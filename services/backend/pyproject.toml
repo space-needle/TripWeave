@@ -1,0 +1,52 @@
+[project]
+name = "tripweave-backend"
+version = "0.1.0"
+description = "Local-first TripWeave backend foundation."
+requires-python = ">=3.14"
+dependencies = [
+  "alembic==1.17.2",
+  "fastapi==0.124.0",
+  "psycopg[binary]==3.3.2",
+  "pydantic==2.12.5",
+  "pydantic-settings==2.12.0",
+  "python-json-logger==4.0.0",
+  "sqlalchemy==2.0.45",
+  "uvicorn[standard]==0.38.0",
+]
+
+[project.scripts]
+tripweave-api = "tripweave.entrypoints.api.main:run"
+tripweave-worker = "tripweave.entrypoints.worker.main:run"
+
+[dependency-groups]
+dev = [
+  "httpx==0.28.1",
+  "mypy==1.19.0",
+  "pytest==9.0.2",
+  "pytest-cov==7.0.0",
+  "ruff==0.14.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.4,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "tripweave"
+module-root = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["tripweave"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

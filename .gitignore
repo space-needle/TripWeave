@@ -1,0 +1,17 @@
+.DS_Store
+.env
+**/.next/
+node_modules/
+**/node_modules/
+**/*.tsbuildinfo
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+dist/
+build/
+*.egg-info/
+local-blobs/
+postgres-data/

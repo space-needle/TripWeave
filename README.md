@@ -2,7 +2,7 @@
 
 TripWeave reconstructs one shared trip from multiple travelers' camera rolls. Contributors upload photos after a trip. The system aligns time and location, groups media into days, stops, and moments, provides a review-by-exception workflow, and publishes an interactive map-and-timeline story.
 
-This repository currently contains architecture documentation only. Application code, package files, Docker files, and infrastructure resources are intentionally out of scope for this stage.
+This repository now contains the minimal local development foundation for Stage 1. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, and CI wiring needed to start local development. Authentication, trips, uploads, media processing, and cloud adapters are intentionally not implemented yet.
 
 ## Architecture Direction
 
@@ -44,3 +44,46 @@ Domain and application modules must not import cloud provider SDKs or expose pro
 TripWeave stores logical `store_alias` and `object_key` values, never signed URLs or permanent provider URLs. Upload and download access is represented by provider-neutral `UploadGrant` and `DownloadGrant` contracts.
 
 Original files and original metadata are immutable. Effective corrected values are stored separately, user corrections outrank automation, and published stories contain sanitized derivatives rather than originals.
+
+## Local Development
+
+Prerequisites:
+
+- Docker Desktop or a compatible Docker Engine with Compose
+- Node.js 24 with Corepack
+- Python 3.14
+- uv 0.9.4 or newer
+
+Start from a clean clone:
+
+```sh
+cp .env.example .env
+corepack enable
+corepack pnpm install --frozen-lockfile
+cd services/backend && uv sync --frozen && cd ../..
+make dev
+```
+
+Local service URLs:
+
+- Web status page: http://localhost:3000
+- API liveness: http://localhost:8000/health/live
+- API readiness: http://localhost:8000/health/ready
+- API dependency status: http://localhost:8000/status
+- PostgreSQL: localhost:5432
+
+Common commands:
+
+```sh
+make dev
+make down
+make logs
+make format
+make lint
+make typecheck
+make test
+make build
+make check
+```
+
+The local database migration enables PostGIS and creates only Alembic's version table. Domain tables arrive in the database foundation stage.

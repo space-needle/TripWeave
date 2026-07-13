@@ -1,0 +1,74 @@
+services:
+  db:
+    build:
+      context: ..
+      dockerfile: deploy/postgis.Dockerfile
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tripweave}
+      POSTGRES_USER: ${POSTGRES_USER:-tripweave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tripweave_local_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../services/backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://tripweave:tripweave_local_password@db:5432/tripweave}
+      TRIPWEAVE_ENV: ${TRIPWEAVE_ENV:-local}
+      TRIPWEAVE_LOG_LEVEL: ${TRIPWEAVE_LOG_LEVEL:-INFO}
+      TRIPWEAVE_BLOB_DIR: ${TRIPWEAVE_BLOB_DIR:-/var/lib/tripweave/blobs}
+      TRIPWEAVE_WORKER_STALE_SECONDS: ${TRIPWEAVE_WORKER_STALE_SECONDS:-90}
+    ports:
+      - "8000:8000"
+    volumes:
+      - local-blobs:/var/lib/tripweave/blobs
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && uvicorn tripweave.entrypoints.api.main:app --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: ../services/backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://tripweave:tripweave_local_password@db:5432/tripweave}
+      TRIPWEAVE_ENV: ${TRIPWEAVE_ENV:-local}
+      TRIPWEAVE_LOG_LEVEL: ${TRIPWEAVE_LOG_LEVEL:-INFO}
+      TRIPWEAVE_BLOB_DIR: ${TRIPWEAVE_BLOB_DIR:-/var/lib/tripweave/blobs}
+      TRIPWEAVE_WORKER_HEARTBEAT_SECONDS: ${TRIPWEAVE_WORKER_HEARTBEAT_SECONDS:-30}
+    volumes:
+      - local-blobs:/var/lib/tripweave/blobs
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["tripweave-worker"]
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  local-blobs:

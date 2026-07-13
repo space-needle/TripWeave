@@ -1,0 +1,23 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.4"
+          enable-cache: true
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+      - run: cd services/backend && uv sync --frozen
+      - run: make check
