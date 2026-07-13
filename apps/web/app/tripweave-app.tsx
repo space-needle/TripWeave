@@ -10,9 +10,14 @@ import {
   useRef,
   useState,
 } from "react";
+import QRCode from "qrcode";
 import { ApiError, api, uploadWithProgress } from "./api-client";
 import type {
+  GuestMemberResponse,
+  InvitationPreviewResponse,
+  InvitationResponse,
   MediaItemResponse,
+  MemberResponse,
   TripResponse,
   UploadFileResponse,
   UploadSessionResponse,
@@ -90,6 +95,27 @@ function stringHeaders(
 }
 
 export default function TripWeaveApp() {
+  const [path] = useState(() =>
+    typeof window === "undefined" ? "/" : window.location.pathname,
+  );
+  if (path.startsWith("/invite/")) {
+    return (
+      <InviteAcceptance
+        token={decodeURIComponent(path.slice("/invite/".length))}
+      />
+    );
+  }
+  if (path.startsWith("/contribute/")) {
+    return (
+      <ContributorWorkspace
+        tripId={decodeURIComponent(path.slice("/contribute/".length))}
+      />
+    );
+  }
+  return <OwnerWorkspace />;
+}
+
+function OwnerWorkspace() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
@@ -109,6 +135,11 @@ export default function TripWeaveApp() {
   const [uploadError, setUploadError] = useState("");
   const [media, setMedia] = useState<MediaItemResponse[]>([]);
   const [mediaError, setMediaError] = useState("");
+  const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
+  const [members, setMembers] = useState<MemberResponse[]>([]);
+  const [collaborationError, setCollaborationError] = useState("");
+  const [latestInviteUrl, setLatestInviteUrl] = useState("");
+  const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
   >({});
@@ -174,11 +205,26 @@ export default function TripWeaveApp() {
     setMedia(result.media);
   }, []);
 
+  const loadCollaboration = useCallback(async (tripId: string | null) => {
+    if (!tripId) {
+      setInvitations([]);
+      setMembers([]);
+      return;
+    }
+    const [inviteResult, memberResult] = await Promise.all([
+      api.invitations(tripId),
+      api.members(tripId),
+    ]);
+    setInvitations(inviteResult.invitations);
+    setMembers(memberResult.members);
+  }, []);
+
   function selectTrip(trip: TripResponse) {
     setSelectedTripId(trip.id);
     setSettingsForm(fromTrip(trip));
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
+    void loadCollaboration(trip.id);
   }
 
   function removeTripFromState(tripId: string) {
@@ -190,6 +236,8 @@ export default function TripWeaveApp() {
     if (!nextTrip) {
       setUploadSessions([]);
       setMedia([]);
+      setInvitations([]);
+      setMembers([]);
     }
   }
 
@@ -240,6 +288,41 @@ export default function TripWeaveApp() {
       );
     }
   }, [loadUploadSessions, selectedTrip?.id]);
+
+  useEffect(() => {
+    if (selectedTrip?.id && selectedTrip.role === "owner") {
+      void Promise.resolve().then(() =>
+        loadCollaboration(selectedTrip.id).catch((error) =>
+          setCollaborationError(messageFrom(error)),
+        ),
+      );
+    }
+  }, [loadCollaboration, selectedTrip?.id, selectedTrip?.role]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!latestInviteUrl) {
+      return;
+    }
+    QRCode.toDataURL(latestInviteUrl, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 160,
+    })
+      .then((url) => {
+        if (!cancelled) {
+          setLatestInviteQrUrl(url);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLatestInviteQrUrl("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [latestInviteUrl]);
 
   useEffect(() => {
     if (!selectedTrip?.id) {
@@ -309,6 +392,8 @@ export default function TripWeaveApp() {
       setSelectedTripId(null);
       setUploadSessions([]);
       setMedia([]);
+      setInvitations([]);
+      setMembers([]);
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -527,6 +612,54 @@ export default function TripWeaveApp() {
     }
   }
 
+  async function createInvite() {
+    if (!selectedTrip) {
+      return;
+    }
+    setCollaborationError("");
+    try {
+      const invitation = await api.createInvitation(selectedTrip.id);
+      setLatestInviteQrUrl("");
+      setLatestInviteUrl(invitation.inviteUrl ?? "");
+      await loadCollaboration(selectedTrip.id);
+    } catch (error) {
+      setCollaborationError(messageFrom(error));
+    }
+  }
+
+  async function copyInviteUrl() {
+    if (!latestInviteUrl || typeof navigator === "undefined") {
+      return;
+    }
+    await navigator.clipboard.writeText(latestInviteUrl);
+  }
+
+  async function revokeInvite(invitation: InvitationResponse) {
+    if (!selectedTrip) {
+      return;
+    }
+    setCollaborationError("");
+    try {
+      await api.revokeInvitation(invitation.id);
+      await loadCollaboration(selectedTrip.id);
+    } catch (error) {
+      setCollaborationError(messageFrom(error));
+    }
+  }
+
+  async function removeMember(member: MemberResponse) {
+    if (!selectedTrip) {
+      return;
+    }
+    setCollaborationError("");
+    try {
+      await api.removeMember(member.id);
+      await loadCollaboration(selectedTrip.id);
+    } catch (error) {
+      setCollaborationError(messageFrom(error));
+    }
+  }
+
   if (loadState === "loading") {
     return (
       <main className="app-shell">
@@ -732,6 +865,42 @@ export default function TripWeaveApp() {
           )}
         </section>
 
+        {selectedTrip?.role === "owner" ? (
+          <section className="panel stack" aria-labelledby="sharing-title">
+            <div>
+              <h2 id="sharing-title">Travelers</h2>
+              <p>Invite guest contributors and manage trip access.</p>
+            </div>
+            {collaborationError ? (
+              <p className="error">{collaborationError}</p>
+            ) : null}
+            <div className="action-row">
+              <button type="button" onClick={createInvite} disabled={isBusy}>
+                Create contributor link
+              </button>
+              {latestInviteUrl ? (
+                <button type="button" onClick={copyInviteUrl}>
+                  Copy link
+                </button>
+              ) : null}
+            </div>
+            {latestInviteUrl ? (
+              <div className="invite-card">
+                <code>{latestInviteUrl}</code>
+                {latestInviteQrUrl ? (
+                  <img
+                    className="qr-block"
+                    src={latestInviteQrUrl}
+                    alt="Invitation QR code"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            <InvitationList invitations={invitations} onRevoke={revokeInvite} />
+            <MemberRoster members={members} onRemove={removeMember} />
+          </section>
+        ) : null}
+
         <section
           className="panel stack media-panel"
           aria-labelledby="media-title"
@@ -743,6 +912,349 @@ export default function TripWeaveApp() {
           {mediaError ? <p className="error">{mediaError}</p> : null}
           <MediaList media={media} onRetry={retryMedia} />
         </section>
+      </section>
+    </main>
+  );
+}
+
+function InviteAcceptance({ token }: { token: string }) {
+  const [preview, setPreview] = useState<InvitationPreviewResponse | null>(
+    null,
+  );
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .previewInvitation(token)
+      .then((result) => {
+        if (!cancelled) {
+          setPreview(result);
+        }
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setError(messageFrom(reason));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  async function accept(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const guest = await api.acceptInvitation(token, { displayName });
+      window.location.assign(`/contribute/${guest.tripId}`);
+    } catch (reason) {
+      setError(messageFrom(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel stack" aria-labelledby="invite-title">
+        <p className="eyebrow">TripWeave invitation</p>
+        <h1 id="invite-title">
+          {preview ? preview.title : "Loading invitation"}
+        </h1>
+        {preview ? <p>Join this trip as a {preview.role}.</p> : null}
+        <form className="stack" onSubmit={accept}>
+          <label>
+            Display name
+            <input
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              required
+              maxLength={160}
+            />
+          </label>
+          {error ? <p className="error">{error}</p> : null}
+          <button type="submit" disabled={busy || !preview}>
+            Join trip
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function ContributorWorkspace({ tripId }: { tripId: string }) {
+  const [guest, setGuest] = useState<GuestMemberResponse | null>(null);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
+    [],
+  );
+  const [media, setMedia] = useState<MediaItemResponse[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<
+    Record<string, UploadProgress>
+  >({});
+  const [error, setError] = useState("");
+  const localFiles = useRef<Map<string, File>>(new Map());
+  const abortUpload = useRef<Map<string, () => void>>(new Map());
+
+  const selectedUploadFiles = useMemo(
+    () => uploadSessions.flatMap((session) => session.files),
+    [uploadSessions],
+  );
+  const hasProcessingMedia = useMemo(
+    () =>
+      media.some((item) =>
+        ["pending", "processing"].includes(item.processingState),
+      ),
+    [media],
+  );
+
+  const loadContribution = useCallback(async () => {
+    const [sessionResult, mediaResult] = await Promise.all([
+      api.uploadSessions(tripId),
+      api.media(tripId),
+    ]);
+    setUploadSessions(sessionResult.uploadSessions);
+    setMedia(mediaResult.media);
+  }, [tripId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGuest() {
+      try {
+        const result = await api.guestMe();
+        if (!cancelled) {
+          setGuest(result);
+          await loadContribution();
+        }
+      } catch (reason) {
+        if (!cancelled) {
+          setError(messageFrom(reason));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadState("ready");
+        }
+      }
+    }
+    void loadGuest();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadContribution]);
+
+  useEffect(() => {
+    if (!hasProcessingMedia) {
+      return;
+    }
+    let cancelled = false;
+    let delay = 1200;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      try {
+        const result = await api.media(tripId);
+        if (cancelled) {
+          return;
+        }
+        setMedia(result.media);
+        if (
+          result.media.some((item) =>
+            ["pending", "processing"].includes(item.processingState),
+          )
+        ) {
+          timeout = setTimeout(poll, delay);
+          delay = Math.min(delay * 1.6, 10000);
+        }
+      } catch {
+        timeout = setTimeout(poll, delay);
+      }
+    }
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [hasProcessingMedia, tripId]);
+
+  function rememberProgress(fileId: string, next: UploadProgress) {
+    setUploadProgress((current) => ({ ...current, [fileId]: next }));
+  }
+
+  async function uploadOne(uploadFile: UploadFileResponse, file: File) {
+    if (!uploadFile.grant) {
+      rememberProgress(uploadFile.id, {
+        loaded: 0,
+        total: file.size,
+        status: "failed",
+        error: "Upload grant is unavailable",
+      });
+      return;
+    }
+    rememberProgress(uploadFile.id, {
+      loaded: 0,
+      total: file.size,
+      status: "uploading",
+    });
+    const transfer = uploadWithProgress({
+      url: uploadFile.grant.url,
+      file,
+      headers: stringHeaders(uploadFile.grant.headers),
+      onProgress: (loaded, total) =>
+        rememberProgress(uploadFile.id, { loaded, total, status: "uploading" }),
+    });
+    abortUpload.current.set(uploadFile.id, transfer.abort);
+    try {
+      await transfer.promise;
+      await api.completeUploadFile(uploadFile.id);
+      rememberProgress(uploadFile.id, {
+        loaded: file.size,
+        total: file.size,
+        status: "complete",
+      });
+    } catch (reason) {
+      rememberProgress(uploadFile.id, {
+        loaded: 0,
+        total: file.size,
+        status: "failed",
+        error: messageFrom(reason),
+      });
+    } finally {
+      abortUpload.current.delete(uploadFile.id);
+    }
+  }
+
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    setError("");
+    try {
+      const session = await api.createUploadSession(tripId, {
+        files: files.map((file) => ({
+          filename: file.name,
+          byteSize: file.size,
+          mimeType: file.type || "application/octet-stream",
+        })),
+      });
+      setUploadSessions((current) => [session, ...current]);
+      session.files.forEach((uploadFile, index) => {
+        const file = files[index];
+        if (file) {
+          localFiles.current.set(uploadFile.id, file);
+          rememberProgress(uploadFile.id, {
+            loaded: 0,
+            total: file.size,
+            status: "pending",
+          });
+        }
+      });
+      for (const uploadFile of session.files) {
+        const file = localFiles.current.get(uploadFile.id);
+        if (file) {
+          await uploadOne(uploadFile, file);
+        }
+      }
+      await loadContribution();
+    } catch (reason) {
+      setError(messageFrom(reason));
+    }
+  }
+
+  async function cancelUpload(uploadFile: UploadFileResponse) {
+    abortUpload.current.get(uploadFile.id)?.();
+    rememberProgress(uploadFile.id, {
+      loaded: 0,
+      total: uploadFile.byteSize ?? 0,
+      status: "cancelled",
+    });
+    await api.cancelUploadFile(uploadFile.id);
+    await loadContribution();
+  }
+
+  async function retryUpload(
+    uploadFile: UploadFileResponse,
+    selectedFile?: File,
+  ) {
+    const file = selectedFile ?? localFiles.current.get(uploadFile.id);
+    if (!file) {
+      return;
+    }
+    localFiles.current.set(uploadFile.id, file);
+    await uploadOne(uploadFile, file);
+    await loadContribution();
+  }
+
+  async function updateOwnMedia(item: MediaItemResponse, visibility: string) {
+    await api.updateMedia(item.id, { visibility });
+    await loadContribution();
+  }
+
+  async function deleteOwnMedia(item: MediaItemResponse) {
+    await api.updateMedia(item.id, { deleted: true });
+    await loadContribution();
+  }
+
+  if (loadState === "loading") {
+    return (
+      <main className="app-shell">
+        <h1>Loading contribution page</h1>
+      </main>
+    );
+  }
+
+  return (
+    <main className="app-shell">
+      <section className="panel stack">
+        <p className="eyebrow">Contributor upload</p>
+        <h1>
+          {guest ? `Welcome, ${guest.displayName}` : "Contribution unavailable"}
+        </h1>
+        {error ? <p className="error">{error}</p> : null}
+        {guest ? (
+          <>
+            <div
+              className="drop-zone"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void uploadFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
+              <label>
+                Add JPEG or HEIC images
+                <input
+                  accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
+                  multiple
+                  type="file"
+                  onChange={(event) =>
+                    void uploadFiles(Array.from(event.target.files ?? []))
+                  }
+                />
+              </label>
+              <p>Only your uploads are shown here.</p>
+            </div>
+            <UploadFileList
+              files={selectedUploadFiles}
+              progress={uploadProgress}
+              onCancel={cancelUpload}
+              onRetry={retryUpload}
+            />
+            <MediaList
+              media={media}
+              onRetry={async (item) => {
+                await api.retryMedia(item.id);
+                await loadContribution();
+              }}
+              onVisibilityChange={updateOwnMedia}
+              onDelete={deleteOwnMedia}
+            />
+          </>
+        ) : null}
       </section>
     </main>
   );
@@ -893,12 +1405,81 @@ function UploadFileList({
   );
 }
 
+function InvitationList({
+  invitations,
+  onRevoke,
+}: {
+  invitations: InvitationResponse[];
+  onRevoke: (invitation: InvitationResponse) => void;
+}) {
+  if (invitations.length === 0) {
+    return <p>No invitations yet.</p>;
+  }
+  return (
+    <div className="simple-list" role="list">
+      {invitations.map((invitation) => (
+        <div className="simple-row" key={invitation.id} role="listitem">
+          <div>
+            <strong>{invitation.role}</strong>
+            <small>
+              {invitation.status} · {invitation.useCount}/{invitation.maxUses}{" "}
+              used
+            </small>
+          </div>
+          {invitation.status === "pending" ? (
+            <button type="button" onClick={() => onRevoke(invitation)}>
+              Revoke
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MemberRoster({
+  members,
+  onRemove,
+}: {
+  members: MemberResponse[];
+  onRemove: (member: MemberResponse) => void;
+}) {
+  if (members.length === 0) {
+    return <p>No members yet.</p>;
+  }
+  return (
+    <div className="simple-list" role="list">
+      {members.map((member) => (
+        <div className="simple-row" key={member.id} role="listitem">
+          <div>
+            <strong>{member.displayName}</strong>
+            <small>
+              {member.role}
+              {member.isGuest ? " · guest" : ""}{" "}
+              {member.removedAt ? " · removed" : ""}
+            </small>
+          </div>
+          {!member.removedAt && member.role !== "owner" ? (
+            <button type="button" onClick={() => onRemove(member)}>
+              Remove
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MediaList({
   media,
   onRetry,
+  onVisibilityChange,
+  onDelete,
 }: {
   media: MediaItemResponse[];
   onRetry: (item: MediaItemResponse) => void;
+  onVisibilityChange?: (item: MediaItemResponse, visibility: string) => void;
+  onDelete?: (item: MediaItemResponse) => void;
 }) {
   if (media.length === 0) {
     return <p>No processed media yet.</p>;
@@ -944,6 +1525,39 @@ function MediaList({
               <button type="button" onClick={() => onRetry(item)}>
                 Retry processing
               </button>
+            ) : null}
+            {onVisibilityChange ? (
+              <div className="button-row">
+                <button
+                  type="button"
+                  onClick={() => onVisibilityChange(item, "trip")}
+                >
+                  Trip members
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onVisibilityChange(item, "story")}
+                >
+                  Publishable
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onVisibilityChange(item, "private")}
+                >
+                  Private
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onVisibilityChange(item, "excluded")}
+                >
+                  Exclude
+                </button>
+                {onDelete ? (
+                  <button type="button" onClick={() => onDelete(item)}>
+                    Delete
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </article>

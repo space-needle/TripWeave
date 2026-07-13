@@ -167,7 +167,10 @@ class TripInvitation(Base):
     __table_args__ = (
         CheckConstraint(f"role IN ({enum_values(TripMemberRole)})", name="role"),
         CheckConstraint(f"status IN ({enum_values(InvitationStatus)})", name="status"),
-        CheckConstraint("email = lower(email)", name="email_normalized"),
+        CheckConstraint("email IS NULL OR email = lower(email)", name="email_normalized"),
+        CheckConstraint(
+            "use_count >= 0 AND max_uses > 0 AND use_count <= max_uses", name="use_count"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -176,14 +179,45 @@ class TripInvitation(Base):
     trip_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
     )
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))
     role: Mapped[str] = mapped_column(String(40), nullable=False)
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default=text("'pending'")
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    use_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_member_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_members.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["member_id", "trip_id"],
+            ["trip_members.id", "trip_members.trip_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    member_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -444,6 +478,8 @@ Index(
     postgresql_where=TripMember.removed_at.is_(None),
 )
 Index("ix_trip_invitations_trip_email", TripInvitation.trip_id, TripInvitation.email)
+Index("ix_guest_sessions_trip_id", GuestSession.trip_id)
+Index("ix_guest_sessions_member_id", GuestSession.member_id)
 Index("ix_upload_sessions_trip_id", UploadSession.trip_id)
 Index("ix_upload_sessions_member_id", UploadSession.member_id)
 Index("ix_upload_files_upload_session_id", UploadFile.upload_session_id)

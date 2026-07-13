@@ -49,6 +49,7 @@ def test_upload_state_transitions_are_explicit() -> None:
 
 def test_schema_has_expected_domain_tables() -> None:
     assert set(Base.metadata.tables) == {
+        "guest_sessions",
         "media_assets",
         "media_items",
         "processing_jobs",

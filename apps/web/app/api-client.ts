@@ -1,8 +1,16 @@
 import type {
   AuthResponse,
+  GuestMemberResponse,
+  InvitationAcceptRequest,
+  InvitationCreateRequest,
+  InvitationPreviewResponse,
+  InvitationResponse,
+  InvitationsListResponse,
   LoginRequest,
+  MediaUpdateRequest,
   MediaItemResponse,
   MediaListResponse,
+  MemberRosterResponse,
   MeResponse,
   RegisterRequest,
   TripCreateRequest,
@@ -96,6 +104,9 @@ export const api = {
   me(): Promise<MeResponse> {
     return apiRequest<MeResponse>("/auth/me");
   },
+  guestMe(): Promise<GuestMemberResponse> {
+    return apiRequest<GuestMemberResponse>("/guest/me");
+  },
   trips(): Promise<TripsListResponse> {
     return apiRequest<TripsListResponse>("/trips");
   },
@@ -114,8 +125,52 @@ export const api = {
   deleteTrip(id: string): Promise<void> {
     return apiRequest<void>(`/trips/${id}`, { method: "DELETE" });
   },
+  createInvitation(
+    tripId: string,
+    payload: InvitationCreateRequest = {},
+  ): Promise<InvitationResponse> {
+    return apiRequest<InvitationResponse>(`/trips/${tripId}/invitations`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  invitations(tripId: string): Promise<InvitationsListResponse> {
+    return apiRequest<InvitationsListResponse>(`/trips/${tripId}/invitations`);
+  },
+  revokeInvitation(id: string): Promise<void> {
+    return apiRequest<void>(`/invitations/${id}`, { method: "DELETE" });
+  },
+  previewInvitation(token: string): Promise<InvitationPreviewResponse> {
+    return apiRequest<InvitationPreviewResponse>(
+      `/invitations/${encodeURIComponent(token)}`,
+    );
+  },
+  acceptInvitation(
+    token: string,
+    payload: InvitationAcceptRequest,
+  ): Promise<GuestMemberResponse> {
+    return apiRequest<GuestMemberResponse>(
+      `/invitations/${encodeURIComponent(token)}/accept`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+  members(tripId: string): Promise<MemberRosterResponse> {
+    return apiRequest<MemberRosterResponse>(`/trips/${tripId}/members`);
+  },
+  removeMember(id: string): Promise<void> {
+    return apiRequest<void>(`/trip-members/${id}`, { method: "DELETE" });
+  },
   media(tripId: string): Promise<MediaListResponse> {
     return apiRequest<MediaListResponse>(`/trips/${tripId}/media`);
+  },
+  updateMedia(
+    id: string,
+    payload: MediaUpdateRequest,
+  ): Promise<MediaItemResponse> {
+    return apiRequest<MediaItemResponse>(`/media/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
   },
   retryMedia(id: string): Promise<MediaItemResponse> {
     return apiRequest<MediaItemResponse>(`/media/${id}/retry`, {

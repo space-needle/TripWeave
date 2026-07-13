@@ -1,7 +1,8 @@
 # ruff: noqa: B008
+import secrets
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
 from uuid import UUID
@@ -35,7 +36,9 @@ from tripweave.application.auth import (
 from tripweave.application.rate_limit import FixedWindowRateLimiter
 from tripweave.config import Settings, get_settings
 from tripweave.domain.enums import (
+    InvitationStatus,
     MediaType,
+    MediaVisibility,
     ProcessingJobState,
     ProcessingJobType,
     ProcessingState,
@@ -50,10 +53,19 @@ from tripweave.entrypoints.api.schemas import (
     AuthResponse,
     BlobRefResponse,
     CompleteUploadFileResponse,
+    GuestMemberResponse,
+    InvitationAcceptRequest,
+    InvitationCreateRequest,
+    InvitationPreviewResponse,
+    InvitationResponse,
+    InvitationsListResponse,
     LoginRequest,
     MediaAssetResponse,
     MediaItemResponse,
     MediaListResponse,
+    MediaUpdateRequest,
+    MemberResponse,
+    MemberRosterResponse,
     MeResponse,
     RegisterRequest,
     TripCreateRequest,
@@ -74,6 +86,24 @@ from tripweave.logging import configure_logging
 class AuthenticatedUser:
     user: orm.User
     session: orm.Session
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedGuest:
+    member: orm.TripMember
+    session: orm.GuestSession
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedActor:
+    user: orm.User | None
+    user_session: orm.Session | None
+    guest_session: orm.GuestSession | None
+    guest_member: orm.TripMember | None
+
+    @property
+    def is_guest(self) -> bool:
+        return self.guest_member is not None
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
@@ -151,6 +181,68 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         user_session, user = result
         return AuthenticatedUser(user=user, session=user_session)
 
+    def optional_user(request: Request, db: DbSession) -> AuthenticatedUser | None:
+        token = request.cookies.get(resolved_settings.session_cookie_name)
+        if not token:
+            return None
+        session_token_hash = hash_token(token)
+        now = datetime.now(UTC)
+        result = db.execute(
+            select(orm.Session, orm.User)
+            .join(orm.User, orm.User.id == orm.Session.user_id)
+            .where(
+                orm.Session.token_hash == session_token_hash,
+                orm.Session.revoked_at.is_(None),
+                orm.Session.expires_at > now,
+            )
+        ).one_or_none()
+        if result is None:
+            return None
+        user_session, user = result
+        return AuthenticatedUser(user=user, session=user_session)
+
+    def optional_guest(request: Request, db: DbSession) -> AuthenticatedGuest | None:
+        token = request.cookies.get(resolved_settings.guest_session_cookie_name)
+        if not token:
+            return None
+        now = datetime.now(UTC)
+        result = db.execute(
+            select(orm.GuestSession, orm.TripMember)
+            .join(orm.TripMember, orm.TripMember.id == orm.GuestSession.member_id)
+            .where(
+                orm.GuestSession.token_hash == hash_token(token),
+                orm.GuestSession.revoked_at.is_(None),
+                orm.GuestSession.expires_at > now,
+                orm.TripMember.removed_at.is_(None),
+            )
+        ).one_or_none()
+        if result is None:
+            return None
+        guest_session, member = result
+        return AuthenticatedGuest(member=member, session=guest_session)
+
+    def current_actor(
+        request: Request,
+        db: DbSession = Depends(db_session),
+    ) -> AuthenticatedActor:
+        user = optional_user(request, db)
+        if user is not None:
+            return AuthenticatedActor(
+                user=user.user,
+                user_session=user.session,
+                guest_session=None,
+                guest_member=None,
+            )
+        guest = optional_guest(request, db)
+        if guest is not None:
+            return AuthenticatedActor(
+                user=None,
+                user_session=None,
+                guest_session=guest.session,
+                guest_member=guest.member,
+            )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
     def require_csrf(request: Request) -> None:
         csrf_cookie = request.cookies.get(resolved_settings.csrf_cookie_name)
         x_csrf_token = request.headers.get("x-csrf-token")
@@ -181,6 +273,26 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             path="/",
         )
 
+    def set_guest_cookies(response: Response, session_token: str, csrf_token: str) -> None:
+        response.set_cookie(
+            resolved_settings.guest_session_cookie_name,
+            session_token,
+            httponly=True,
+            max_age=resolved_settings.guest_session_lifetime_seconds,
+            secure=resolved_settings.secure_cookies,
+            samesite="lax",
+            path="/",
+        )
+        response.set_cookie(
+            resolved_settings.csrf_cookie_name,
+            csrf_token,
+            httponly=False,
+            max_age=resolved_settings.guest_session_lifetime_seconds,
+            secure=resolved_settings.secure_cookies,
+            samesite="lax",
+            path="/",
+        )
+
     def clear_auth_cookies(response: Response) -> None:
         response.delete_cookie(
             resolved_settings.session_cookie_name,
@@ -190,6 +302,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         response.delete_cookie(
             resolved_settings.csrf_cookie_name,
+            path="/",
+            secure=resolved_settings.secure_cookies,
+            samesite="lax",
+        )
+
+    def clear_guest_cookies(response: Response) -> None:
+        response.delete_cookie(
+            resolved_settings.guest_session_cookie_name,
             path="/",
             secure=resolved_settings.secure_cookies,
             samesite="lax",
@@ -299,6 +419,33 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
         ).scalar_one_or_none()
 
+    def member_for_actor(
+        db: DbSession, trip_id: UUID, actor: AuthenticatedActor
+    ) -> orm.TripMember | None:
+        if actor.user is not None:
+            return member_for_trip(db, trip_id, actor.user.id)
+        if (
+            actor.guest_member is not None
+            and actor.guest_member.trip_id == trip_id
+            and actor.guest_member.removed_at is None
+        ):
+            return actor.guest_member
+        return None
+
+    def require_member_for_actor(
+        db: DbSession, trip_id: UUID, actor: AuthenticatedActor
+    ) -> orm.TripMember:
+        member = member_for_actor(db, trip_id, actor)
+        if member is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        return member
+
+    def require_owner_member(db: DbSession, trip_id: UUID, user_id: UUID) -> orm.TripMember:
+        member = member_for_trip(db, trip_id, user_id)
+        if member is None or member.role != TripMemberRole.OWNER.value:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        return member
+
     def trip_response(trip: orm.Trip, role: str) -> TripResponse:
         return TripResponse(
             id=trip.id,
@@ -314,6 +461,63 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             createdAt=trip.created_at,
             updatedAt=trip.updated_at,
         )
+
+    def invitation_url(request: Request, token: str) -> str:
+        origin = request.headers.get("origin")
+        if origin in resolved_settings.cors_origins:
+            return f"{origin}/invite/{token}"
+        return f"http://localhost:3000/invite/{token}"
+
+    def invitation_response(
+        invitation: orm.TripInvitation, invite_url: str | None = None
+    ) -> InvitationResponse:
+        status_value = invitation.status
+        if (
+            invitation.status == InvitationStatus.PENDING.value
+            and invitation.expires_at <= datetime.now(UTC)
+        ):
+            status_value = InvitationStatus.EXPIRED.value
+        return InvitationResponse(
+            id=invitation.id,
+            tripId=invitation.trip_id,
+            role=invitation.role,
+            status=status_value,
+            expiresAt=invitation.expires_at,
+            useCount=invitation.use_count,
+            maxUses=invitation.max_uses,
+            revokedAt=invitation.revoked_at,
+            acceptedAt=invitation.accepted_at,
+            inviteUrl=invite_url,
+        )
+
+    def member_response(member: orm.TripMember) -> MemberResponse:
+        return MemberResponse(
+            id=member.id,
+            displayName=member.display_name,
+            role=member.role,
+            joinedAt=member.joined_at,
+            removedAt=member.removed_at,
+            isGuest=member.user_id is None,
+        )
+
+    def active_invitation_for_token(db: DbSession, token: str) -> orm.TripInvitation:
+        invitation = db.execute(
+            select(orm.TripInvitation).where(orm.TripInvitation.token_hash == hash_token(token))
+        ).scalar_one_or_none()
+        now = datetime.now(UTC)
+        if invitation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        if invitation.revoked_at is not None or invitation.status == InvitationStatus.REVOKED.value:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        if invitation.expires_at <= now:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        return invitation
 
     @app.post("/trips", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
     def create_trip(
@@ -348,6 +552,217 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.flush()
         db.commit()
         return trip_response(trip, member.role)
+
+    @app.post(
+        "/trips/{trip_id}/invitations",
+        response_model=InvitationResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_invitation(
+        trip_id: UUID,
+        payload: InvitationCreateRequest,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> InvitationResponse:
+        require_csrf(request)
+        require_owner_member(db, trip_id, auth.user.id)
+        trip = db.get(orm.Trip, trip_id)
+        if trip is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(UTC)
+        invitation = orm.TripInvitation(
+            trip_id=trip_id,
+            email=None,
+            role=TripMemberRole.CONTRIBUTOR.value,
+            token_hash=hash_token(token),
+            status=InvitationStatus.PENDING.value,
+            expires_at=now
+            + timedelta(
+                seconds=payload.expires_in_seconds or resolved_settings.invitation_lifetime_seconds
+            ),
+            max_uses=1,
+            use_count=0,
+        )
+        db.add(invitation)
+        db.commit()
+        return invitation_response(invitation, invitation_url(request, token))
+
+    @app.get("/trips/{trip_id}/invitations", response_model=InvitationsListResponse)
+    def list_invitations(
+        trip_id: UUID,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> InvitationsListResponse:
+        require_owner_member(db, trip_id, auth.user.id)
+        invitations = db.scalars(
+            select(orm.TripInvitation)
+            .where(orm.TripInvitation.trip_id == trip_id)
+            .order_by(orm.TripInvitation.created_at.desc(), orm.TripInvitation.id)
+        ).all()
+        return InvitationsListResponse(
+            invitations=[invitation_response(invitation) for invitation in invitations]
+        )
+
+    @app.delete("/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def revoke_invitation(
+        invitation_id: UUID,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> Response:
+        require_csrf(request)
+        invitation = db.get(orm.TripInvitation, invitation_id)
+        if invitation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        require_owner_member(db, invitation.trip_id, auth.user.id)
+        invitation.status = InvitationStatus.REVOKED.value
+        invitation.revoked_at = datetime.now(UTC)
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/invitations/{token}", response_model=InvitationPreviewResponse)
+    def preview_invitation(
+        token: str, db: DbSession = Depends(db_session)
+    ) -> InvitationPreviewResponse:
+        invitation = active_invitation_for_token(db, token)
+        trip = db.get(orm.Trip, invitation.trip_id)
+        if trip is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        return InvitationPreviewResponse(
+            tripId=trip.id,
+            title=trip.title,
+            role=invitation.role,
+            expiresAt=invitation.expires_at,
+            status=invitation.status,
+        )
+
+    @app.post("/invitations/{token}/accept", response_model=GuestMemberResponse)
+    def accept_invitation(
+        token: str,
+        payload: InvitationAcceptRequest,
+        request: Request,
+        response: Response,
+        db: DbSession = Depends(db_session),
+    ) -> GuestMemberResponse:
+        invitation = active_invitation_for_token(db, token)
+        now = datetime.now(UTC)
+        member = (
+            db.get(orm.TripMember, invitation.accepted_member_id)
+            if invitation.accepted_member_id is not None
+            else None
+        )
+        if member is None:
+            if invitation.use_count >= invitation.max_uses:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+                )
+            member = orm.TripMember(
+                trip_id=invitation.trip_id,
+                user_id=None,
+                role=invitation.role,
+                display_name=payload.display_name.strip(),
+                joined_at=now,
+            )
+            db.add(member)
+            db.flush()
+            invitation.accepted_member_id = member.id
+            invitation.accepted_at = now
+            invitation.use_count += 1
+            invitation.status = InvitationStatus.ACCEPTED.value
+        elif member.removed_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        else:
+            guest = optional_guest(request, db)
+            if guest is None or guest.member.id != member.id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+                )
+        secrets_value = new_session_secrets(resolved_settings.guest_session_lifetime_seconds)
+        db.add(
+            orm.GuestSession(
+                trip_id=member.trip_id,
+                member_id=member.id,
+                token_hash=secrets_value.session_token_hash,
+                expires_at=secrets_value.expires_at,
+            )
+        )
+        db.commit()
+        set_guest_cookies(response, secrets_value.session_token, secrets_value.csrf_token)
+        return GuestMemberResponse(
+            id=member.id,
+            tripId=member.trip_id,
+            displayName=member.display_name,
+            role=member.role,
+            csrfToken=secrets_value.csrf_token,
+        )
+
+    @app.get("/guest/me", response_model=GuestMemberResponse)
+    def guest_me(
+        request: Request,
+        guest: AuthenticatedActor = Depends(current_actor),
+    ) -> GuestMemberResponse:
+        if guest.guest_member is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            )
+        csrf_token = request.cookies.get(resolved_settings.csrf_cookie_name, "")
+        return GuestMemberResponse(
+            id=guest.guest_member.id,
+            tripId=guest.guest_member.trip_id,
+            displayName=guest.guest_member.display_name,
+            role=guest.guest_member.role,
+            csrfToken=csrf_token,
+        )
+
+    @app.get("/trips/{trip_id}/members", response_model=MemberRosterResponse)
+    def list_members(
+        trip_id: UUID,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> MemberRosterResponse:
+        require_owner_member(db, trip_id, auth.user.id)
+        members = db.scalars(
+            select(orm.TripMember)
+            .where(orm.TripMember.trip_id == trip_id)
+            .order_by(orm.TripMember.joined_at, orm.TripMember.id)
+        ).all()
+        return MemberRosterResponse(members=[member_response(member) for member in members])
+
+    @app.delete("/trip-members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def remove_member(
+        member_id: UUID,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> Response:
+        require_csrf(request)
+        member = db.get(orm.TripMember, member_id)
+        if member is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        require_owner_member(db, member.trip_id, auth.user.id)
+        if member.role == TripMemberRole.OWNER.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove owner"
+            )
+        now = datetime.now(UTC)
+        member.removed_at = now
+        for session in db.scalars(
+            select(orm.GuestSession).where(
+                orm.GuestSession.member_id == member.id,
+                orm.GuestSession.revoked_at.is_(None),
+            )
+        ):
+            session.revoked_at = now
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/trips", response_model=TripsListResponse)
     def list_trips(
@@ -525,6 +940,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             width=width if isinstance(width, int) else None,
             height=height if isinstance(height, int) else None,
             contributor=contributor.display_name,
+            contributorMemberId=contributor.id,
             thumbnail=media_asset_response(thumbnail) if thumbnail is not None else None,
         )
 
@@ -609,17 +1025,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             limits=upload_limits(),
         )
 
-    def upload_session_for_user(
+    def upload_session_for_actor(
         db: DbSession,
         upload_session_id: UUID,
-        user_id: UUID,
+        actor: AuthenticatedActor,
     ) -> tuple[orm.UploadSession, orm.TripMember]:
         upload_session = db.get(orm.UploadSession, upload_session_id)
         if upload_session is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Upload session not found"
             )
-        member = member_for_trip(db, upload_session.trip_id, user_id)
+        member = member_for_actor(db, upload_session.trip_id, actor)
         if member is None or member.id != upload_session.member_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Upload session not found"
@@ -635,12 +1051,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         trip_id: UUID,
         payload: UploadSessionCreateRequest,
         request: Request,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> UploadSessionResponse:
         require_csrf(request)
-        member = member_for_trip(db, trip_id, auth.user.id)
-        if member is None:
+        member = require_member_for_actor(db, trip_id, actor)
+        if member.role == TripMemberRole.VIEWER.value:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
 
         if len(payload.files) > resolved_settings.upload_max_files_per_trip:
@@ -716,12 +1132,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     @app.get("/upload-sessions", response_model=UploadSessionsListResponse)
     def list_upload_sessions(
         trip_id: UUID,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> UploadSessionsListResponse:
-        member = member_for_trip(db, trip_id, auth.user.id)
-        if member is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        member = require_member_for_actor(db, trip_id, actor)
         sessions = db.scalars(
             select(orm.UploadSession)
             .where(orm.UploadSession.trip_id == trip_id, orm.UploadSession.member_id == member.id)
@@ -737,10 +1151,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     @app.get("/upload-sessions/{upload_session_id}", response_model=UploadSessionResponse)
     def get_upload_session(
         upload_session_id: UUID,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> UploadSessionResponse:
-        upload_session, _ = upload_session_for_user(db, upload_session_id, auth.user.id)
+        upload_session, _ = upload_session_for_actor(db, upload_session_id, actor)
         return upload_session_response(db, upload_session, include_grants=True)
 
     @app.put("/blob-upload/{token}")
@@ -774,16 +1188,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def complete_upload_file(
         upload_file_id: UUID,
         request: Request,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> CompleteUploadFileResponse:
         require_csrf(request)
         upload_file = db.get(orm.UploadFile, upload_file_id)
         if upload_file is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
-        upload_session, member = upload_session_for_user(
-            db, upload_file.upload_session_id, auth.user.id
-        )
+        upload_session, member = upload_session_for_actor(db, upload_file.upload_session_id, actor)
         if upload_session.id != upload_file.upload_session_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
         if upload_file.state == UploadState.COMPLETED.value:
@@ -873,14 +1285,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def cancel_upload_file(
         upload_file_id: UUID,
         request: Request,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> Response:
         require_csrf(request)
         upload_file = db.get(orm.UploadFile, upload_file_id)
         if upload_file is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
-        upload_session_for_user(db, upload_file.upload_session_id, auth.user.id)
+        upload_session_for_actor(db, upload_file.upload_session_id, actor)
         if upload_file.state != UploadState.COMPLETED.value:
             now = datetime.now(UTC)
             upload_file.state = UploadState.CANCELLED.value
@@ -895,18 +1307,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     @app.get("/trips/{trip_id}/media", response_model=MediaListResponse)
     def list_media(
         trip_id: UUID,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> MediaListResponse:
-        member = member_for_trip(db, trip_id, auth.user.id)
-        if member is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
-        rows = db.execute(
+        member = require_member_for_actor(db, trip_id, actor)
+        statement = (
             select(orm.MediaItem, orm.TripMember)
             .join(orm.TripMember, orm.TripMember.id == orm.MediaItem.contributor_member_id)
             .where(orm.MediaItem.trip_id == trip_id, orm.MediaItem.deleted_at.is_(None))
             .order_by(orm.MediaItem.created_at.desc(), orm.MediaItem.id)
-        ).all()
+        )
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            statement = statement.where(orm.MediaItem.contributor_member_id == member.id)
+        rows = db.execute(statement).all()
         return MediaListResponse(
             media=[
                 media_item_response(db, media_item, contributor) for media_item, contributor in rows
@@ -917,14 +1330,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def retry_media_processing(
         media_item_id: UUID,
         request: Request,
-        auth: AuthenticatedUser = Depends(current_user),
+        actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> MediaItemResponse:
         require_csrf(request)
         media_item = db.get(orm.MediaItem, media_item_id)
         if media_item is None or media_item.deleted_at is not None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
-        member = member_for_trip(db, media_item.trip_id, auth.user.id)
+        member = member_for_actor(db, media_item.trip_id, actor)
         if member is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
         if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value} and (
@@ -959,6 +1372,63 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         media_item.updated_at = now
         db.commit()
         return media_item_response(db, media_item, member)
+
+    @app.patch("/media/{media_item_id}", response_model=MediaItemResponse)
+    def update_media(
+        media_item_id: UUID,
+        payload: MediaUpdateRequest,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> MediaItemResponse:
+        require_csrf(request)
+        media_item = db.get(orm.MediaItem, media_item_id)
+        if media_item is None or media_item.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        member = member_for_actor(db, media_item.trip_id, actor)
+        if member is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+
+        is_owner_editor = member.role in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}
+        is_contributor_owner = media_item.contributor_member_id == member.id
+        if not is_owner_editor and not is_contributor_owner:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+
+        if is_contributor_owner and not is_owner_editor:
+            if payload.visibility is not None:
+                media_item.visibility = payload.visibility
+                media_item.user_locked = True
+            if payload.include_in_story is not None:
+                media_item.include_in_story = payload.include_in_story
+            if payload.deleted:
+                media_item.deleted_at = datetime.now(UTC)
+                media_item.include_in_story = False
+        else:
+            if payload.visibility is not None:
+                if media_item.contributor_member_id != member.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Cannot change contributor visibility",
+                    )
+                media_item.visibility = payload.visibility
+                media_item.user_locked = True
+            if payload.include_in_story is not None:
+                if (
+                    media_item.visibility == MediaVisibility.PRIVATE.value
+                    and payload.include_in_story
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Contributor restricted this media",
+                    )
+                media_item.include_in_story = payload.include_in_story
+
+        media_item.updated_at = datetime.now(UTC)
+        db.commit()
+        contributor = db.get(orm.TripMember, media_item.contributor_member_id)
+        if contributor is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        return media_item_response(db, media_item, contributor)
 
     @app.get("/blob-download/{token}")
     def download_blob(token: str) -> StreamingResponse:

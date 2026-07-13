@@ -27,8 +27,17 @@ class Settings(BaseSettings):
         default=300, ge=1, alias="TRIPWEAVE_WORKER_LOCK_TIMEOUT_SECONDS"
     )
     session_cookie_name: str = Field(default="tripweave_session", alias="TRIPWEAVE_SESSION_COOKIE")
+    guest_session_cookie_name: str = Field(
+        default="tripweave_guest_session", alias="TRIPWEAVE_GUEST_SESSION_COOKIE"
+    )
     csrf_cookie_name: str = Field(default="tripweave_csrf", alias="TRIPWEAVE_CSRF_COOKIE")
     session_lifetime_seconds: int = Field(default=604800, ge=60, alias="TRIPWEAVE_SESSION_SECONDS")
+    guest_session_lifetime_seconds: int = Field(
+        default=604800, ge=60, alias="TRIPWEAVE_GUEST_SESSION_SECONDS"
+    )
+    invitation_lifetime_seconds: int = Field(
+        default=604800, ge=60, alias="TRIPWEAVE_INVITATION_SECONDS"
+    )
     auth_rate_limit_window_seconds: int = Field(
         default=60, ge=1, alias="TRIPWEAVE_AUTH_RATE_LIMIT_WINDOW_SECONDS"
     )

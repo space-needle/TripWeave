@@ -18,8 +18,49 @@ export type CompleteUploadFileResponse = {
   file: UploadFileResponse;
 };
 
+export type GuestMemberResponse = {
+  id: string;
+  tripId: string;
+  displayName: string;
+  role: string;
+  csrfToken: string;
+};
+
 export type HTTPValidationError = {
   detail?: ValidationError[];
+};
+
+export type InvitationAcceptRequest = {
+  displayName: string;
+};
+
+export type InvitationCreateRequest = {
+  expiresInSeconds?: number | null;
+};
+
+export type InvitationPreviewResponse = {
+  tripId: string;
+  title: string;
+  role: string;
+  expiresAt: string;
+  status: string;
+};
+
+export type InvitationResponse = {
+  id: string;
+  tripId: string;
+  role: string;
+  status: string;
+  expiresAt: string;
+  useCount: number;
+  maxUses: number;
+  revokedAt?: string | null;
+  acceptedAt?: string | null;
+  inviteUrl?: string | null;
+};
+
+export type InvitationsListResponse = {
+  invitations: InvitationResponse[];
 };
 
 export type LoginRequest = {
@@ -50,11 +91,31 @@ export type MediaItemResponse = {
   width?: number | null;
   height?: number | null;
   contributor: string;
+  contributorMemberId: string;
   thumbnail?: MediaAssetResponse | null;
 };
 
 export type MediaListResponse = {
   media: MediaItemResponse[];
+};
+
+export type MediaUpdateRequest = {
+  visibility?: string | null;
+  includeInStory?: boolean | null;
+  deleted?: boolean | null;
+};
+
+export type MemberResponse = {
+  id: string;
+  displayName: string;
+  role: string;
+  joinedAt: string;
+  removedAt?: string | null;
+  isGuest: boolean;
+};
+
+export type MemberRosterResponse = {
+  members: MemberResponse[];
 };
 
 export type RegisterRequest = {

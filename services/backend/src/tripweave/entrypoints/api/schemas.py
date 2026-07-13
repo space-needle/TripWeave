@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tripweave.application.auth import normalize_email
-from tripweave.domain.enums import TripStatus, TripVisibility
+from tripweave.domain.enums import MediaVisibility, TripStatus, TripVisibility
 
 
 class UserResponse(BaseModel):
@@ -44,6 +44,14 @@ class LoginRequest(BaseModel):
 
 class MeResponse(BaseModel):
     user: UserResponse
+
+
+class GuestMemberResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    display_name: str = Field(alias="displayName")
+    role: str
+    csrf_token: str = Field(alias="csrfToken")
 
 
 class TripCreateRequest(BaseModel):
@@ -119,6 +127,54 @@ class TripResponse(BaseModel):
 
 class TripsListResponse(BaseModel):
     trips: list[TripResponse]
+
+
+class InvitationCreateRequest(BaseModel):
+    expires_in_seconds: int | None = Field(
+        default=None, alias="expiresInSeconds", ge=60, le=60 * 60 * 24 * 30
+    )
+
+
+class InvitationResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    role: str
+    status: str
+    expires_at: datetime = Field(alias="expiresAt")
+    use_count: int = Field(alias="useCount")
+    max_uses: int = Field(alias="maxUses")
+    revoked_at: datetime | None = Field(default=None, alias="revokedAt")
+    accepted_at: datetime | None = Field(default=None, alias="acceptedAt")
+    invite_url: str | None = Field(default=None, alias="inviteUrl")
+
+
+class InvitationsListResponse(BaseModel):
+    invitations: list[InvitationResponse]
+
+
+class InvitationPreviewResponse(BaseModel):
+    trip_id: UUID = Field(alias="tripId")
+    title: str
+    role: str
+    expires_at: datetime = Field(alias="expiresAt")
+    status: str
+
+
+class InvitationAcceptRequest(BaseModel):
+    display_name: str = Field(alias="displayName", min_length=1, max_length=160)
+
+
+class MemberResponse(BaseModel):
+    id: UUID
+    display_name: str = Field(alias="displayName")
+    role: str
+    joined_at: datetime = Field(alias="joinedAt")
+    removed_at: datetime | None = Field(default=None, alias="removedAt")
+    is_guest: bool = Field(alias="isGuest")
+
+
+class MemberRosterResponse(BaseModel):
+    members: list[MemberResponse]
 
 
 class UploadFileRegisterRequest(BaseModel):
@@ -201,8 +257,22 @@ class MediaItemResponse(BaseModel):
     width: int | None = None
     height: int | None = None
     contributor: str
+    contributor_member_id: UUID = Field(alias="contributorMemberId")
     thumbnail: MediaAssetResponse | None = None
 
 
 class MediaListResponse(BaseModel):
     media: list[MediaItemResponse]
+
+
+class MediaUpdateRequest(BaseModel):
+    visibility: str | None = None
+    include_in_story: bool | None = Field(default=None, alias="includeInStory")
+    deleted: bool | None = None
+
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility(cls, value: str | None) -> str | None:
+        if value is not None and value not in {item.value for item in MediaVisibility}:
+            raise ValueError("Invalid media visibility")
+        return value
