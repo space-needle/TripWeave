@@ -2,7 +2,7 @@ COMPOSE_FILE := deploy/compose.local.yml
 BACKEND_DIR := services/backend
 WEB_DIR := apps/web
 
-.PHONY: dev down logs format lint typecheck test build check
+.PHONY: dev down logs format lint typecheck test build check generate-api-types
 
 dev:
 	docker compose -f $(COMPOSE_FILE) up --build
@@ -13,6 +13,9 @@ down:
 logs:
 	docker compose -f $(COMPOSE_FILE) logs -f
 
+generate-api-types:
+	cd $(BACKEND_DIR) && uv run python ../../scripts/generate_openapi_types.py
+
 format:
 	cd $(BACKEND_DIR) && uv run ruff format .
 	corepack pnpm --dir $(WEB_DIR) format
@@ -21,7 +24,7 @@ lint:
 	cd $(BACKEND_DIR) && uv run ruff check .
 	corepack pnpm --dir $(WEB_DIR) lint
 
-typecheck:
+typecheck: generate-api-types
 	cd $(BACKEND_DIR) && uv run mypy src tests
 	corepack pnpm --dir $(WEB_DIR) typecheck
 
@@ -29,7 +32,7 @@ test:
 	cd $(BACKEND_DIR) && uv run pytest
 	corepack pnpm --dir $(WEB_DIR) test
 
-build:
+build: generate-api-types
 	corepack pnpm --dir $(WEB_DIR) build
 	docker compose -f $(COMPOSE_FILE) build
 

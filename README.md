@@ -2,7 +2,7 @@
 
 TripWeave reconstructs one shared trip from multiple travelers' camera rolls. Contributors upload photos after a trip. The system aligns time and location, groups media into days, stops, and moments, provides a review-by-exception workflow, and publishes an interactive map-and-timeline story.
 
-This repository now contains the minimal local development foundation and the Stage 2 provider-neutral database foundation. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, and PostgreSQL repository adapters needed to start local development. HTTP authentication, upload endpoints, media processing, and cloud adapters are intentionally not implemented yet.
+This repository now contains the minimal local development foundation, the provider-neutral database foundation, and the first local owner workflow. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, PostgreSQL repository adapters, email/password authentication, server-side sessions, and local trip management. Upload endpoints, media processing, and cloud adapters are intentionally not implemented yet.
 
 ## Architecture Direction
 
@@ -66,7 +66,7 @@ make dev
 
 Local service URLs:
 
-- Web status page: http://localhost:3000
+- Web app: http://localhost:3000
 - API liveness: http://localhost:8000/health/live
 - API readiness: http://localhost:8000/health/ready
 - API dependency status: http://localhost:8000/status
@@ -86,4 +86,4 @@ make build
 make check
 ```
 
-The local database migrations enable PostGIS and create the first provider-neutral domain tables for users, sessions, trips, trip membership, invitations, uploads, media records, media assets, and processing jobs.
+The local database migrations enable PostGIS and create the first provider-neutral domain tables for users, sessions, trips, trip membership, invitations, uploads, media records, media assets, and processing jobs. The current product flow lets an owner register, sign in, create trips, edit trip settings, delete their own trips, and sign out.

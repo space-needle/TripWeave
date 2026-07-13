@@ -15,6 +15,7 @@ class TripVisibility(StrEnum):
 
 class TripMemberRole(StrEnum):
     OWNER = "owner"
+    EDITOR = "editor"
     CONTRIBUTOR = "contributor"
     VIEWER = "viewer"
 

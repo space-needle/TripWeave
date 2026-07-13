@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "TripWeave Status",
-  description: "Local TripWeave development status",
+  title: "TripWeave",
+  description: "Local TripWeave owner workspace",
 };
 
 export default function RootLayout({
