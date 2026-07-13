@@ -24,6 +24,69 @@ TripWeave turns multiple travelers' camera rolls into one shared trip story.
 
 `StoryPublication` is a versioned published snapshot of map, timeline, text, media derivatives, visibility decisions, and sanitized geometry.
 
+## Stage 2 Domain Foundation
+
+```mermaid
+erDiagram
+    users ||--o{ sessions : owns
+    users ||--o{ trips : creates
+    users ||--o{ trip_members : joins
+    trips ||--o{ trip_members : has
+    trips ||--o{ trip_invitations : invites
+    trips ||--o{ upload_sessions : receives
+    trip_members ||--o{ upload_sessions : starts
+    upload_sessions ||--o{ upload_files : tracks
+    trips ||--o{ media_items : contains
+    trip_members ||--o{ media_items : contributes
+    upload_files }o--o| media_items : becomes
+    media_items ||--o{ media_assets : has
+    processing_jobs }o--|| upload_files : targets
+    processing_jobs }o--|| media_items : targets
+    processing_jobs }o--|| trips : targets
+
+    users {
+        uuid id
+        string email
+        string password_hash
+        string display_name
+    }
+    trips {
+        uuid id
+        string title
+        string timezone_id
+        int day_cutoff_hour
+        string status
+        string visibility
+    }
+    media_items {
+        uuid id
+        string original_store_alias
+        string original_object_key
+        geography original_location
+        geography effective_location
+        timestamptz original_captured_at_utc
+        timestamptz effective_captured_at_utc
+        string processing_state
+    }
+    media_assets {
+        uuid id
+        string asset_type
+        string store_alias
+        string object_key
+        boolean metadata_stripped
+    }
+    processing_jobs {
+        uuid id
+        string job_type
+        string target_type
+        uuid target_id
+        string state
+        string idempotency_key
+    }
+```
+
+Stage 2 intentionally stores only provider-neutral blob identity through `store_alias` and `object_key`. It does not introduce authentication flows, upload endpoints, media processing, cloud adapters, story publication tables, or provider-specific storage fields.
+
 ## Invariants
 
 - Original files are immutable.
