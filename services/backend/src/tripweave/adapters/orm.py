@@ -34,6 +34,11 @@ from tripweave.domain.enums import (
     ProcessingJobType,
     ProcessingState,
     ProcessingTargetType,
+    ReconstructionRunState,
+    ReconstructionSource,
+    ReviewItemStatus,
+    ReviewItemType,
+    RouteSource,
     TimeSource,
     TripMemberRole,
     TripStatus,
@@ -55,6 +60,13 @@ class GeographyPoint(UserDefinedType[object]):
 
     def get_col_spec(self, **_kw: object) -> str:
         return "geography(Point,4326)"
+
+
+class GeographyLineString(UserDefinedType[object]):
+    cache_ok = True
+
+    def get_col_spec(self, **_kw: object) -> str:
+        return "geography(LineString,4326)"
 
 
 class Base(DeclarativeBase):
@@ -466,6 +478,253 @@ class ProcessingJob(Base):
     )
 
 
+class GeneratedRecordMixin(TimestampMixin):
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    algorithm_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    reconstruction_run_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("reconstruction_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
+class ReconstructionRun(Base, TimestampMixin):
+    __tablename__ = "reconstruction_runs"
+    __table_args__ = (
+        CheckConstraint(f"state IN ({enum_values(ReconstructionRunState)})", name="state"),
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="confidence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    state: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'running'"))
+    source: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default=text("'automation'")
+    )
+    confidence: Mapped[float | None] = mapped_column(Float)
+    algorithm_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    algorithm_config: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    user_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    summary: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class TripDay(Base, GeneratedRecordMixin):
+    __tablename__ = "trip_days"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        UniqueConstraint("trip_id", "day_date", "reconstruction_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    day_date: Mapped[date] = mapped_column(Date, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Place(Base, GeneratedRecordMixin):
+    __tablename__ = "places"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str | None] = mapped_column(String(255))
+    centroid: Mapped[object | None] = mapped_column(GeographyPoint)
+
+
+class Stop(Base, GeneratedRecordMixin):
+    __tablename__ = "stops"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_day_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_days.id", ondelete="CASCADE"), nullable=False
+    )
+    place_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("places.id", ondelete="RESTRICT"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    centroid: Mapped[object | None] = mapped_column(GeographyPoint)
+
+
+class Moment(Base, GeneratedRecordMixin):
+    __tablename__ = "moments"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    stop_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MomentMedia(Base, GeneratedRecordMixin):
+    __tablename__ = "moment_media"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        UniqueConstraint("moment_id", "media_item_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    moment_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("moments.id", ondelete="CASCADE"), nullable=False
+    )
+    media_item_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MomentParticipant(Base, GeneratedRecordMixin):
+    __tablename__ = "moment_participants"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        UniqueConstraint("moment_id", "trip_member_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    moment_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("moments.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_member_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("trip_members.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+
+class TripLeg(Base, GeneratedRecordMixin):
+    __tablename__ = "trip_legs"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(f"route_source IN ({enum_values(RouteSource)})", name="route_source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        UniqueConstraint("from_stop_id", "to_stop_id", "reconstruction_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_day_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_days.id", ondelete="CASCADE"), nullable=False
+    )
+    from_stop_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
+    )
+    to_stop_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
+    )
+    route_source: Mapped[str] = mapped_column(String(40), nullable=False)
+    geometry: Mapped[object | None] = mapped_column(GeographyLineString)
+
+
+class ReviewItem(Base, GeneratedRecordMixin):
+    __tablename__ = "review_items"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(f"item_type IN ({enum_values(ReviewItemType)})", name="item_type"),
+        CheckConstraint(f"status IN ({enum_values(ReviewItemStatus)})", name="status"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    media_item_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="SET NULL")
+    )
+    item_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'open'"))
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
 Index("ix_sessions_user_id", Session.user_id)
 Index("ix_trips_created_by", Trip.created_by)
 Index("ix_trip_members_trip_id", TripMember.trip_id)
@@ -500,3 +759,18 @@ Index(
     ProcessingJob.run_after,
 )
 Index("ix_processing_jobs_target", ProcessingJob.target_type, ProcessingJob.target_id)
+Index("ix_reconstruction_runs_trip_id", ReconstructionRun.trip_id)
+Index("ix_trip_days_trip_id", TripDay.trip_id)
+Index("ix_places_trip_id", Place.trip_id)
+Index("ix_places_centroid_gist", Place.centroid, postgresql_using="gist")
+Index("ix_stops_trip_day_id", Stop.trip_day_id)
+Index("ix_stops_trip_id", Stop.trip_id)
+Index("ix_stops_centroid_gist", Stop.centroid, postgresql_using="gist")
+Index("ix_moments_stop_id", Moment.stop_id)
+Index("ix_moments_trip_id", Moment.trip_id)
+Index("ix_moment_media_media_item_id", MomentMedia.media_item_id)
+Index("ix_moment_participants_trip_member_id", MomentParticipant.trip_member_id)
+Index("ix_trip_legs_trip_day_id", TripLeg.trip_day_id)
+Index("ix_trip_legs_geometry_gist", TripLeg.geometry, postgresql_using="gist")
+Index("ix_review_items_trip_id", ReviewItem.trip_id)
+Index("ix_review_items_media_item_id", ReviewItem.media_item_id)

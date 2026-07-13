@@ -18,6 +18,7 @@ import type {
   InvitationResponse,
   MediaItemResponse,
   MemberResponse,
+  ReconstructionResponse,
   TripResponse,
   UploadFileResponse,
   UploadSessionResponse,
@@ -135,6 +136,9 @@ function OwnerWorkspace() {
   const [uploadError, setUploadError] = useState("");
   const [media, setMedia] = useState<MediaItemResponse[]>([]);
   const [mediaError, setMediaError] = useState("");
+  const [reconstruction, setReconstruction] =
+    useState<ReconstructionResponse | null>(null);
+  const [reconstructionError, setReconstructionError] = useState("");
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [members, setMembers] = useState<MemberResponse[]>([]);
   const [collaborationError, setCollaborationError] = useState("");
@@ -205,6 +209,15 @@ function OwnerWorkspace() {
     setMedia(result.media);
   }, []);
 
+  const loadReconstruction = useCallback(async (tripId: string | null) => {
+    if (!tripId) {
+      setReconstruction(null);
+      return;
+    }
+    const result = await api.reconstruction(tripId);
+    setReconstruction(result);
+  }, []);
+
   const loadCollaboration = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setInvitations([]);
@@ -224,6 +237,7 @@ function OwnerWorkspace() {
     setSettingsForm(fromTrip(trip));
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
+    void loadReconstruction(trip.id);
     void loadCollaboration(trip.id);
   }
 
@@ -236,6 +250,7 @@ function OwnerWorkspace() {
     if (!nextTrip) {
       setUploadSessions([]);
       setMedia([]);
+      setReconstruction(null);
       setInvitations([]);
       setMembers([]);
     }
@@ -288,6 +303,16 @@ function OwnerWorkspace() {
       );
     }
   }, [loadUploadSessions, selectedTrip?.id]);
+
+  useEffect(() => {
+    if (selectedTrip?.id) {
+      void Promise.resolve().then(() =>
+        loadReconstruction(selectedTrip.id).catch((error) =>
+          setReconstructionError(messageFrom(error)),
+        ),
+      );
+    }
+  }, [loadReconstruction, selectedTrip?.id]);
 
   useEffect(() => {
     if (selectedTrip?.id && selectedTrip.role === "owner") {
@@ -548,6 +573,7 @@ function OwnerWorkspace() {
       await Promise.all(workers);
       await loadUploadSessions(selectedTrip.id);
       await loadMedia(selectedTrip.id);
+      await loadReconstruction(selectedTrip.id);
     } catch (error) {
       setUploadError(messageFrom(error));
     }
@@ -606,6 +632,7 @@ function OwnerWorkspace() {
       await api.retryMedia(item.id);
       if (selectedTrip) {
         await loadMedia(selectedTrip.id);
+        await loadReconstruction(selectedTrip.id);
       }
     } catch (error) {
       setMediaError(messageFrom(error));
@@ -657,6 +684,22 @@ function OwnerWorkspace() {
       await loadCollaboration(selectedTrip.id);
     } catch (error) {
       setCollaborationError(messageFrom(error));
+    }
+  }
+
+  async function runReconstruction() {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    setIsBusy(true);
+    try {
+      const result = await api.startReconstruction(selectedTrip.id);
+      setReconstruction(result);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
     }
   }
 
@@ -901,6 +944,36 @@ function OwnerWorkspace() {
           </section>
         ) : null}
 
+        {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+          <section
+            className="panel stack media-panel"
+            aria-labelledby="reconstruction-title"
+          >
+            <div className="section-heading">
+              <div>
+                <h2 id="reconstruction-title">Reconstruction</h2>
+                <p>
+                  Build days, stops, moments, inferred legs, and review items.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={runReconstruction}
+                disabled={isBusy}
+              >
+                Run reconstruction
+              </button>
+            </div>
+            {reconstructionError ? (
+              <p className="error">{reconstructionError}</p>
+            ) : null}
+            <ReconstructionOutline
+              reconstruction={reconstruction}
+              timezoneId={selectedTrip.timezoneId}
+            />
+          </section>
+        ) : null}
+
         <section
           className="panel stack media-panel"
           aria-labelledby="media-title"
@@ -910,7 +983,11 @@ function OwnerWorkspace() {
             {hasProcessingMedia ? <p>Processing uploads...</p> : null}
           </div>
           {mediaError ? <p className="error">{mediaError}</p> : null}
-          <MediaList media={media} onRetry={retryMedia} />
+          <MediaList
+            media={media}
+            onRetry={retryMedia}
+            timezoneId={selectedTrip?.timezoneId}
+          />
         </section>
       </section>
     </main>
@@ -1470,16 +1547,106 @@ function MemberRoster({
   );
 }
 
+function ReconstructionOutline({
+  reconstruction,
+  timezoneId,
+}: {
+  reconstruction: ReconstructionResponse | null;
+  timezoneId: string;
+}) {
+  if (!reconstruction?.latestRun) {
+    return <p>No reconstruction run yet.</p>;
+  }
+  return (
+    <div className="outline">
+      <div className="summary-grid">
+        <div>
+          <strong>{reconstruction.latestRun.state}</strong>
+          <small>{reconstruction.latestRun.algorithmVersion}</small>
+        </div>
+        <div>
+          <strong>{String(reconstruction.latestRun.summary.days ?? 0)}</strong>
+          <small>days</small>
+        </div>
+        <div>
+          <strong>{String(reconstruction.latestRun.summary.stops ?? 0)}</strong>
+          <small>stops</small>
+        </div>
+        <div>
+          <strong>
+            {String(reconstruction.latestRun.summary.reviewItems ?? 0)}
+          </strong>
+          <small>review items</small>
+        </div>
+      </div>
+      {reconstruction.days.length === 0 ? (
+        <p>No usable media has been grouped yet.</p>
+      ) : (
+        <div className="simple-list" role="list">
+          {reconstruction.days.map((day) => (
+            <article className="outline-day" key={day.id} role="listitem">
+              <h3>{day.date}</h3>
+              {day.stops.map((stop) => (
+                <div className="outline-stop" key={stop.id}>
+                  <strong>
+                    Stop {stop.position}
+                    {stop.placeName ? ` · ${stop.placeName}` : ""}
+                  </strong>
+                  <small>
+                    {formatReconstructionTime(
+                      stop.startsAt,
+                      stop.startsAtLocal ?? null,
+                      timezoneId,
+                    )}{" "}
+                    to{" "}
+                    {formatReconstructionTime(
+                      stop.endsAt,
+                      stop.endsAtLocal ?? null,
+                      timezoneId,
+                    )}{" "}
+                    · {stop.mediaCount} media · {stop.contributorCount}{" "}
+                    contributors
+                  </small>
+                  <div className="moment-row">
+                    {stop.moments.map((moment) => (
+                      <span key={moment.id}>
+                        Moment {moment.position}: {moment.mediaCount} media,{" "}
+                        {moment.contributorCount} contributors
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </article>
+          ))}
+        </div>
+      )}
+      {reconstruction.reviewItems.length > 0 ? (
+        <div className="review-list">
+          <h3>Review</h3>
+          {reconstruction.reviewItems.map((item) => (
+            <p key={item.id}>
+              <strong>{item.itemType}</strong>: {item.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MediaList({
   media,
   onRetry,
   onVisibilityChange,
   onDelete,
+  timezoneId,
 }: {
   media: MediaItemResponse[];
   onRetry: (item: MediaItemResponse) => void;
   onVisibilityChange?: (item: MediaItemResponse, visibility: string) => void;
   onDelete?: (item: MediaItemResponse) => void;
+  timezoneId?: string;
 }) {
   if (media.length === 0) {
     return <p>No processed media yet.</p>;
@@ -1503,7 +1670,7 @@ function MediaList({
             <dl>
               <div>
                 <dt>Captured</dt>
-                <dd>{formatDate(item.capturedAt ?? null)}</dd>
+                <dd>{formatDate(item.capturedAt ?? null, timezoneId)}</dd>
               </div>
               <div>
                 <dt>GPS</dt>
@@ -1566,12 +1733,46 @@ function MediaList({
   );
 }
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, timezoneId?: string): string {
   if (!value) {
     return "Unknown";
   }
+  const options: Intl.DateTimeFormatOptions = {
+    dateStyle: "medium",
+    timeStyle: "short",
+  };
+  if (timezoneId) {
+    options.timeZone = timezoneId;
+  }
+  return new Intl.DateTimeFormat(undefined, options).format(new Date(value));
+}
+
+function formatReconstructionTime(
+  utcValue: string | null,
+  localValue: string | null,
+  timezoneId?: string,
+): string {
+  if (localValue) {
+    return formatFloatingDate(localValue);
+  }
+  return formatDate(utcValue, timezoneId);
+}
+
+function formatFloatingDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(date);
 }

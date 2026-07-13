@@ -1,5 +1,6 @@
 """Ports package reserved for provider-neutral interfaces."""
 
+from tripweave.ports.geocoder import Geocoder, GeocodeResult
 from tripweave.ports.repositories import (
     MediaItemsRepository,
     ProcessingJobsRepository,
@@ -8,6 +9,8 @@ from tripweave.ports.repositories import (
 )
 
 __all__ = [
+    "GeocodeResult",
+    "Geocoder",
     "MediaItemsRepository",
     "ProcessingJobsRepository",
     "TripsRepository",

@@ -87,6 +87,77 @@ erDiagram
 
 Stage 2 intentionally stores only provider-neutral blob identity through `store_alias` and `object_key`. It does not introduce authentication flows, upload endpoints, media processing, cloud adapters, story publication tables, or provider-specific storage fields.
 
+## Reconstruction Foundation
+
+```mermaid
+erDiagram
+    trips ||--o{ reconstruction_runs : reconstructs
+    reconstruction_runs ||--o{ trip_days : generates
+    reconstruction_runs ||--o{ places : generates
+    reconstruction_runs ||--o{ stops : generates
+    reconstruction_runs ||--o{ moments : generates
+    reconstruction_runs ||--o{ trip_legs : generates
+    reconstruction_runs ||--o{ review_items : flags
+    trips ||--o{ trip_days : has
+    trips ||--o{ places : has
+    trip_days ||--o{ stops : contains
+    places ||--o{ stops : visited_as
+    stops ||--o{ moments : contains
+    moments ||--o{ moment_media : includes
+    media_items ||--o{ moment_media : grouped_into
+    moments ||--o{ moment_participants : includes
+    trip_members ||--o{ moment_participants : appears_in
+    stops ||--o{ trip_legs : from_stop
+    stops ||--o{ trip_legs : to_stop
+    media_items ||--o{ review_items : may_need_review
+
+    reconstruction_runs {
+        uuid id
+        uuid trip_id
+        string state
+        string algorithm_version
+        jsonb algorithm_config
+    }
+    trip_days {
+        uuid id
+        date day_date
+        int position
+        uuid reconstruction_run_id
+    }
+    places {
+        uuid id
+        string name
+        geography centroid
+        uuid reconstruction_run_id
+    }
+    stops {
+        uuid id
+        uuid place_id
+        timestamptz starts_at_utc
+        timestamptz ends_at_utc
+        geography centroid
+    }
+    moments {
+        uuid id
+        uuid stop_id
+        timestamptz starts_at_utc
+        timestamptz ends_at_utc
+    }
+    trip_legs {
+        uuid id
+        string route_source
+        geography geometry
+    }
+    review_items {
+        uuid id
+        string item_type
+        string status
+        uuid media_item_id
+    }
+```
+
+Reconstruction records are generated results. Each generated table records `source`, `confidence`, `algorithm_version`, `reconstruction_run_id`, `user_locked`, `created_at`, and `updated_at`. Reruns replace unlocked generated records while preserving locked human edits.
+
 ## Invariants
 
 - Original files are immutable.

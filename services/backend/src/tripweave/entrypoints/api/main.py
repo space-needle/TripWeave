@@ -24,6 +24,8 @@ from tripweave.adapters.local_blob_store import (
     BlobSizeExceededError,
     InvalidGrantError,
 )
+from tripweave.adapters.manual_geocoder import ManualGeocoder
+from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
 from tripweave.application.auth import (
@@ -67,7 +69,13 @@ from tripweave.entrypoints.api.schemas import (
     MemberResponse,
     MemberRosterResponse,
     MeResponse,
+    ReconstructionDayResponse,
+    ReconstructionMomentResponse,
+    ReconstructionResponse,
+    ReconstructionRunResponse,
+    ReconstructionStopResponse,
     RegisterRequest,
+    ReviewItemResponse,
     TripCreateRequest,
     TripResponse,
     TripsListResponse,
@@ -122,6 +130,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         window_seconds=resolved_settings.auth_rate_limit_window_seconds,
     )
     app.state.blob_store = create_blob_store(resolved_settings)
+    app.state.geocoder = ManualGeocoder()
 
     app.add_middleware(
         CORSMiddleware,
@@ -934,7 +943,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             filename=media_item.original_filename,
             processingState=media_item.processing_state,
             errorMessage=media_error_for(db, media_item.id),
-            capturedAt=media_item.effective_captured_at_utc or media_item.original_captured_at_utc,
+            capturedAt=media_item.effective_captured_at_utc
+            or media_item.original_captured_at_utc
+            or media_item.original_captured_at_local,
             gpsPresent=media_item.effective_location is not None
             or media_item.original_location is not None,
             width=width if isinstance(width, int) else None,
@@ -943,6 +954,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             contributorMemberId=contributor.id,
             thumbnail=media_asset_response(thumbnail) if thumbnail is not None else None,
         )
+
+    def media_local_capture(media_item: orm.MediaItem) -> datetime | None:
+        if media_item.original_captured_at_local is not None:
+            return media_item.original_captured_at_local
+        captured_at_utc = (
+            media_item.effective_captured_at_utc or media_item.original_captured_at_utc
+        )
+        if captured_at_utc is None or media_item.original_utc_offset_minutes is None:
+            return None
+        return (
+            captured_at_utc + timedelta(minutes=media_item.original_utc_offset_minutes)
+        ).replace(tzinfo=None)
 
     def upload_file_response(
         upload_file: orm.UploadFile,
@@ -1429,6 +1452,173 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if contributor is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
         return media_item_response(db, media_item, contributor)
+
+    def reconstruction_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
+        latest_run = db.execute(
+            select(orm.ReconstructionRun)
+            .where(orm.ReconstructionRun.trip_id == trip_id)
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest_run is None:
+            return ReconstructionResponse(latestRun=None, days=[], reviewItems=[])
+
+        days = list(
+            db.execute(
+                select(orm.TripDay)
+                .where(
+                    orm.TripDay.trip_id == trip_id,
+                    orm.TripDay.reconstruction_run_id == latest_run.id,
+                )
+                .order_by(orm.TripDay.position)
+            ).scalars()
+        )
+        stops = list(
+            db.execute(
+                select(orm.Stop, orm.Place)
+                .join(orm.Place, orm.Place.id == orm.Stop.place_id)
+                .where(
+                    orm.Stop.trip_id == trip_id,
+                    orm.Stop.reconstruction_run_id == latest_run.id,
+                )
+                .order_by(orm.Stop.position)
+            ).all()
+        )
+        moments = list(
+            db.execute(
+                select(orm.Moment)
+                .where(
+                    orm.Moment.trip_id == trip_id,
+                    orm.Moment.reconstruction_run_id == latest_run.id,
+                )
+                .order_by(orm.Moment.position)
+            ).scalars()
+        )
+        moment_media_rows = db.execute(
+            select(orm.MomentMedia.moment_id, orm.Moment.stop_id, orm.MediaItem)
+            .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+            .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+            .where(
+                orm.MomentMedia.trip_id == trip_id,
+                orm.MomentMedia.reconstruction_run_id == latest_run.id,
+            )
+        ).all()
+        contributors_by_moment: dict[UUID, set[UUID]] = {}
+        media_count_by_moment: dict[UUID, int] = {}
+        local_times_by_moment: dict[UUID, list[datetime]] = {}
+        local_times_by_stop: dict[UUID, list[datetime]] = {}
+        for moment_id, stop_id, media_item in moment_media_rows:
+            contributor_id = media_item.contributor_member_id
+            media_count_by_moment[moment_id] = media_count_by_moment.get(moment_id, 0) + 1
+            contributors_by_moment.setdefault(moment_id, set()).add(contributor_id)
+            local_capture = media_local_capture(media_item)
+            if local_capture is not None:
+                local_times_by_moment.setdefault(moment_id, []).append(local_capture)
+                local_times_by_stop.setdefault(stop_id, []).append(local_capture)
+
+        moments_by_stop: dict[UUID, list[ReconstructionMomentResponse]] = {}
+        for moment in moments:
+            contributors = contributors_by_moment.get(moment.id, set())
+            moment_local_times = local_times_by_moment.get(moment.id, [])
+            moments_by_stop.setdefault(moment.stop_id, []).append(
+                ReconstructionMomentResponse(
+                    id=moment.id,
+                    position=moment.position,
+                    startsAt=moment.starts_at_utc,
+                    endsAt=moment.ends_at_utc,
+                    startsAtLocal=min(moment_local_times) if moment_local_times else None,
+                    endsAtLocal=max(moment_local_times) if moment_local_times else None,
+                    mediaCount=media_count_by_moment.get(moment.id, 0),
+                    contributorCount=len(contributors),
+                )
+            )
+
+        stops_by_day: dict[UUID, list[ReconstructionStopResponse]] = {}
+        for stop, place in stops:
+            moment_items = moments_by_stop.get(stop.id, [])
+            stop_local_times = local_times_by_stop.get(stop.id, [])
+            media_count = sum(item.media_count for item in moment_items)
+            contributor_count = sum(item.contributor_count for item in moment_items)
+            stops_by_day.setdefault(stop.trip_day_id, []).append(
+                ReconstructionStopResponse(
+                    id=stop.id,
+                    position=stop.position,
+                    startsAt=stop.starts_at_utc,
+                    endsAt=stop.ends_at_utc,
+                    startsAtLocal=min(stop_local_times) if stop_local_times else None,
+                    endsAtLocal=max(stop_local_times) if stop_local_times else None,
+                    placeName=place.name,
+                    mediaCount=media_count,
+                    contributorCount=contributor_count,
+                    moments=moment_items,
+                )
+            )
+
+        review_items = list(
+            db.execute(
+                select(orm.ReviewItem)
+                .where(
+                    orm.ReviewItem.trip_id == trip_id,
+                    orm.ReviewItem.reconstruction_run_id == latest_run.id,
+                )
+                .order_by(orm.ReviewItem.created_at, orm.ReviewItem.id)
+            ).scalars()
+        )
+        return ReconstructionResponse(
+            latestRun=ReconstructionRunResponse(
+                id=latest_run.id,
+                state=latest_run.state,
+                algorithmVersion=latest_run.algorithm_version,
+                summary=latest_run.summary,
+                startedAt=latest_run.started_at,
+                finishedAt=latest_run.finished_at,
+            ),
+            days=[
+                ReconstructionDayResponse(
+                    id=day.id,
+                    date=day.day_date,
+                    position=day.position,
+                    stops=stops_by_day.get(day.id, []),
+                )
+                for day in days
+            ],
+            reviewItems=[
+                ReviewItemResponse(
+                    id=item.id,
+                    itemType=item.item_type,
+                    status=item.status,
+                    message=item.message,
+                    mediaItemId=item.media_item_id,
+                )
+                for item in review_items
+            ],
+        )
+
+    @app.post("/trips/{trip_id}/reconstruction-runs", response_model=ReconstructionResponse)
+    def start_reconstruction(
+        trip_id: UUID,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> ReconstructionResponse:
+        require_csrf(request)
+        trip = db.get(orm.Trip, trip_id)
+        if trip is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        member = require_member_for_actor(db, trip_id, actor)
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        reconstruct_trip(db=db, trip=trip, geocoder=app.state.geocoder)
+        return reconstruction_response(db, trip_id)
+
+    @app.get("/trips/{trip_id}/reconstruction", response_model=ReconstructionResponse)
+    def get_reconstruction(
+        trip_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> ReconstructionResponse:
+        require_member_for_actor(db, trip_id, actor)
+        return reconstruction_response(db, trip_id)
 
     @app.get("/blob-download/{token}")
     def download_blob(token: str) -> StreamingResponse:

@@ -300,6 +300,18 @@ p {
   grid-column: 1 / -1;
 }
 
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
 .invite-card,
 .simple-row {
   display: flex;
@@ -342,6 +354,70 @@ p {
 .simple-row small {
   color: var(--muted);
   margin-top: 3px;
+}
+
+.outline {
+  display: grid;
+  gap: 14px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.summary-grid > div,
+.outline-day,
+.outline-stop,
+.review-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.summary-grid strong,
+.summary-grid small,
+.outline-stop strong,
+.outline-stop small {
+  display: block;
+}
+
+.summary-grid small,
+.outline-stop small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.outline-day {
+  display: grid;
+  gap: 10px;
+}
+
+.outline-day h3,
+.review-list h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.outline-stop {
+  display: grid;
+  gap: 8px;
+}
+
+.moment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.moment-row span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .media-list {

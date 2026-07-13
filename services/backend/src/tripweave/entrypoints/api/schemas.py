@@ -276,3 +276,57 @@ class MediaUpdateRequest(BaseModel):
         if value is not None and value not in {item.value for item in MediaVisibility}:
             raise ValueError("Invalid media visibility")
         return value
+
+
+class ReconstructionRunResponse(BaseModel):
+    id: UUID
+    state: str
+    algorithm_version: str = Field(alias="algorithmVersion")
+    summary: dict[str, object]
+    started_at: datetime = Field(alias="startedAt")
+    finished_at: datetime | None = Field(default=None, alias="finishedAt")
+
+
+class ReconstructionMomentResponse(BaseModel):
+    id: UUID
+    position: int
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime = Field(alias="endsAt")
+    starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
+    ends_at_local: datetime | None = Field(default=None, alias="endsAtLocal")
+    media_count: int = Field(alias="mediaCount")
+    contributor_count: int = Field(alias="contributorCount")
+
+
+class ReconstructionStopResponse(BaseModel):
+    id: UUID
+    position: int
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime = Field(alias="endsAt")
+    starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
+    ends_at_local: datetime | None = Field(default=None, alias="endsAtLocal")
+    place_name: str | None = Field(default=None, alias="placeName")
+    media_count: int = Field(alias="mediaCount")
+    contributor_count: int = Field(alias="contributorCount")
+    moments: list[ReconstructionMomentResponse]
+
+
+class ReconstructionDayResponse(BaseModel):
+    id: UUID
+    date: date
+    position: int
+    stops: list[ReconstructionStopResponse]
+
+
+class ReviewItemResponse(BaseModel):
+    id: UUID
+    item_type: str = Field(alias="itemType")
+    status: str
+    message: str
+    media_item_id: UUID | None = Field(default=None, alias="mediaItemId")
+
+
+class ReconstructionResponse(BaseModel):
+    latest_run: ReconstructionRunResponse | None = Field(default=None, alias="latestRun")
+    days: list[ReconstructionDayResponse]
+    review_items: list[ReviewItemResponse] = Field(alias="reviewItems")

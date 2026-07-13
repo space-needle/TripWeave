@@ -12,6 +12,7 @@ import type {
   MediaListResponse,
   MemberRosterResponse,
   MeResponse,
+  ReconstructionResponse,
   RegisterRequest,
   TripCreateRequest,
   TripResponse,
@@ -162,6 +163,17 @@ export const api = {
   },
   media(tripId: string): Promise<MediaListResponse> {
     return apiRequest<MediaListResponse>(`/trips/${tripId}/media`);
+  },
+  reconstruction(tripId: string): Promise<ReconstructionResponse> {
+    return apiRequest<ReconstructionResponse>(
+      `/trips/${tripId}/reconstruction`,
+    );
+  },
+  startReconstruction(tripId: string): Promise<ReconstructionResponse> {
+    return apiRequest<ReconstructionResponse>(
+      `/trips/${tripId}/reconstruction-runs`,
+      { method: "POST" },
+    );
   },
   updateMedia(
     id: string,

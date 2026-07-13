@@ -35,6 +35,7 @@ The planned stack is:
 - `docs/security-and-privacy.md` defines ownership, deletion, publication, and secret-handling rules.
 - `docs/cloud-portability-contract.md` defines provider-neutral storage contracts.
 - `docs/worker-state-machine.md` defines durable processing-job claiming, retry, and media-ingest behavior.
+- `docs/reconstruction-algorithm.md` defines the deterministic local trip reconstruction algorithm.
 - `docs/roadmap.md` defines delivery order through local MVP, provider proof, and later deployment adapters.
 - `docs/adr/` records architectural decisions.
 

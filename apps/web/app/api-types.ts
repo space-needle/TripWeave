@@ -118,10 +118,64 @@ export type MemberRosterResponse = {
   members: MemberResponse[];
 };
 
+export type ReconstructionDayResponse = {
+  id: string;
+  date: string;
+  position: number;
+  stops: ReconstructionStopResponse[];
+};
+
+export type ReconstructionMomentResponse = {
+  id: string;
+  position: number;
+  startsAt: string;
+  endsAt: string;
+  startsAtLocal?: string | null;
+  endsAtLocal?: string | null;
+  mediaCount: number;
+  contributorCount: number;
+};
+
+export type ReconstructionResponse = {
+  latestRun?: ReconstructionRunResponse | null;
+  days: ReconstructionDayResponse[];
+  reviewItems: ReviewItemResponse[];
+};
+
+export type ReconstructionRunResponse = {
+  id: string;
+  state: string;
+  algorithmVersion: string;
+  summary: Record<string, unknown>;
+  startedAt: string;
+  finishedAt?: string | null;
+};
+
+export type ReconstructionStopResponse = {
+  id: string;
+  position: number;
+  startsAt: string;
+  endsAt: string;
+  startsAtLocal?: string | null;
+  endsAtLocal?: string | null;
+  placeName?: string | null;
+  mediaCount: number;
+  contributorCount: number;
+  moments: ReconstructionMomentResponse[];
+};
+
 export type RegisterRequest = {
   email: string;
   password: string;
   displayName: string;
+};
+
+export type ReviewItemResponse = {
+  id: string;
+  itemType: string;
+  status: string;
+  message: string;
+  mediaItemId?: string | null;
 };
 
 export type TripCreateRequest = {

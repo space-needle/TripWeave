@@ -89,6 +89,7 @@ class ProcessingJobType(StrEnum):
     PUBLICATION = "publication"
     DELETION = "deletion"
     REPAIR = "repair"
+    RECONSTRUCT_TRIP = "reconstruct_trip"
 
 
 class ProcessingTargetType(StrEnum):
@@ -96,6 +97,37 @@ class ProcessingTargetType(StrEnum):
     MEDIA_ITEM = "media_item"
     TRIP = "trip"
     STORY_PUBLICATION = "story_publication"
+
+
+class ReconstructionRunState(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ReconstructionSource(StrEnum):
+    AUTOMATION = "automation"
+    USER_CORRECTION = "user_correction"
+    MANUAL = "manual"
+
+
+class RouteSource(StrEnum):
+    PHOTO_INFERRED = "photo_inferred"
+    MANUAL = "manual"
+    DIRECTIONS_API = "directions_api"
+    GPS_TRACK = "gps_track"
+
+
+class ReviewItemType(StrEnum):
+    UNUSABLE_TIME = "unusable_time"
+    MISSING_GPS_AMBIGUOUS = "missing_gps_ambiguous"
+    LOW_CONFIDENCE_STOP = "low_confidence_stop"
+
+
+class ReviewItemStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
 
 
 class ProcessingJobState(StrEnum):

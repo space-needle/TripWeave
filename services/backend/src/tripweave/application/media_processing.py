@@ -149,6 +149,14 @@ def extract_metadata(
     gps_info = exif.get_ifd(ExifTags.IFD.GPSInfo) if exif else {}
     latitude, longitude = gps_to_decimal(gps_info)
     captured_at_local, captured_at_utc, utc_offset_minutes = capture_time(named_exif)
+    if captured_at_utc is None:
+        gps_utc = gps_time_utc(gps_info)
+        if gps_utc is not None:
+            captured_at_utc = gps_utc
+            if captured_at_local is not None:
+                utc_offset_minutes = int(
+                    round((captured_at_local.replace(tzinfo=UTC) - gps_utc).total_seconds() / 60)
+                )
     orientation = safe_int(named_exif.get("Orientation"))
     camera_hints = {
         key: str(named_exif[key])
@@ -224,6 +232,38 @@ def gps_to_decimal(gps_info: dict[int, object]) -> tuple[float | None, float | N
     return latitude, longitude
 
 
+def gps_time_utc(gps_info: dict[int, object]) -> datetime | None:
+    if not gps_info:
+        return None
+    named = {ExifTags.GPSTAGS.get(key, str(key)): value for key, value in gps_info.items()}
+    date_stamp = first_string(named.get("GPSDateStamp"))
+    time_stamp = named.get("GPSTimeStamp")
+    if date_stamp is None or not isinstance(time_stamp, (tuple, list)) or len(time_stamp) != 3:
+        return None
+    parts = [to_float(part) for part in time_stamp]
+    if any(part is None for part in parts):
+        return None
+    hour, minute, second = parts
+    if hour is None or minute is None or second is None:
+        return None
+    try:
+        date_part = datetime.strptime(date_stamp, "%Y:%m:%d")
+    except ValueError:
+        return None
+    whole_second = int(second)
+    microsecond = int(round((second - whole_second) * 1_000_000))
+    return datetime(
+        date_part.year,
+        date_part.month,
+        date_part.day,
+        int(hour),
+        int(minute),
+        whole_second,
+        microsecond,
+        tzinfo=UTC,
+    )
+
+
 def coordinate(value: object, ref: object) -> float | None:
     if not isinstance(value, (tuple, list)) or len(value) != 3:
         return None
@@ -259,19 +299,27 @@ def extract_xmp(payload: bytes) -> str | None:
     match = XMP_RE.search(payload)
     if not match:
         return None
-    return match.group(0).decode("utf-8", errors="replace")
+    return sanitize_text(match.group(0).decode("utf-8", errors="replace"))
 
 
 def safe_value(value: object) -> object:
     if isinstance(value, bytes):
         return f"<bytes:{len(value)}>"
     if isinstance(value, str | int | float | bool) or value is None:
-        return value
+        return sanitize_text(value) if isinstance(value, str) else value
     if isinstance(value, Fraction):
         return float(value)
     if isinstance(value, tuple | list):
         return [safe_value(item) for item in value[:20]]
-    return str(value)[:500]
+    return sanitize_text(str(value))[:500]
+
+
+def sanitize_text(value: str) -> str:
+    return "".join(
+        character
+        for character in value
+        if character == "\n" or character == "\r" or character == "\t" or ord(character) >= 0x20
+    )[:10_000]
 
 
 def safe_int(value: object) -> int | None:
@@ -290,12 +338,10 @@ def safe_int(value: object) -> int | None:
 def to_float(value: object) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
-    if isinstance(value, int | float | str | Fraction):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-    return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def first_string(*values: object) -> str | None:

@@ -2,11 +2,15 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
+from PIL.TiffImagePlugin import IFDRational
 
 from tripweave.application.media_processing import (
     MediaProcessingError,
     ProcessedMedia,
+    coordinate,
+    gps_time_utc,
     process_image_bytes,
+    sanitize_text,
 )
 
 
@@ -93,6 +97,27 @@ def test_derivative_metadata_is_stripped() -> None:
     for derivative in result.derivatives:
         with Image.open(BytesIO(derivative.payload)) as image:
             assert image.getexif() == {}
+
+
+def test_metadata_text_sanitizer_removes_nul_characters() -> None:
+    assert sanitize_text("safe\u0000text\n") == "safetext\n"
+
+
+def test_gps_rational_values_are_converted_to_decimal() -> None:
+    assert coordinate((IFDRational(34), IFDRational(30), IFDRational(0)), "N") == 34.5
+    assert coordinate((IFDRational(127), IFDRational(30), IFDRational(0)), "W") == -127.5
+
+
+def test_gps_timestamp_extracts_utc_time() -> None:
+    captured_at = gps_time_utc(
+        {
+            7: (IFDRational(10), IFDRational(44), IFDRational(24)),
+            29: "2026:06:08",
+        }
+    )
+
+    assert captured_at is not None
+    assert captured_at.isoformat() == "2026-06-08T10:44:24+00:00"
 
 
 def test_heic_decodes_where_supported() -> None:
