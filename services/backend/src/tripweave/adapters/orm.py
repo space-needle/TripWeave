@@ -19,6 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
@@ -337,6 +338,9 @@ class MediaItem(Base, TimestampMixin):
     location_confidence: Mapped[float | None] = mapped_column(Float)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     perceptual_hash: Mapped[str | None] = mapped_column(String(255))
+    original_metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     processing_state: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default=text("'pending'")
     )

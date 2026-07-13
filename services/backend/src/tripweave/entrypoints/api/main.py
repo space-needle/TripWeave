@@ -9,19 +9,19 @@ from uuid import UUID
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from tripweave.adapters import orm
+from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.database import check_database, create_database_engine, get_postgis_version
 from tripweave.adapters.local_blob_store import (
     BlobNotFoundError,
     BlobSizeExceededError,
     InvalidGrantError,
-    LocalBlobStore,
 )
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
@@ -36,19 +36,24 @@ from tripweave.application.rate_limit import FixedWindowRateLimiter
 from tripweave.config import Settings, get_settings
 from tripweave.domain.enums import (
     MediaType,
+    ProcessingJobState,
     ProcessingJobType,
+    ProcessingState,
     ProcessingTargetType,
     TripMemberRole,
     TripStatus,
     TripVisibility,
     UploadState,
 )
-from tripweave.domain.storage import BlobRef, UploadGrant, UploadGrantRequest
+from tripweave.domain.storage import BlobRef, DownloadGrantRequest, UploadGrant, UploadGrantRequest
 from tripweave.entrypoints.api.schemas import (
     AuthResponse,
     BlobRefResponse,
     CompleteUploadFileResponse,
     LoginRequest,
+    MediaAssetResponse,
+    MediaItemResponse,
+    MediaListResponse,
     MeResponse,
     RegisterRequest,
     TripCreateRequest,
@@ -86,14 +91,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         max_attempts=resolved_settings.auth_rate_limit_max_attempts,
         window_seconds=resolved_settings.auth_rate_limit_window_seconds,
     )
-    app.state.blob_store = LocalBlobStore(
-        root=resolved_settings.blob_dir,
-        store_aliases=resolved_settings.store_aliases,
-        signing_secret=resolved_settings.storage_signing_secret,
-        public_base_url=resolved_settings.public_api_base_url,
-        grant_lifetime_seconds=resolved_settings.upload_grant_lifetime_seconds,
-        maximum_single_upload_bytes=resolved_settings.upload_max_file_bytes,
-    )
+    app.state.blob_store = create_blob_store(resolved_settings)
 
     app.add_middleware(
         CORSMiddleware,
@@ -472,6 +470,64 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             contentType=grant.content_type,
         )
 
+    def media_asset_response(asset: orm.MediaAsset) -> MediaAssetResponse:
+        download_url: str | None = None
+        try:
+            download_url = app.state.blob_store.create_download_grant(
+                DownloadGrantRequest(
+                    blob_ref=BlobRef(store_alias=asset.store_alias, object_key=asset.object_key)
+                )
+            ).url
+        except BlobNotFoundError:
+            download_url = None
+        return MediaAssetResponse(
+            id=asset.id,
+            assetType=asset.asset_type,
+            width=asset.width,
+            height=asset.height,
+            mimeType=asset.mime_type,
+            downloadUrl=download_url,
+        )
+
+    def media_error_for(db: DbSession, media_item_id: UUID) -> str | None:
+        job = db.execute(
+            select(orm.ProcessingJob)
+            .where(
+                orm.ProcessingJob.target_id == media_item_id,
+                orm.ProcessingJob.target_type == ProcessingTargetType.MEDIA_ITEM.value,
+                orm.ProcessingJob.job_type == ProcessingJobType.INGEST_MEDIA.value,
+            )
+            .order_by(orm.ProcessingJob.created_at.desc(), orm.ProcessingJob.id)
+            .limit(1)
+        ).scalar_one_or_none()
+        if job is None or job.state != "failed":
+            return None
+        return job.error_message
+
+    def media_item_response(
+        db: DbSession, media_item: orm.MediaItem, contributor: orm.TripMember
+    ) -> MediaItemResponse:
+        thumbnail = next(
+            (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
+            None,
+        )
+        dimensions = media_item.original_metadata_json.get("dimensions", {})
+        width = dimensions.get("width") if isinstance(dimensions, dict) else None
+        height = dimensions.get("height") if isinstance(dimensions, dict) else None
+        return MediaItemResponse(
+            id=media_item.id,
+            filename=media_item.original_filename,
+            processingState=media_item.processing_state,
+            errorMessage=media_error_for(db, media_item.id),
+            capturedAt=media_item.effective_captured_at_utc or media_item.original_captured_at_utc,
+            gpsPresent=media_item.effective_location is not None
+            or media_item.original_location is not None,
+            width=width if isinstance(width, int) else None,
+            height=height if isinstance(height, int) else None,
+            contributor=contributor.display_name,
+            thumbnail=media_asset_response(thumbnail) if thumbnail is not None else None,
+        )
+
     def upload_file_response(
         upload_file: orm.UploadFile,
         *,
@@ -835,6 +891,100 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/trips/{trip_id}/media", response_model=MediaListResponse)
+    def list_media(
+        trip_id: UUID,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> MediaListResponse:
+        member = member_for_trip(db, trip_id, auth.user.id)
+        if member is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        rows = db.execute(
+            select(orm.MediaItem, orm.TripMember)
+            .join(orm.TripMember, orm.TripMember.id == orm.MediaItem.contributor_member_id)
+            .where(orm.MediaItem.trip_id == trip_id, orm.MediaItem.deleted_at.is_(None))
+            .order_by(orm.MediaItem.created_at.desc(), orm.MediaItem.id)
+        ).all()
+        return MediaListResponse(
+            media=[
+                media_item_response(db, media_item, contributor) for media_item, contributor in rows
+            ]
+        )
+
+    @app.post("/media/{media_item_id}/retry", response_model=MediaItemResponse)
+    def retry_media_processing(
+        media_item_id: UUID,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> MediaItemResponse:
+        require_csrf(request)
+        media_item = db.get(orm.MediaItem, media_item_id)
+        if media_item is None or media_item.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        member = member_for_trip(db, media_item.trip_id, auth.user.id)
+        if member is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value} and (
+            media_item.contributor_member_id != member.id
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+
+        job = db.execute(
+            select(orm.ProcessingJob).where(
+                orm.ProcessingJob.idempotency_key == f"ingest-media:{media_item.id}"
+            )
+        ).scalar_one_or_none()
+        now = datetime.now(UTC)
+        if job is None:
+            job = orm.ProcessingJob(
+                job_type=ProcessingJobType.INGEST_MEDIA.value,
+                target_type=ProcessingTargetType.MEDIA_ITEM.value,
+                target_id=media_item.id,
+                idempotency_key=f"ingest-media:{media_item.id}",
+            )
+            db.add(job)
+        job.state = ProcessingJobState.PENDING.value
+        job.attempts = 0
+        job.run_after = now
+        job.locked_at = None
+        job.locked_by = None
+        job.error_code = None
+        job.error_message = None
+        job.started_at = None
+        job.finished_at = None
+        media_item.processing_state = ProcessingState.PENDING.value
+        media_item.updated_at = now
+        db.commit()
+        return media_item_response(db, media_item, member)
+
+    @app.get("/blob-download/{token}")
+    def download_blob(token: str) -> StreamingResponse:
+        try:
+            blob_ref = app.state.blob_store.verify_download_token(token)
+            metadata = app.state.blob_store.stat(blob_ref)
+        except InvalidGrantError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except BlobNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Blob not found"
+            ) from exc
+
+        def body() -> Iterator[bytes]:
+            with app.state.blob_store.open_reader(blob_ref) as reader:
+                while True:
+                    chunk = reader.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return StreamingResponse(
+            body(),
+            media_type=metadata.content_type or "application/octet-stream",
+            headers={"cache-control": "private, max-age=60"},
+        )
 
     return app
 

@@ -1,6 +1,8 @@
 import type {
   AuthResponse,
   LoginRequest,
+  MediaItemResponse,
+  MediaListResponse,
   MeResponse,
   RegisterRequest,
   TripCreateRequest,
@@ -111,6 +113,14 @@ export const api = {
   },
   deleteTrip(id: string): Promise<void> {
     return apiRequest<void>(`/trips/${id}`, { method: "DELETE" });
+  },
+  media(tripId: string): Promise<MediaListResponse> {
+    return apiRequest<MediaListResponse>(`/trips/${tripId}/media`);
+  },
+  retryMedia(id: string): Promise<MediaItemResponse> {
+    return apiRequest<MediaItemResponse>(`/media/${id}/retry`, {
+      method: "POST",
+    });
   },
   createUploadSession(
     tripId: string,

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { ApiError, api, uploadWithProgress } from "./api-client";
 import type {
+  MediaItemResponse,
   TripResponse,
   UploadFileResponse,
   UploadSessionResponse,
@@ -106,6 +107,8 @@ export default function TripWeaveApp() {
     [],
   );
   const [uploadError, setUploadError] = useState("");
+  const [media, setMedia] = useState<MediaItemResponse[]>([]);
+  const [mediaError, setMediaError] = useState("");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
   >({});
@@ -128,6 +131,14 @@ export default function TripWeaveApp() {
     const total = entries.reduce((sum, item) => sum + item.total, 0);
     return total > 0 ? Math.round((loaded / total) * 100) : 0;
   }, [uploadProgress]);
+
+  const hasProcessingMedia = useMemo(
+    () =>
+      media.some((item) =>
+        ["pending", "processing"].includes(item.processingState),
+      ),
+    [media],
+  );
 
   const loadTrips = useCallback(
     async (preferredTripId: string | null = null) => {
@@ -154,10 +165,20 @@ export default function TripWeaveApp() {
     setUploadSessions(result.uploadSessions);
   }, []);
 
+  const loadMedia = useCallback(async (tripId: string | null) => {
+    if (!tripId) {
+      setMedia([]);
+      return;
+    }
+    const result = await api.media(tripId);
+    setMedia(result.media);
+  }, []);
+
   function selectTrip(trip: TripResponse) {
     setSelectedTripId(trip.id);
     setSettingsForm(fromTrip(trip));
     void loadUploadSessions(trip.id);
+    void loadMedia(trip.id);
   }
 
   function removeTripFromState(tripId: string) {
@@ -166,6 +187,10 @@ export default function TripWeaveApp() {
     setTrips(remaining);
     setSelectedTripId(nextTrip?.id ?? null);
     setSettingsForm(nextTrip ? fromTrip(nextTrip) : emptyTripForm);
+    if (!nextTrip) {
+      setUploadSessions([]);
+      setMedia([]);
+    }
   }
 
   function addTripToState(trip: TripResponse) {
@@ -216,6 +241,46 @@ export default function TripWeaveApp() {
     }
   }, [loadUploadSessions, selectedTrip?.id]);
 
+  useEffect(() => {
+    if (!selectedTrip?.id) {
+      return;
+    }
+    const tripId = selectedTrip.id;
+    let cancelled = false;
+    let delay = 1200;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      try {
+        const result = await api.media(tripId);
+        if (cancelled) {
+          return;
+        }
+        setMedia(result.media);
+        setMediaError("");
+        const keepPolling = result.media.some((item) =>
+          ["pending", "processing"].includes(item.processingState),
+        );
+        if (keepPolling) {
+          timeout = setTimeout(poll, delay);
+          delay = Math.min(delay * 1.6, 10000);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMediaError(messageFrom(error));
+          timeout = setTimeout(poll, delay);
+          delay = Math.min(delay * 1.6, 10000);
+        }
+      }
+    }
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [hasProcessingMedia, selectedTrip?.id]);
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
@@ -242,6 +307,8 @@ export default function TripWeaveApp() {
       setUser(null);
       setTrips([]);
       setSelectedTripId(null);
+      setUploadSessions([]);
+      setMedia([]);
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -395,6 +462,7 @@ export default function TripWeaveApp() {
       );
       await Promise.all(workers);
       await loadUploadSessions(selectedTrip.id);
+      await loadMedia(selectedTrip.id);
     } catch (error) {
       setUploadError(messageFrom(error));
     }
@@ -429,6 +497,7 @@ export default function TripWeaveApp() {
     await uploadOne(uploadFile, file);
     if (selectedTrip) {
       await loadUploadSessions(selectedTrip.id);
+      await loadMedia(selectedTrip.id);
     }
   }
 
@@ -442,6 +511,19 @@ export default function TripWeaveApp() {
     await api.cancelUploadFile(uploadFile.id);
     if (selectedTrip) {
       await loadUploadSessions(selectedTrip.id);
+      await loadMedia(selectedTrip.id);
+    }
+  }
+
+  async function retryMedia(item: MediaItemResponse) {
+    setMediaError("");
+    try {
+      await api.retryMedia(item.id);
+      if (selectedTrip) {
+        await loadMedia(selectedTrip.id);
+      }
+    } catch (error) {
+      setMediaError(messageFrom(error));
     }
   }
 
@@ -649,6 +731,18 @@ export default function TripWeaveApp() {
             <p>Create or select a trip before uploading.</p>
           )}
         </section>
+
+        <section
+          className="panel stack media-panel"
+          aria-labelledby="media-title"
+        >
+          <div>
+            <h2 id="media-title">Media</h2>
+            {hasProcessingMedia ? <p>Processing uploads...</p> : null}
+          </div>
+          {mediaError ? <p className="error">{mediaError}</p> : null}
+          <MediaList media={media} onRetry={retryMedia} />
+        </section>
       </section>
     </main>
   );
@@ -797,4 +891,73 @@ function UploadFileList({
       })}
     </div>
   );
+}
+
+function MediaList({
+  media,
+  onRetry,
+}: {
+  media: MediaItemResponse[];
+  onRetry: (item: MediaItemResponse) => void;
+}) {
+  if (media.length === 0) {
+    return <p>No processed media yet.</p>;
+  }
+  return (
+    <div className="media-list" role="list">
+      {media.map((item) => (
+        <article className="media-row" key={item.id} role="listitem">
+          <div className="thumb-frame">
+            {item.thumbnail?.downloadUrl ? (
+              <img src={item.thumbnail.downloadUrl} alt="" />
+            ) : (
+              <span>{item.processingState}</span>
+            )}
+          </div>
+          <div className="media-details">
+            <strong>{item.filename ?? "Untitled image"}</strong>
+            <small>
+              {item.processingState} · {item.contributor}
+            </small>
+            <dl>
+              <div>
+                <dt>Captured</dt>
+                <dd>{formatDate(item.capturedAt ?? null)}</dd>
+              </div>
+              <div>
+                <dt>GPS</dt>
+                <dd>{item.gpsPresent ? "Present" : "Not found"}</dd>
+              </div>
+              <div>
+                <dt>Dimensions</dt>
+                <dd>
+                  {item.width && item.height
+                    ? `${item.width} × ${item.height}`
+                    : "Unknown"}
+                </dd>
+              </div>
+            </dl>
+            {item.errorMessage ? (
+              <p className="error">{item.errorMessage}</p>
+            ) : null}
+            {item.processingState === "failed" ? (
+              <button type="button" onClick={() => onRetry(item)}>
+                Retry processing
+              </button>
+            ) : null}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function formatDate(value: string | null): string {
+  if (!value) {
+    return "Unknown";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

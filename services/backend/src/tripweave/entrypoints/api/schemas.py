@@ -180,3 +180,29 @@ class UploadSessionsListResponse(BaseModel):
 
 class CompleteUploadFileResponse(BaseModel):
     file: UploadFileResponse
+
+
+class MediaAssetResponse(BaseModel):
+    id: UUID
+    asset_type: str = Field(alias="assetType")
+    width: int | None
+    height: int | None
+    mime_type: str = Field(alias="mimeType")
+    download_url: str | None = Field(default=None, alias="downloadUrl")
+
+
+class MediaItemResponse(BaseModel):
+    id: UUID
+    filename: str | None
+    processing_state: str = Field(alias="processingState")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    gps_present: bool = Field(alias="gpsPresent")
+    width: int | None = None
+    height: int | None = None
+    contributor: str
+    thumbnail: MediaAssetResponse | None = None
+
+
+class MediaListResponse(BaseModel):
+    media: list[MediaItemResponse]

@@ -1,19 +1,24 @@
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from PIL import Image
 from pydantic import PostgresDsn
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import sessionmaker
 
 from alembic import command
+from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.config import Settings, get_settings
 from tripweave.entrypoints.api.main import create_app
+from tripweave.entrypoints.worker.main import ClaimedJob, claim_job, handle_job
 
 
 def get_test_database_url() -> str | None:
@@ -79,6 +84,43 @@ def create_trip(client: TestClient, csrf_token: str, title: str = "Kyoto") -> di
 def upload_path(grant_url: str) -> str:
     parsed = urlparse(grant_url)
     return parsed.path
+
+
+def jpeg_bytes(size: tuple[int, int] = (32, 24)) -> bytes:
+    image = Image.new("RGB", size, "purple")
+    output = BytesIO()
+    image.save(output, format="JPEG")
+    return output.getvalue()
+
+
+def upload_completed_jpeg(
+    client: TestClient,
+    csrf_token: str,
+    trip_id: object,
+    payload: bytes,
+    filename: str = "image.jpg",
+) -> str:
+    created = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "files": [{"filename": filename, "byteSize": len(payload), "mimeType": "image/jpeg"}]
+        },
+    )
+    assert created.status_code == 201
+    upload_file = created.json()["files"][0]
+    put = client.put(
+        upload_path(upload_file["grant"]["url"]),
+        content=payload,
+        headers=upload_file["grant"]["headers"],
+    )
+    assert put.status_code == 200
+    completed = client.post(
+        f"/upload-files/{upload_file['id']}/complete",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert completed.status_code == 200
+    return str(completed.json()["file"]["mediaItemId"])
 
 
 def test_authentication_lifecycle_and_trip_management(client: TestClient) -> None:
@@ -281,3 +323,88 @@ def test_second_user_cannot_complete_first_users_upload(
     )
 
     assert response.status_code == 404
+
+
+def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    settings = Settings(
+        DATABASE_URL=PostgresDsn(url),
+        TRIPWEAVE_BLOB_DIR=tmp_path,
+        TRIPWEAVE_AUTH_RATE_LIMIT_MAX_ATTEMPTS=100,
+    )
+    csrf_token = register(client, "worker-owner@example.com")
+    trip = create_trip(client, csrf_token)
+    media_item_id = upload_completed_jpeg(client, csrf_token, trip["id"], jpeg_bytes())
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    blob_store = create_blob_store(settings)
+
+    with session_factory() as db:
+        job = claim_job(db, settings, "test-worker")
+    assert job is not None
+    handle_job(settings, session_factory, blob_store, "test-worker", job)
+
+    with engine.connect() as connection:
+        state = connection.execute(
+            text("SELECT processing_state FROM media_items WHERE id = :id"),
+            {"id": media_item_id},
+        ).scalar_one()
+        asset_count = connection.execute(text("SELECT count(*) FROM media_assets")).scalar_one()
+        job_state = connection.execute(text("SELECT state FROM processing_jobs")).scalar_one()
+
+    assert state == "ready"
+    assert asset_count == 2
+    assert job_state == "succeeded"
+
+    handle_job(
+        settings,
+        session_factory,
+        blob_store,
+        "test-worker",
+        ClaimedJob(
+            id=job.id,
+            job_type=job.job_type,
+            target_type=job.target_type,
+            target_id=job.target_id,
+            attempts=1,
+            max_attempts=3,
+        ),
+    )
+
+    with engine.connect() as connection:
+        asset_count_after = connection.execute(
+            text("SELECT count(*) FROM media_assets")
+        ).scalar_one()
+
+    assert asset_count_after == 2
+
+
+def test_worker_recovers_expired_lock(client: TestClient, engine: Engine, tmp_path: Path) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    settings = Settings(
+        DATABASE_URL=PostgresDsn(url),
+        TRIPWEAVE_BLOB_DIR=tmp_path,
+        TRIPWEAVE_AUTH_RATE_LIMIT_MAX_ATTEMPTS=100,
+        TRIPWEAVE_WORKER_LOCK_TIMEOUT_SECONDS=1,
+    )
+    csrf_token = register(client, "lock-owner@example.com")
+    trip = create_trip(client, csrf_token)
+    upload_completed_jpeg(client, csrf_token, trip["id"], jpeg_bytes())
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    with session_factory() as db:
+        first = claim_job(db, settings, "test-worker-one")
+    assert first is not None
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE processing_jobs SET locked_at = '2020-01-01T00:00:00+00:00'")
+        )
+    with session_factory() as db:
+        reclaimed = claim_job(db, settings, "test-worker-two")
+
+    assert reclaimed is not None
+    assert reclaimed.id == first.id
+    assert reclaimed.attempts == 2

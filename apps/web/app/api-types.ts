@@ -31,6 +31,32 @@ export type MeResponse = {
   user: UserResponse;
 };
 
+export type MediaAssetResponse = {
+  id: string;
+  assetType: string;
+  width: number | null;
+  height: number | null;
+  mimeType: string;
+  downloadUrl?: string | null;
+};
+
+export type MediaItemResponse = {
+  id: string;
+  filename: string | null;
+  processingState: string;
+  errorMessage?: string | null;
+  capturedAt?: string | null;
+  gpsPresent: boolean;
+  width?: number | null;
+  height?: number | null;
+  contributor: string;
+  thumbnail?: MediaAssetResponse | null;
+};
+
+export type MediaListResponse = {
+  media: MediaItemResponse[];
+};
+
 export type RegisterRequest = {
   email: string;
   password: string;

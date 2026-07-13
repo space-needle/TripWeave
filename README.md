@@ -2,7 +2,7 @@
 
 TripWeave reconstructs one shared trip from multiple travelers' camera rolls. Contributors upload photos after a trip. The system aligns time and location, groups media into days, stops, and moments, provides a review-by-exception workflow, and publishes an interactive map-and-timeline story.
 
-This repository now contains the minimal local development foundation, the provider-neutral database foundation, and the first local owner workflow. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, PostgreSQL repository adapters, email/password authentication, server-side sessions, and local trip management. Upload endpoints, media processing, and cloud adapters are intentionally not implemented yet.
+This repository now contains the minimal local development foundation, the provider-neutral database foundation, the first local owner workflow, local browser uploads, and asynchronous local media processing. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, PostgreSQL repository adapters, email/password authentication, server-side sessions, local trip management, provider-neutral upload grants, and local thumbnail/preview generation. Cloud adapters are intentionally not implemented yet.
 
 ## Architecture Direction
 
@@ -34,6 +34,7 @@ The planned stack is:
 - `docs/mvp-scope.md` defines the local MVP stages.
 - `docs/security-and-privacy.md` defines ownership, deletion, publication, and secret-handling rules.
 - `docs/cloud-portability-contract.md` defines provider-neutral storage contracts.
+- `docs/worker-state-machine.md` defines durable processing-job claiming, retry, and media-ingest behavior.
 - `docs/roadmap.md` defines delivery order through local MVP, provider proof, and later deployment adapters.
 - `docs/adr/` records architectural decisions.
 
@@ -86,4 +87,4 @@ make build
 make check
 ```
 
-The local database migrations enable PostGIS and create the first provider-neutral domain tables for users, sessions, trips, trip membership, invitations, uploads, media records, media assets, and processing jobs. The current product flow lets an owner register, sign in, create trips, edit trip settings, delete their own trips, and sign out.
+The local database migrations enable PostGIS and create the first provider-neutral domain tables for users, sessions, trips, trip membership, invitations, uploads, media records, media assets, and processing jobs. The current product flow lets an owner register, sign in, create trips, edit trip settings, upload JPEG/HEIC images into local storage, watch processing status, view generated thumbnails and extracted metadata, retry failed processing, delete their own trips, and sign out.

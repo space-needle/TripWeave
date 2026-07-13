@@ -141,6 +141,18 @@ class LocalBlobStore:
             raise InvalidGrantError("invalid upload grant")
         return blob_ref, max_size_bytes, content_type
 
+    def verify_download_token(self, token: str) -> BlobRef:
+        payload = self._verify_token(token)
+        if payload.get("purpose") != "download":
+            raise InvalidGrantError("invalid download grant")
+        try:
+            return BlobRef(
+                store_alias=str(payload["store_alias"]),
+                object_key=str(payload["object_key"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InvalidGrantError("invalid download grant") from exc
+
     def stat(self, blob_ref: BlobRef) -> BlobMetadata:
         path = self._object_path(blob_ref)
         if not path.exists() or not path.is_file():

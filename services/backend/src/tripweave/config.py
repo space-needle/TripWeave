@@ -21,6 +21,11 @@ class Settings(BaseSettings):
         default=30, ge=1, alias="TRIPWEAVE_WORKER_HEARTBEAT_SECONDS"
     )
     worker_stale_seconds: int = Field(default=90, ge=1, alias="TRIPWEAVE_WORKER_STALE_SECONDS")
+    worker_concurrency: int = Field(default=1, ge=1, alias="TRIPWEAVE_WORKER_CONCURRENCY")
+    worker_poll_seconds: float = Field(default=2.0, ge=0.1, alias="TRIPWEAVE_WORKER_POLL_SECONDS")
+    worker_lock_timeout_seconds: int = Field(
+        default=300, ge=1, alias="TRIPWEAVE_WORKER_LOCK_TIMEOUT_SECONDS"
+    )
     session_cookie_name: str = Field(default="tripweave_session", alias="TRIPWEAVE_SESSION_COOKIE")
     csrf_cookie_name: str = Field(default="tripweave_csrf", alias="TRIPWEAVE_CSRF_COOKIE")
     session_lifetime_seconds: int = Field(default=604800, ge=60, alias="TRIPWEAVE_SESSION_SECONDS")
@@ -63,6 +68,12 @@ class Settings(BaseSettings):
         default="image/jpeg,image/heic,image/heif",
         alias="TRIPWEAVE_UPLOAD_ALLOWED_MIME_TYPES",
     )
+    media_max_pixels: int = Field(default=80_000_000, ge=1, alias="TRIPWEAVE_MEDIA_MAX_PIXELS")
+    media_max_decoded_bytes: int = Field(
+        default=512 * 1024 * 1024, ge=1, alias="TRIPWEAVE_MEDIA_MAX_DECODED_BYTES"
+    )
+    media_thumbnail_max_px: int = Field(default=480, ge=1, alias="TRIPWEAVE_MEDIA_THUMBNAIL_MAX_PX")
+    media_preview_max_px: int = Field(default=1600, ge=1, alias="TRIPWEAVE_MEDIA_PREVIEW_MAX_PX")
 
     @property
     def secure_cookies(self) -> bool:
