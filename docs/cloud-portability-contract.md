@@ -98,6 +98,34 @@ Every storage adapter must pass the same provider contract tests:
 
 The local filesystem adapter must pass these tests before any cloud adapter is accepted.
 
+## Browser Upload Contract
+
+Browser uploads are coordinated through provider-neutral `UploadGrant` records. The API persists only `store_alias`, `object_key`, checksums, size, MIME type, and upload state. The browser may receive a temporary grant URL, but the URL is not durable product state.
+
+Supported upload transport names are:
+
+- `api_proxy`
+- `single_put`
+- `multipart`
+- `resumable`
+
+The local MVP implements only `api_proxy`. Future adapters may add other transports by returning the same `UploadGrant` shape without exposing bucket, namespace, account, signed URL, or provider resource terms to domain and application modules.
+
+## Local Filesystem Adapter
+
+The local adapter maps each logical store alias to a separate directory under the configured local blob root. For the MVP, `media_private` stores uploaded originals and `story_published` is reserved for sanitized published derivatives.
+
+The adapter must:
+
+- generate signed, expiring, single-object upload grants
+- verify the expected `store_alias`, `object_key`, maximum size, and expiration before accepting bytes
+- stream uploads to a temporary file and atomically rename on success
+- reject path traversal, absolute paths, NUL bytes, unknown store aliases, and symbolic-link escapes
+- implement `stat`, `open_reader`, `put`, `delete`, `exists`, upload grants, and download grants
+- keep file bytes out of PostgreSQL
+
+Contract tests live under `services/backend/tests/blob_store_contract.py` and must be reused unchanged by future OCI, S3, and GCS adapters.
+
 ## Runtime Identity Rules
 
 Runtime identity is an adapter and deployment concern. Domain and application modules must not import provider SDK identity packages or expose provider identity terms in public types.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ BACKEND_SRC = REPO_ROOT / "services" / "backend" / "src"
 OUTPUT = REPO_ROOT / "apps" / "web" / "app" / "api-types.ts"
 
 sys.path.insert(0, str(BACKEND_SRC))
+os.environ.setdefault("TRIPWEAVE_BLOB_DIR", str(REPO_ROOT / ".tmp" / "openapi-blobs"))
 
 from tripweave.entrypoints.api.main import create_app  # noqa: E402
 

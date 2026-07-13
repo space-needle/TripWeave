@@ -81,6 +81,7 @@ class MediaAssetType(StrEnum):
 
 
 class ProcessingJobType(StrEnum):
+    INGEST_MEDIA = "ingest_media"
     METADATA_EXTRACTION = "metadata_extraction"
     ALIGNMENT = "alignment"
     GROUPING = "grouping"

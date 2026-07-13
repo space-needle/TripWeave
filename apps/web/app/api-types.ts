@@ -5,6 +5,19 @@ export type AuthResponse = {
   csrfToken: string;
 };
 
+export type BlobRefResponse = {
+  storeAlias: string;
+  objectKey: string;
+  checksumAlgorithm?: string | null;
+  checksum?: string | null;
+  sizeBytes?: number | null;
+  contentType?: string | null;
+};
+
+export type CompleteUploadFileResponse = {
+  file: UploadFileResponse;
+};
+
 export type HTTPValidationError = {
   detail?: ValidationError[];
 };
@@ -61,6 +74,54 @@ export type TripUpdateRequest = {
 
 export type TripsListResponse = {
   trips: TripResponse[];
+};
+
+export type UploadFileRegisterRequest = {
+  filename: string;
+  byteSize: number;
+  mimeType: string;
+};
+
+export type UploadFileResponse = {
+  id: string;
+  state: string;
+  filename: string | null;
+  byteSize: number | null;
+  mimeType: string | null;
+  storeAlias: string;
+  objectKey: string;
+  sha256: string | null;
+  mediaItemId?: string | null;
+  errorMessage?: string | null;
+  grant?: UploadGrantResponse | null;
+};
+
+export type UploadGrantResponse = {
+  blobRef: BlobRefResponse;
+  method: string;
+  url: string;
+  headers: Record<string, unknown>;
+  expiresAt: string;
+  maxSizeBytes: number;
+  contentType?: string | null;
+};
+
+export type UploadSessionCreateRequest = {
+  files: UploadFileRegisterRequest[];
+};
+
+export type UploadSessionResponse = {
+  id: string;
+  tripId: string;
+  state: string;
+  declaredFileCount: number | null;
+  declaredTotalBytes: number | null;
+  files: UploadFileResponse[];
+  limits: Record<string, unknown>;
+};
+
+export type UploadSessionsListResponse = {
+  uploadSessions: UploadSessionResponse[];
 };
 
 export type UserResponse = {

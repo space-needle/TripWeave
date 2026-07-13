@@ -33,6 +33,36 @@ class Settings(BaseSettings):
     allowed_web_origins: str = Field(
         default="http://localhost:3000", alias="TRIPWEAVE_ALLOWED_WEB_ORIGINS"
     )
+    public_api_base_url: str = Field(
+        default="http://localhost:8000", alias="TRIPWEAVE_PUBLIC_API_BASE_URL"
+    )
+    storage_signing_secret: str = Field(
+        default="local-development-upload-signing-secret",
+        alias="TRIPWEAVE_STORAGE_SIGNING_SECRET",
+        min_length=16,
+    )
+    storage_store_aliases: str = Field(
+        default="media_private,story_published", alias="TRIPWEAVE_STORAGE_STORE_ALIASES"
+    )
+    upload_grant_lifetime_seconds: int = Field(
+        default=900, ge=1, alias="TRIPWEAVE_UPLOAD_GRANT_SECONDS"
+    )
+    upload_max_files_per_trip: int = Field(
+        default=500, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILES_PER_TRIP"
+    )
+    upload_max_file_bytes: int = Field(
+        default=25 * 1024 * 1024, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILE_BYTES"
+    )
+    upload_max_trip_bytes: int = Field(
+        default=5 * 1024 * 1024 * 1024, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_TRIP_BYTES"
+    )
+    upload_allowed_extensions: str = Field(
+        default=".jpg,.jpeg,.heic", alias="TRIPWEAVE_UPLOAD_ALLOWED_EXTENSIONS"
+    )
+    upload_allowed_mime_types: str = Field(
+        default="image/jpeg,image/heic,image/heif",
+        alias="TRIPWEAVE_UPLOAD_ALLOWED_MIME_TYPES",
+    )
 
     @property
     def secure_cookies(self) -> bool:
@@ -41,6 +71,26 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_web_origins.split(",") if origin.strip()]
+
+    @property
+    def store_aliases(self) -> set[str]:
+        return {alias.strip() for alias in self.storage_store_aliases.split(",") if alias.strip()}
+
+    @property
+    def allowed_upload_extensions(self) -> set[str]:
+        return {
+            extension.strip().lower()
+            for extension in self.upload_allowed_extensions.split(",")
+            if extension.strip()
+        }
+
+    @property
+    def allowed_upload_mime_types(self) -> set[str]:
+        return {
+            mime_type.strip().lower()
+            for mime_type in self.upload_allowed_mime_types.split(",")
+            if mime_type.strip()
+        }
 
 
 @lru_cache

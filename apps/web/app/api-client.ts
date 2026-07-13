@@ -7,6 +7,10 @@ import type {
   TripResponse,
   TripsListResponse,
   TripUpdateRequest,
+  CompleteUploadFileResponse,
+  UploadSessionCreateRequest,
+  UploadSessionResponse,
+  UploadSessionsListResponse,
 } from "./api-types";
 
 const API_BASE_URL =
@@ -108,4 +112,71 @@ export const api = {
   deleteTrip(id: string): Promise<void> {
     return apiRequest<void>(`/trips/${id}`, { method: "DELETE" });
   },
+  createUploadSession(
+    tripId: string,
+    payload: UploadSessionCreateRequest,
+  ): Promise<UploadSessionResponse> {
+    return apiRequest<UploadSessionResponse>(
+      `/trips/${tripId}/upload-sessions`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+  uploadSessions(tripId: string): Promise<UploadSessionsListResponse> {
+    return apiRequest<UploadSessionsListResponse>(
+      `/upload-sessions?trip_id=${encodeURIComponent(tripId)}`,
+    );
+  },
+  completeUploadFile(id: string): Promise<CompleteUploadFileResponse> {
+    return apiRequest<CompleteUploadFileResponse>(
+      `/upload-files/${id}/complete`,
+      { method: "POST" },
+    );
+  },
+  cancelUploadFile(id: string): Promise<void> {
+    return apiRequest<void>(`/upload-files/${id}`, { method: "DELETE" });
+  },
 };
+
+export function uploadWithProgress({
+  url,
+  file,
+  headers,
+  onProgress,
+}: {
+  url: string;
+  file: File;
+  headers: Record<string, string>;
+  onProgress: (loaded: number, total: number) => void;
+}): { promise: Promise<void>; abort: () => void } {
+  const request = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
+    request.open("PUT", url);
+    for (const [name, value] of Object.entries(headers)) {
+      request.setRequestHeader(name, value);
+    }
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(event.loaded, event.total);
+      }
+    };
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve();
+        return;
+      }
+      reject(
+        new ApiError(request.responseText || "Upload failed", request.status),
+      );
+    };
+    request.onerror = () => reject(new Error("Upload failed"));
+    request.onabort = () => reject(new Error("Upload cancelled"));
+    request.send(file);
+  });
+  return {
+    promise,
+    abort: () => request.abort(),
+  };
+}

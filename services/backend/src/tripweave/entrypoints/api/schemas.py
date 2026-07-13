@@ -119,3 +119,64 @@ class TripResponse(BaseModel):
 
 class TripsListResponse(BaseModel):
     trips: list[TripResponse]
+
+
+class UploadFileRegisterRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=500)
+    byte_size: int = Field(alias="byteSize", gt=0)
+    mime_type: str = Field(alias="mimeType", min_length=1, max_length=255)
+
+
+class UploadSessionCreateRequest(BaseModel):
+    files: list[UploadFileRegisterRequest] = Field(min_length=1)
+
+
+class BlobRefResponse(BaseModel):
+    store_alias: str = Field(alias="storeAlias")
+    object_key: str = Field(alias="objectKey")
+    checksum_algorithm: str | None = Field(default=None, alias="checksumAlgorithm")
+    checksum: str | None = None
+    size_bytes: int | None = Field(default=None, alias="sizeBytes")
+    content_type: str | None = Field(default=None, alias="contentType")
+
+
+class UploadGrantResponse(BaseModel):
+    blob_ref: BlobRefResponse = Field(alias="blobRef")
+    method: str
+    url: str
+    headers: dict[str, str]
+    expires_at: datetime = Field(alias="expiresAt")
+    max_size_bytes: int = Field(alias="maxSizeBytes")
+    content_type: str | None = Field(default=None, alias="contentType")
+
+
+class UploadFileResponse(BaseModel):
+    id: UUID
+    state: str
+    filename: str | None
+    byte_size: int | None = Field(alias="byteSize")
+    mime_type: str | None = Field(alias="mimeType")
+    store_alias: str = Field(alias="storeAlias")
+    object_key: str = Field(alias="objectKey")
+    sha256: str | None
+    media_item_id: UUID | None = Field(default=None, alias="mediaItemId")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    grant: UploadGrantResponse | None = None
+
+
+class UploadSessionResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    state: str
+    declared_file_count: int | None = Field(alias="declaredFileCount")
+    declared_total_bytes: int | None = Field(alias="declaredTotalBytes")
+    files: list[UploadFileResponse]
+    limits: dict[str, object]
+
+
+class UploadSessionsListResponse(BaseModel):
+    upload_sessions: list[UploadSessionResponse] = Field(alias="uploadSessions")
+
+
+class CompleteUploadFileResponse(BaseModel):
+    file: UploadFileResponse
