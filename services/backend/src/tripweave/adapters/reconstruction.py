@@ -17,6 +17,7 @@ from tripweave.domain.enums import (
     ReconstructionSource,
     ReviewItemStatus,
     ReviewItemType,
+    ReviewSeverity,
     RouteSource,
 )
 from tripweave.ports.geocoder import Geocoder
@@ -115,8 +116,10 @@ def reconstruct_trip(
                 run,
                 trip.id,
                 point.id,
-                ReviewItemType.UNUSABLE_TIME,
+                ReviewItemType.UNKNOWN_TIME,
                 "Capture time is missing or unusable.",
+                severity=ReviewSeverity.HIGH,
+                payload={"reason": "missing_capture_time"},
             )
             review_count += 1
             continue
@@ -395,8 +398,10 @@ def assign_missing_gps(
             run,
             trip_id,
             point.id,
-            ReviewItemType.MISSING_GPS_AMBIGUOUS,
+            ReviewItemType.UNKNOWN_LOCATION,
             "GPS is missing and cannot be assigned without guessing.",
+            severity=ReviewSeverity.MEDIUM,
+            payload={"reason": "not_bracketed_by_same_high_confidence_stop"},
         )
         review_count += 1
     return review_count
@@ -511,15 +516,22 @@ def add_review_item(
     media_item_id: UUID,
     item_type: ReviewItemType,
     message: str,
+    *,
+    severity: ReviewSeverity,
+    payload: dict[str, object],
 ) -> None:
     db.add(
         orm.ReviewItem(
             trip_id=trip_id,
             media_item_id=media_item_id,
             item_type=item_type.value,
+            severity=severity.value,
+            target_type="media_item",
+            target_id=media_item_id,
+            target_refs={"mediaItemId": str(media_item_id)},
             status=ReviewItemStatus.OPEN.value,
             message=message,
-            payload={},
+            payload=payload,
             **generated(run, 0.4),
         )
     )

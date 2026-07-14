@@ -98,6 +98,7 @@ erDiagram
     reconstruction_runs ||--o{ moments : generates
     reconstruction_runs ||--o{ trip_legs : generates
     reconstruction_runs ||--o{ review_items : flags
+    trips ||--o{ edit_operations : audits
     trips ||--o{ trip_days : has
     trips ||--o{ places : has
     trip_days ||--o{ stops : contains
@@ -110,6 +111,7 @@ erDiagram
     stops ||--o{ trip_legs : from_stop
     stops ||--o{ trip_legs : to_stop
     media_items ||--o{ review_items : may_need_review
+    review_items ||--o{ edit_operations : may_be_resolved_by
 
     reconstruction_runs {
         uuid id
@@ -151,12 +153,24 @@ erDiagram
     review_items {
         uuid id
         string item_type
+        string severity
         string status
         uuid media_item_id
+        jsonb target_refs
+    }
+    edit_operations {
+        uuid id
+        uuid trip_id
+        string operation_type
+        string status
+        jsonb before_values
+        jsonb after_values
     }
 ```
 
 Reconstruction records are generated results. Each generated table records `source`, `confidence`, `algorithm_version`, `reconstruction_run_id`, `user_locked`, `created_at`, and `updated_at`. Reruns replace unlocked generated records while preserving locked human edits.
+
+Review items use a fixed exception taxonomy: `unknown_time`, `unknown_location`, `possible_wrong_day`, `possible_stop_merge`, `possible_stop_split`, `possible_clock_offset`, `unassigned_media`, and `failed_media_processing`. Organizer corrections create auditable `edit_operations` with before/after values. Corrected generated records are marked `user_locked` so reruns preserve human decisions.
 
 ## Invariants
 

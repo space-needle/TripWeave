@@ -25,6 +25,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
 from tripweave.domain.enums import (
+    EditOperationStatus,
+    EditOperationType,
     InvitationStatus,
     LocationSource,
     MediaAssetType,
@@ -38,6 +40,7 @@ from tripweave.domain.enums import (
     ReconstructionSource,
     ReviewItemStatus,
     ReviewItemType,
+    ReviewSeverity,
     RouteSource,
     TimeSource,
     TripMemberRole,
@@ -542,6 +545,7 @@ class TripDay(Base, GeneratedRecordMixin):
         PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
     )
     day_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255))
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -587,6 +591,7 @@ class Stop(Base, GeneratedRecordMixin):
     place_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), ForeignKey("places.id", ondelete="RESTRICT"), nullable=False
     )
+    title: Mapped[str | None] = mapped_column(String(255))
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -611,6 +616,7 @@ class Moment(Base, GeneratedRecordMixin):
     stop_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
     )
+    title: Mapped[str | None] = mapped_column(String(255))
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -702,6 +708,7 @@ class ReviewItem(Base, GeneratedRecordMixin):
     __table_args__ = (
         CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
         CheckConstraint(f"item_type IN ({enum_values(ReviewItemType)})", name="item_type"),
+        CheckConstraint(f"severity IN ({enum_values(ReviewSeverity)})", name="severity"),
         CheckConstraint(f"status IN ({enum_values(ReviewItemStatus)})", name="status"),
         CheckConstraint(
             "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
@@ -718,10 +725,67 @@ class ReviewItem(Base, GeneratedRecordMixin):
         PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="SET NULL")
     )
     item_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    severity: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default=text("'medium'")
+    )
+    target_type: Mapped[str | None] = mapped_column(String(80))
+    target_id: Mapped[UUID | None] = mapped_column(PostgresUUID(as_uuid=True))
+    target_refs: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'open'"))
     message: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    resolution: Mapped[str | None] = mapped_column(Text)
+    resolved_by: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EditOperation(Base, TimestampMixin):
+    __tablename__ = "edit_operations"
+    __table_args__ = (
+        CheckConstraint(
+            f"operation_type IN ({enum_values(EditOperationType)})", name="operation_type"
+        ),
+        CheckConstraint(f"status IN ({enum_values(EditOperationStatus)})", name="status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    operation_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default=text("'applied'")
+    )
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    actor_member_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_members.id", ondelete="SET NULL")
+    )
+    review_item_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("review_items.id", ondelete="SET NULL")
+    )
+    target_type: Mapped[str | None] = mapped_column(String(80))
+    target_id: Mapped[UUID | None] = mapped_column(PostgresUUID(as_uuid=True))
+    payload: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    before_values: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    after_values: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    undo_of_operation_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("edit_operations.id", ondelete="SET NULL")
     )
 
 
@@ -774,3 +838,6 @@ Index("ix_trip_legs_trip_day_id", TripLeg.trip_day_id)
 Index("ix_trip_legs_geometry_gist", TripLeg.geometry, postgresql_using="gist")
 Index("ix_review_items_trip_id", ReviewItem.trip_id)
 Index("ix_review_items_media_item_id", ReviewItem.media_item_id)
+Index("ix_review_items_trip_status", ReviewItem.trip_id, ReviewItem.status)
+Index("ix_edit_operations_trip_created", EditOperation.trip_id, EditOperation.created_at)
+Index("ix_edit_operations_review_item_id", EditOperation.review_item_id)

@@ -44,12 +44,71 @@ type UploadProgress = {
   error?: string;
 };
 
+type IntlWithTimeZones = typeof Intl & {
+  supportedValuesOf?: (key: "timeZone") => string[];
+};
+
+const fallbackTimeZones = [
+  "UTC",
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Rome",
+  "Asia/Seoul",
+  "Asia/Tokyo",
+  "Asia/Taipei",
+  "Asia/Hong_Kong",
+  "Asia/Singapore",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+];
+
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function supportedTimeZones(): string[] {
+  try {
+    const zones = (Intl as IntlWithTimeZones).supportedValuesOf?.("timeZone");
+    return zones && zones.length > 0 ? zones : fallbackTimeZones;
+  } catch {
+    return fallbackTimeZones;
+  }
+}
+
+function timeZoneOptions(currentValue: string): string[] {
+  return Array.from(
+    new Set(["UTC", browserTimeZone(), currentValue, ...supportedTimeZones()]),
+  )
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function isSupportedTimeZone(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const emptyTripForm: TripForm = {
   title: "",
   description: "",
   startDate: "",
   endDate: "",
-  timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  timezoneId: browserTimeZone(),
   dayCutoffHour: "4",
 };
 
@@ -139,6 +198,7 @@ function OwnerWorkspace() {
   const [reconstruction, setReconstruction] =
     useState<ReconstructionResponse | null>(null);
   const [reconstructionError, setReconstructionError] = useState("");
+  const [reviewIndex, setReviewIndex] = useState(0);
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [members, setMembers] = useState<MemberResponse[]>([]);
   const [collaborationError, setCollaborationError] = useState("");
@@ -703,6 +763,51 @@ function OwnerWorkspace() {
     }
   }
 
+  async function applyReviewDecision(
+    reviewItemId: string,
+    operationType: "resolve_review_item" | "dismiss_review_item",
+  ) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    setIsBusy(true);
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType,
+        reviewItemId,
+        payload: {
+          reviewItemId,
+          resolution:
+            operationType === "resolve_review_item"
+              ? "Reviewed and accepted"
+              : "Dismissed by organizer",
+        },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function undoLatestEdit() {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    setIsBusy(true);
+    try {
+      await api.undoLatestEdit(selectedTrip.id);
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   if (loadState === "loading") {
     return (
       <main className="app-shell">
@@ -970,6 +1075,15 @@ function OwnerWorkspace() {
             <ReconstructionOutline
               reconstruction={reconstruction}
               timezoneId={selectedTrip.timezoneId}
+              reviewIndex={reviewIndex}
+              onSkipReview={() => setReviewIndex((current) => current + 1)}
+              onResolveReview={(id) =>
+                void applyReviewDecision(id, "resolve_review_item")
+              }
+              onDismissReview={(id) =>
+                void applyReviewDecision(id, "dismiss_review_item")
+              }
+              onUndo={undoLatestEdit}
             />
           </section>
         ) : null}
@@ -1344,6 +1458,12 @@ function TripFields({
   form: TripForm;
   onChange: (form: TripForm) => void;
 }) {
+  const timeZones = useMemo(
+    () => timeZoneOptions(form.timezoneId),
+    [form.timezoneId],
+  );
+  const validTimeZone = isSupportedTimeZone(form.timezoneId);
+
   function setField(field: keyof TripForm, value: string) {
     onChange({ ...form, [field]: value });
   }
@@ -1387,11 +1507,25 @@ function TripFields({
       <div className="field-grid">
         <label>
           Time zone
-          <input
+          <select
             value={form.timezoneId}
             onChange={(event) => setField("timezoneId", event.target.value)}
             required
-          />
+          >
+            {timeZones.map((timeZone) => (
+              <option key={timeZone} value={timeZone}>
+                {timeZone}
+                {timeZone === form.timezoneId && !validTimeZone
+                  ? " (invalid, choose another)"
+                  : ""}
+              </option>
+            ))}
+          </select>
+          {!validTimeZone ? (
+            <span className="field-hint warning">
+              Choose an IANA time zone such as Asia/Seoul.
+            </span>
+          ) : null}
         </label>
         <label>
           Day cutoff hour
@@ -1550,13 +1684,37 @@ function MemberRoster({
 function ReconstructionOutline({
   reconstruction,
   timezoneId,
+  reviewIndex,
+  onSkipReview,
+  onResolveReview,
+  onDismissReview,
+  onUndo,
 }: {
   reconstruction: ReconstructionResponse | null;
   timezoneId: string;
+  reviewIndex: number;
+  onSkipReview: () => void;
+  onResolveReview: (id: string) => void;
+  onDismissReview: (id: string) => void;
+  onUndo: () => void;
 }) {
   if (!reconstruction?.latestRun) {
     return <p>No reconstruction run yet.</p>;
   }
+  const openReviewItems = reconstruction.reviewItems.filter(
+    (item) => item.status === "open",
+  );
+  const severityCounts = openReviewItems.reduce<Record<string, number>>(
+    (counts, item) => {
+      counts[item.severity] = (counts[item.severity] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const currentReview =
+    openReviewItems.length > 0
+      ? openReviewItems[reviewIndex % openReviewItems.length]
+      : null;
   return (
     <div className="outline">
       <div className="summary-grid">
@@ -1579,17 +1737,66 @@ function ReconstructionOutline({
           <small>review items</small>
         </div>
       </div>
+      <div className="review-inbox">
+        <div className="section-heading">
+          <div>
+            <h3>Review inbox</h3>
+            <p>
+              {openReviewItems.length} open issue
+              {openReviewItems.length === 1 ? "" : "s"} ·{" "}
+              {Object.entries(severityCounts)
+                .map(([severity, count]) => `${severity}: ${count}`)
+                .join(", ") || "clear"}
+            </p>
+          </div>
+          <button type="button" onClick={onUndo}>
+            Undo latest edit
+          </button>
+        </div>
+        {currentReview ? (
+          <article className="review-card">
+            <div>
+              <strong>{currentReview.itemType}</strong>
+              <small>
+                {currentReview.severity} · confidence{" "}
+                {currentReview.confidence ?? "unknown"} ·{" "}
+                {currentReview.targetType ?? "trip"}
+              </small>
+            </div>
+            <p>{currentReview.message}</p>
+            <div className="button-row">
+              <button
+                type="button"
+                onClick={() => onResolveReview(currentReview.id)}
+              >
+                Resolve
+              </button>
+              <button
+                type="button"
+                onClick={() => onDismissReview(currentReview.id)}
+              >
+                Dismiss
+              </button>
+              <button type="button" onClick={onSkipReview}>
+                Skip
+              </button>
+            </div>
+          </article>
+        ) : (
+          <p>No open review items.</p>
+        )}
+      </div>
       {reconstruction.days.length === 0 ? (
         <p>No usable media has been grouped yet.</p>
       ) : (
         <div className="simple-list" role="list">
           {reconstruction.days.map((day) => (
             <article className="outline-day" key={day.id} role="listitem">
-              <h3>{day.date}</h3>
+              <h3>{day.title ?? day.date}</h3>
               {day.stops.map((stop) => (
                 <div className="outline-stop" key={stop.id}>
                   <strong>
-                    Stop {stop.position}
+                    {stop.title ?? `Stop ${stop.position}`}
                     {stop.placeName ? ` · ${stop.placeName}` : ""}
                   </strong>
                   <small>
@@ -1610,8 +1817,9 @@ function ReconstructionOutline({
                   <div className="moment-row">
                     {stop.moments.map((moment) => (
                       <span key={moment.id}>
-                        Moment {moment.position}: {moment.mediaCount} media,{" "}
-                        {moment.contributorCount} contributors
+                        {moment.title ?? `Moment ${moment.position}`}:{" "}
+                        {moment.mediaCount} media, {moment.contributorCount}{" "}
+                        contributors
                       </span>
                     ))}
                   </div>
@@ -1744,7 +1952,18 @@ function formatDate(value: string | null, timezoneId?: string): string {
   if (timezoneId) {
     options.timeZone = timezoneId;
   }
-  return new Intl.DateTimeFormat(undefined, options).format(new Date(value));
+  try {
+    return new Intl.DateTimeFormat(undefined, options).format(new Date(value));
+  } catch (error) {
+    if (error instanceof RangeError && timezoneId) {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      }).format(new Date(value));
+    }
+    throw error;
+  }
 }
 
 function formatReconstructionTime(

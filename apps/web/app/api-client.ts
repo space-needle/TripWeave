@@ -19,6 +19,8 @@ import type {
   TripsListResponse,
   TripUpdateRequest,
   CompleteUploadFileResponse,
+  EditOperationRequest,
+  EditOperationResponse,
   UploadSessionCreateRequest,
   UploadSessionResponse,
   UploadSessionsListResponse,
@@ -172,6 +174,24 @@ export const api = {
   startReconstruction(tripId: string): Promise<ReconstructionResponse> {
     return apiRequest<ReconstructionResponse>(
       `/trips/${tripId}/reconstruction-runs`,
+      { method: "POST" },
+    );
+  },
+  createEditOperation(
+    tripId: string,
+    payload: EditOperationRequest,
+  ): Promise<EditOperationResponse> {
+    return apiRequest<EditOperationResponse>(
+      `/trips/${tripId}/edit-operations`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+  undoLatestEdit(tripId: string): Promise<EditOperationResponse> {
+    return apiRequest<EditOperationResponse>(
+      `/trips/${tripId}/edit-operations/undo`,
       { method: "POST" },
     );
   },

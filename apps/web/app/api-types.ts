@@ -18,6 +18,24 @@ export type CompleteUploadFileResponse = {
   file: UploadFileResponse;
 };
 
+export type EditOperationRequest = {
+  operationType: string;
+  payload?: Record<string, unknown>;
+  reviewItemId?: string | null;
+  expectedUpdatedAt?: string | null;
+};
+
+export type EditOperationResponse = {
+  id: string;
+  operationType: string;
+  status: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  beforeValues: Record<string, unknown>;
+  afterValues: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type GuestMemberResponse = {
   id: string;
   tripId: string;
@@ -122,12 +140,14 @@ export type ReconstructionDayResponse = {
   id: string;
   date: string;
   position: number;
+  title?: string | null;
   stops: ReconstructionStopResponse[];
 };
 
 export type ReconstructionMomentResponse = {
   id: string;
   position: number;
+  title?: string | null;
   startsAt: string;
   endsAt: string;
   startsAtLocal?: string | null;
@@ -154,6 +174,7 @@ export type ReconstructionRunResponse = {
 export type ReconstructionStopResponse = {
   id: string;
   position: number;
+  title?: string | null;
   startsAt: string;
   endsAt: string;
   startsAtLocal?: string | null;
@@ -173,9 +194,18 @@ export type RegisterRequest = {
 export type ReviewItemResponse = {
   id: string;
   itemType: string;
+  severity: string;
+  confidence?: number | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  targetRefs: Record<string, unknown>;
+  payload: Record<string, unknown>;
   status: string;
   message: string;
   mediaItemId?: string | null;
+  resolution?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 };
 
 export type TripCreateRequest = {

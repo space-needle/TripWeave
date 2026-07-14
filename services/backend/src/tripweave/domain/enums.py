@@ -119,15 +119,49 @@ class RouteSource(StrEnum):
 
 
 class ReviewItemType(StrEnum):
-    UNUSABLE_TIME = "unusable_time"
-    MISSING_GPS_AMBIGUOUS = "missing_gps_ambiguous"
-    LOW_CONFIDENCE_STOP = "low_confidence_stop"
+    UNKNOWN_TIME = "unknown_time"
+    UNKNOWN_LOCATION = "unknown_location"
+    POSSIBLE_WRONG_DAY = "possible_wrong_day"
+    POSSIBLE_STOP_MERGE = "possible_stop_merge"
+    POSSIBLE_STOP_SPLIT = "possible_stop_split"
+    POSSIBLE_CLOCK_OFFSET = "possible_clock_offset"
+    UNASSIGNED_MEDIA = "unassigned_media"
+    FAILED_MEDIA_PROCESSING = "failed_media_processing"
+
+
+class ReviewSeverity(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ReviewItemStatus(StrEnum):
     OPEN = "open"
     RESOLVED = "resolved"
     DISMISSED = "dismissed"
+
+
+class EditOperationType(StrEnum):
+    MOVE_MEDIA = "move_media"
+    MOVE_AFTER_MIDNIGHT_MEDIA = "move_after_midnight_media"
+    MERGE_STOPS = "merge_stops"
+    SPLIT_STOP = "split_stop"
+    MERGE_MOMENTS = "merge_moments"
+    RENAME_DAY = "rename_day"
+    RENAME_STOP = "rename_stop"
+    RENAME_MOMENT = "rename_moment"
+    MOVE_STOP_ON_MAP = "move_stop_on_map"
+    CHANGE_ROUTE_MODE = "change_route_mode"
+    EXCLUDE_MEDIA_FROM_STORY = "exclude_media_from_story"
+    LOCK_RECORD = "lock_record"
+    RESOLVE_REVIEW_ITEM = "resolve_review_item"
+    DISMISS_REVIEW_ITEM = "dismiss_review_item"
+
+
+class EditOperationStatus(StrEnum):
+    APPLIED = "applied"
+    UNDONE = "undone"
 
 
 class ProcessingJobState(StrEnum):

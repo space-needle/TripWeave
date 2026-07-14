@@ -11,7 +11,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -38,6 +38,8 @@ from tripweave.application.auth import (
 from tripweave.application.rate_limit import FixedWindowRateLimiter
 from tripweave.config import Settings, get_settings
 from tripweave.domain.enums import (
+    EditOperationStatus,
+    EditOperationType,
     InvitationStatus,
     MediaType,
     MediaVisibility,
@@ -55,6 +57,8 @@ from tripweave.entrypoints.api.schemas import (
     AuthResponse,
     BlobRefResponse,
     CompleteUploadFileResponse,
+    EditOperationRequest,
+    EditOperationResponse,
     GuestMemberResponse,
     InvitationAcceptRequest,
     InvitationCreateRequest,
@@ -967,6 +971,624 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             captured_at_utc + timedelta(minutes=media_item.original_utc_offset_minutes)
         ).replace(tzinfo=None)
 
+    def payload_uuid(payload: dict[str, object], key: str) -> UUID:
+        value = payload.get(key)
+        if not isinstance(value, str):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is required"
+            )
+        try:
+            return UUID(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is invalid"
+            ) from exc
+
+    def payload_str(payload: dict[str, object], key: str) -> str:
+        value = payload.get(key)
+        if not isinstance(value, str) or not value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is required"
+            )
+        return value
+
+    def json_value(value: object) -> object:
+        if isinstance(value, UUID):
+            return str(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
+    def record_values(record: object, fields: list[str]) -> dict[str, object]:
+        return {field: json_value(getattr(record, field)) for field in fields}
+
+    def expected_fresh(record: object, expected_updated_at: datetime | None) -> None:
+        if expected_updated_at is None:
+            return
+        current = getattr(record, "updated_at", None)
+        if not isinstance(current, datetime) or current != expected_updated_at:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stale edit target")
+
+    def latest_run_for_trip(db: DbSession, trip_id: UUID) -> orm.ReconstructionRun:
+        run = db.execute(
+            select(orm.ReconstructionRun)
+            .where(orm.ReconstructionRun.trip_id == trip_id)
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Run reconstruction first"
+            )
+        return run
+
+    def correction_generated(run: orm.ReconstructionRun) -> dict[str, object]:
+        return {
+            "source": "user_correction",
+            "confidence": 1.0,
+            "algorithm_version": run.algorithm_version,
+            "reconstruction_run_id": run.id,
+            "user_locked": True,
+        }
+
+    def lock_record(record: object) -> None:
+        values: dict[str, object] = {
+            "source": "user_correction",
+            "confidence": 1.0,
+            "user_locked": True,
+            "updated_at": datetime.now(UTC),
+        }
+        for field, value in values.items():
+            if hasattr(record, field):
+                setattr(record, field, value)
+
+    def lock_reconstruction_parents(db: DbSession, record: object) -> None:
+        if isinstance(record, orm.Moment):
+            stop = db.get(orm.Stop, record.stop_id)
+            if stop is not None:
+                lock_record(stop)
+                lock_reconstruction_parents(db, stop)
+        elif isinstance(record, orm.Stop):
+            day = db.get(orm.TripDay, record.trip_day_id)
+            place = db.get(orm.Place, record.place_id)
+            if day is not None:
+                lock_record(day)
+            if place is not None:
+                lock_record(place)
+        elif isinstance(record, orm.TripLeg):
+            day = db.get(orm.TripDay, record.trip_day_id)
+            if day is not None:
+                lock_record(day)
+
+    def get_trip_record(
+        db: DbSession, model: type[object], record_id: UUID, trip_id: UUID, label: str
+    ) -> Any:
+        record = db.get(model, record_id)
+        if record is None or getattr(record, "trip_id", None) != trip_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} not found")
+        return record
+
+    def first_moment_for_stop(
+        db: DbSession, stop: orm.Stop, run: orm.ReconstructionRun
+    ) -> orm.Moment:
+        moment = db.execute(
+            select(orm.Moment)
+            .where(orm.Moment.stop_id == stop.id)
+            .order_by(orm.Moment.position)
+            .limit(1)
+        ).scalar_one_or_none()
+        if moment is not None:
+            return moment
+        moment = orm.Moment(
+            trip_id=stop.trip_id,
+            stop_id=stop.id,
+            position=1,
+            starts_at_utc=stop.starts_at_utc,
+            ends_at_utc=stop.ends_at_utc,
+            **correction_generated(run),
+        )
+        db.add(moment)
+        db.flush()
+        return moment
+
+    def edit_operation_response(operation: orm.EditOperation) -> EditOperationResponse:
+        return EditOperationResponse(
+            id=operation.id,
+            operationType=operation.operation_type,
+            status=operation.status,
+            targetType=operation.target_type,
+            targetId=operation.target_id,
+            beforeValues=operation.before_values,
+            afterValues=operation.after_values,
+            createdAt=operation.created_at,
+        )
+
+    def append_edit_operation(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        member: orm.TripMember,
+        actor: AuthenticatedActor,
+        operation_type: str,
+        payload: dict[str, object],
+        before_values: dict[str, object],
+        after_values: dict[str, object],
+        target_type: str | None,
+        target_id: UUID | None,
+        review_item_id: UUID | None,
+        undo_of_operation_id: UUID | None = None,
+    ) -> orm.EditOperation:
+        operation = orm.EditOperation(
+            trip_id=trip_id,
+            operation_type=operation_type,
+            status=EditOperationStatus.APPLIED.value,
+            actor_user_id=actor.user.id if actor.user is not None else None,
+            actor_member_id=member.id,
+            review_item_id=review_item_id,
+            target_type=target_type,
+            target_id=target_id,
+            payload=payload,
+            before_values=before_values,
+            after_values=after_values,
+            undo_of_operation_id=undo_of_operation_id,
+        )
+        db.add(operation)
+        db.flush()
+        return operation
+
+    def apply_edit_operation(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        actor: AuthenticatedActor,
+        member: orm.TripMember,
+        payload: EditOperationRequest,
+    ) -> orm.EditOperation:
+        run = latest_run_for_trip(db, trip_id)
+        operation_type = payload.operation_type
+        data = payload.payload
+        organizer = member.role in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}
+        contributor_ops = {
+            EditOperationType.MOVE_AFTER_MIDNIGHT_MEDIA.value,
+            EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value,
+        }
+        if not organizer and operation_type not in contributor_ops:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+
+        review_item: orm.ReviewItem | None = None
+        if payload.review_item_id is not None:
+            review_item = db.get(orm.ReviewItem, payload.review_item_id)
+            if review_item is None or review_item.trip_id != trip_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Review item not found"
+                )
+
+        before: dict[str, object]
+        after: dict[str, object]
+        target_type: str | None = None
+        target_id: UUID | None = None
+
+        if operation_type == EditOperationType.MOVE_MEDIA.value:
+            media_id = payload_uuid(data, "mediaItemId")
+            media = db.get(orm.MediaItem, media_id)
+            if media is None or media.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            moment_id = payload_uuid(data, "momentId")
+            moment = db.get(orm.Moment, moment_id)
+            if moment is None or moment.trip_id != trip_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Moment not found"
+                )
+            expected_fresh(moment, payload.expected_updated_at)
+            existing = db.execute(
+                select(orm.MomentMedia).where(orm.MomentMedia.media_item_id == media_id)
+            ).scalar_one_or_none()
+            before = {
+                "mediaItemId": str(media_id),
+                "momentId": str(existing.moment_id) if existing is not None else None,
+            }
+            if existing is None:
+                existing = orm.MomentMedia(
+                    trip_id=trip_id,
+                    moment_id=moment_id,
+                    media_item_id=media_id,
+                    position=1,
+                    **correction_generated(run),
+                )
+                db.add(existing)
+            else:
+                existing.moment_id = moment_id
+                lock_record(existing)
+            lock_record(moment)
+            stop = db.get(orm.Stop, moment.stop_id)
+            if stop is not None:
+                lock_record(stop)
+            after = {"mediaItemId": str(media_id), "momentId": str(moment_id)}
+            target_type, target_id = "media_item", media_id
+
+        elif operation_type == EditOperationType.MOVE_AFTER_MIDNIGHT_MEDIA.value:
+            media_id = payload_uuid(data, "mediaItemId")
+            media = db.get(orm.MediaItem, media_id)
+            if media is None or media.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            if not organizer and media.contributor_member_id != member.id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            expected_fresh(media, payload.expected_updated_at)
+            direction = payload_str(data, "direction")
+            delta = timedelta(days=-1 if direction == "previous" else 1)
+            current = media.effective_captured_at_utc or media.original_captured_at_utc
+            if current is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="Media has no time"
+                )
+            before = record_values(media, ["effective_captured_at_utc", "user_locked"])
+            media.effective_captured_at_utc = current + delta
+            media.user_locked = True
+            media.updated_at = datetime.now(UTC)
+            after = record_values(media, ["effective_captured_at_utc", "user_locked"])
+            target_type, target_id = "media_item", media_id
+
+        elif operation_type == EditOperationType.MERGE_STOPS.value:
+            source = db.get(orm.Stop, payload_uuid(data, "sourceStopId"))
+            target = db.get(orm.Stop, payload_uuid(data, "targetStopId"))
+            if (
+                source is None
+                or target is None
+                or source.trip_id != trip_id
+                or target.trip_id != trip_id
+            ):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
+            expected_fresh(source, payload.expected_updated_at)
+            before = {"sourceStopId": str(source.id), "targetStopId": str(target.id)}
+            for moment in db.scalars(select(orm.Moment).where(orm.Moment.stop_id == source.id)):
+                moment.stop_id = target.id
+                lock_record(moment)
+            target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
+            target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
+            lock_record(target)
+            lock_reconstruction_parents(db, target)
+            db.delete(source)
+            after = {"mergedIntoStopId": str(target.id)}
+            target_type, target_id = "stop", target.id
+
+        elif operation_type == EditOperationType.SPLIT_STOP.value:
+            stop = db.get(orm.Stop, payload_uuid(data, "stopId"))
+            if stop is None or stop.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
+            expected_fresh(stop, payload.expected_updated_at)
+            split_after = payload_uuid(data, "afterMomentId")
+            moments = list(
+                db.scalars(
+                    select(orm.Moment)
+                    .where(orm.Moment.stop_id == stop.id)
+                    .order_by(orm.Moment.position)
+                )
+            )
+            index = next((i for i, moment in enumerate(moments) if moment.id == split_after), -1)
+            if index < 0 or index == len(moments) - 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="Cannot split stop there"
+                )
+            new_stop = orm.Stop(
+                trip_id=trip_id,
+                trip_day_id=stop.trip_day_id,
+                place_id=stop.place_id,
+                position=stop.position + 1,
+                starts_at_utc=moments[index + 1].starts_at_utc,
+                ends_at_utc=stop.ends_at_utc,
+                centroid=stop.centroid,
+                **correction_generated(run),
+            )
+            db.add(new_stop)
+            db.flush()
+            before = {"stopId": str(stop.id), "momentIds": [str(moment.id) for moment in moments]}
+            for moment in moments[index + 1 :]:
+                moment.stop_id = new_stop.id
+                lock_record(moment)
+            stop.ends_at_utc = moments[index].ends_at_utc
+            lock_record(stop)
+            lock_reconstruction_parents(db, stop)
+            after = {"newStopId": str(new_stop.id)}
+            target_type, target_id = "stop", stop.id
+
+        elif operation_type == EditOperationType.MERGE_MOMENTS.value:
+            moment_source = db.get(orm.Moment, payload_uuid(data, "sourceMomentId"))
+            moment_target = db.get(orm.Moment, payload_uuid(data, "targetMomentId"))
+            if (
+                moment_source is None
+                or moment_target is None
+                or moment_source.trip_id != trip_id
+                or moment_target.trip_id != trip_id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Moment not found"
+                )
+            expected_fresh(moment_source, payload.expected_updated_at)
+            before = {
+                "sourceMomentId": str(moment_source.id),
+                "targetMomentId": str(moment_target.id),
+            }
+            for link in db.scalars(
+                select(orm.MomentMedia).where(orm.MomentMedia.moment_id == moment_source.id)
+            ):
+                link.moment_id = moment_target.id
+                lock_record(link)
+            for participant in db.scalars(
+                select(orm.MomentParticipant).where(
+                    orm.MomentParticipant.moment_id == moment_source.id
+                )
+            ):
+                duplicate = db.execute(
+                    select(orm.MomentParticipant).where(
+                        orm.MomentParticipant.moment_id == moment_target.id,
+                        orm.MomentParticipant.trip_member_id == participant.trip_member_id,
+                    )
+                ).scalar_one_or_none()
+                if duplicate is None:
+                    participant.moment_id = moment_target.id
+                    lock_record(participant)
+                else:
+                    db.delete(participant)
+            moment_target.starts_at_utc = min(
+                moment_target.starts_at_utc, moment_source.starts_at_utc
+            )
+            moment_target.ends_at_utc = max(moment_target.ends_at_utc, moment_source.ends_at_utc)
+            lock_record(moment_target)
+            lock_reconstruction_parents(db, moment_target)
+            db.delete(moment_source)
+            after = {"mergedIntoMomentId": str(moment_target.id)}
+            target_type, target_id = "moment", moment_target.id
+
+        elif operation_type in {
+            EditOperationType.RENAME_DAY.value,
+            EditOperationType.RENAME_STOP.value,
+            EditOperationType.RENAME_MOMENT.value,
+        }:
+            model_by_type = {
+                EditOperationType.RENAME_DAY.value: (orm.TripDay, "day", "dayId"),
+                EditOperationType.RENAME_STOP.value: (orm.Stop, "stop", "stopId"),
+                EditOperationType.RENAME_MOMENT.value: (orm.Moment, "moment", "momentId"),
+            }
+            model, label, key = model_by_type[operation_type]
+            record = get_trip_record(db, model, payload_uuid(data, key), trip_id, label)
+            expected_fresh(record, payload.expected_updated_at)
+            before = record_values(record, ["title", "user_locked"])
+            title_field = "title"
+            setattr(record, title_field, payload_str(data, "title"))
+            lock_record(record)
+            lock_reconstruction_parents(db, record)
+            after = record_values(record, ["title", "user_locked"])
+            target_type, target_id = label, record.id
+
+        elif operation_type == EditOperationType.MOVE_STOP_ON_MAP.value:
+            stop = db.get(orm.Stop, payload_uuid(data, "stopId"))
+            if stop is None or stop.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
+            expected_fresh(stop, payload.expected_updated_at)
+            lat_value = data.get("latitude", 0)
+            lon_value = data.get("longitude", 0)
+            lat = float(lat_value) if isinstance(lat_value, str | int | float) else 0.0
+            lon = float(lon_value) if isinstance(lon_value, str | int | float) else 0.0
+            before = record_values(stop, ["centroid", "user_locked"])
+            stop.centroid = f"SRID=4326;POINT({lon} {lat})"
+            lock_record(stop)
+            lock_reconstruction_parents(db, stop)
+            after = record_values(stop, ["centroid", "user_locked"])
+            target_type, target_id = "stop", stop.id
+
+        elif operation_type == EditOperationType.CHANGE_ROUTE_MODE.value:
+            leg = db.get(orm.TripLeg, payload_uuid(data, "tripLegId"))
+            if leg is None or leg.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+            expected_fresh(leg, payload.expected_updated_at)
+            before = record_values(leg, ["route_source", "user_locked"])
+            leg.route_source = payload_str(data, "routeSource")
+            lock_record(leg)
+            lock_reconstruction_parents(db, leg)
+            after = record_values(leg, ["route_source", "user_locked"])
+            target_type, target_id = "trip_leg", leg.id
+
+        elif operation_type == EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value:
+            media = db.get(orm.MediaItem, payload_uuid(data, "mediaItemId"))
+            if media is None or media.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            if not organizer and media.contributor_member_id != member.id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            expected_fresh(media, payload.expected_updated_at)
+            before = record_values(media, ["include_in_story", "user_locked"])
+            media.include_in_story = False
+            media.user_locked = True
+            media.updated_at = datetime.now(UTC)
+            after = record_values(media, ["include_in_story", "user_locked"])
+            target_type, target_id = "media_item", media.id
+
+        elif operation_type == EditOperationType.LOCK_RECORD.value:
+            target_type = payload_str(data, "targetType")
+            model_by_target: dict[str, type[object]] = {
+                "day": orm.TripDay,
+                "stop": orm.Stop,
+                "moment": orm.Moment,
+                "place": orm.Place,
+                "trip_leg": orm.TripLeg,
+                "review_item": orm.ReviewItem,
+            }
+            lock_model = model_by_target.get(target_type)
+            if lock_model is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid targetType"
+                )
+            record = get_trip_record(
+                db, lock_model, payload_uuid(data, "targetId"), trip_id, target_type
+            )
+            expected_fresh(record, payload.expected_updated_at)
+            before = record_values(record, ["user_locked"])
+            lock_record(record)
+            lock_reconstruction_parents(db, record)
+            after = record_values(record, ["user_locked"])
+            target_id = record.id
+
+        elif operation_type in {
+            EditOperationType.RESOLVE_REVIEW_ITEM.value,
+            EditOperationType.DISMISS_REVIEW_ITEM.value,
+        }:
+            item_id = payload.review_item_id or payload_uuid(data, "reviewItemId")
+            item = db.get(orm.ReviewItem, item_id)
+            if item is None or item.trip_id != trip_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Review item not found"
+                )
+            expected_fresh(item, payload.expected_updated_at)
+            before = record_values(item, ["status", "resolution", "resolved_by", "resolved_at"])
+            item.status = (
+                "resolved"
+                if operation_type == EditOperationType.RESOLVE_REVIEW_ITEM.value
+                else "dismissed"
+            )
+            item.resolution = payload_str(data, "resolution")
+            item.resolved_by = actor.user.id if actor.user is not None else None
+            item.resolved_at = datetime.now(UTC)
+            item.user_locked = True
+            item.updated_at = datetime.now(UTC)
+            after = record_values(item, ["status", "resolution", "resolved_by", "resolved_at"])
+            target_type, target_id = "review_item", item.id
+            review_item = item
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unsupported edit operation",
+            )
+
+        operation = append_edit_operation(
+            db,
+            trip_id=trip_id,
+            member=member,
+            actor=actor,
+            operation_type=operation_type,
+            payload=data,
+            before_values=before,
+            after_values=after,
+            target_type=target_type,
+            target_id=target_id,
+            review_item_id=review_item.id if review_item is not None else payload.review_item_id,
+        )
+        db.commit()
+        db.refresh(operation)
+        return operation
+
+    def undo_latest_edit_operation(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        actor: AuthenticatedActor,
+        member: orm.TripMember,
+    ) -> orm.EditOperation:
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        safe_types = {
+            EditOperationType.MOVE_MEDIA.value,
+            EditOperationType.MOVE_AFTER_MIDNIGHT_MEDIA.value,
+            EditOperationType.RENAME_DAY.value,
+            EditOperationType.RENAME_STOP.value,
+            EditOperationType.RENAME_MOMENT.value,
+            EditOperationType.MOVE_STOP_ON_MAP.value,
+            EditOperationType.CHANGE_ROUTE_MODE.value,
+            EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value,
+            EditOperationType.LOCK_RECORD.value,
+            EditOperationType.RESOLVE_REVIEW_ITEM.value,
+            EditOperationType.DISMISS_REVIEW_ITEM.value,
+        }
+        operation = db.execute(
+            select(orm.EditOperation)
+            .where(
+                orm.EditOperation.trip_id == trip_id,
+                orm.EditOperation.status == EditOperationStatus.APPLIED.value,
+                orm.EditOperation.operation_type.in_(safe_types),
+                orm.EditOperation.undo_of_operation_id.is_(None),
+            )
+            .order_by(orm.EditOperation.created_at.desc(), orm.EditOperation.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if operation is None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No safe edit to undo")
+
+        before = operation.before_values
+        target_type = operation.target_type
+        target_id = operation.target_id
+        after: dict[str, object] = {}
+
+        if operation.operation_type == EditOperationType.MOVE_MEDIA.value:
+            media_id = UUID(str(before["mediaItemId"]))
+            moment_id_value = before.get("momentId")
+            link = db.execute(
+                select(orm.MomentMedia).where(orm.MomentMedia.media_item_id == media_id)
+            ).scalar_one_or_none()
+            if link is not None and isinstance(moment_id_value, str):
+                link.moment_id = UUID(moment_id_value)
+                lock_record(link)
+                after = {"mediaItemId": str(media_id), "momentId": moment_id_value}
+            else:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot undo edit")
+        else:
+            model_by_target: dict[str, type[object]] = {
+                "media_item": orm.MediaItem,
+                "day": orm.TripDay,
+                "stop": orm.Stop,
+                "moment": orm.Moment,
+                "trip_leg": orm.TripLeg,
+                "review_item": orm.ReviewItem,
+                "place": orm.Place,
+            }
+            if target_type is None or target_id is None or target_type not in model_by_target:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot undo edit")
+            record = get_trip_record(
+                db, model_by_target[target_type], target_id, trip_id, target_type
+            )
+            field_map = {
+                "effective_captured_at_utc": "effective_captured_at_utc",
+                "include_in_story": "include_in_story",
+                "title": "title",
+                "centroid": "centroid",
+                "route_source": "route_source",
+                "user_locked": "user_locked",
+                "status": "status",
+                "resolution": "resolution",
+                "resolved_by": "resolved_by",
+                "resolved_at": "resolved_at",
+            }
+            for source_field, record_field in field_map.items():
+                if source_field not in before:
+                    continue
+                value = before[source_field]
+                if record_field in {"effective_captured_at_utc", "resolved_at"} and isinstance(
+                    value, str
+                ):
+                    value = datetime.fromisoformat(value)
+                if record_field == "resolved_by" and isinstance(value, str):
+                    value = UUID(value)
+                setattr(record, record_field, value)
+            lock_record(record)
+            after = record_values(record, [field for field in field_map if hasattr(record, field)])
+
+        operation.status = EditOperationStatus.UNDONE.value
+        undo = append_edit_operation(
+            db,
+            trip_id=trip_id,
+            member=member,
+            actor=actor,
+            operation_type=operation.operation_type,
+            payload={"undo": True, "operationId": str(operation.id)},
+            before_values=operation.after_values,
+            after_values=after,
+            target_type=operation.target_type,
+            target_id=operation.target_id,
+            review_item_id=operation.review_item_id,
+            undo_of_operation_id=operation.id,
+        )
+        db.commit()
+        db.refresh(undo)
+        return undo
+
     def upload_file_response(
         upload_file: orm.UploadFile,
         *,
@@ -1468,7 +2090,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 select(orm.TripDay)
                 .where(
                     orm.TripDay.trip_id == trip_id,
-                    orm.TripDay.reconstruction_run_id == latest_run.id,
+                    or_(
+                        orm.TripDay.reconstruction_run_id == latest_run.id,
+                        orm.TripDay.user_locked.is_(True),
+                    ),
                 )
                 .order_by(orm.TripDay.position)
             ).scalars()
@@ -1479,7 +2104,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .join(orm.Place, orm.Place.id == orm.Stop.place_id)
                 .where(
                     orm.Stop.trip_id == trip_id,
-                    orm.Stop.reconstruction_run_id == latest_run.id,
+                    or_(
+                        orm.Stop.reconstruction_run_id == latest_run.id,
+                        orm.Stop.user_locked.is_(True),
+                    ),
                 )
                 .order_by(orm.Stop.position)
             ).all()
@@ -1489,7 +2117,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 select(orm.Moment)
                 .where(
                     orm.Moment.trip_id == trip_id,
-                    orm.Moment.reconstruction_run_id == latest_run.id,
+                    or_(
+                        orm.Moment.reconstruction_run_id == latest_run.id,
+                        orm.Moment.user_locked.is_(True),
+                    ),
                 )
                 .order_by(orm.Moment.position)
             ).scalars()
@@ -1500,7 +2131,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
             .where(
                 orm.MomentMedia.trip_id == trip_id,
-                orm.MomentMedia.reconstruction_run_id == latest_run.id,
+                or_(
+                    orm.MomentMedia.reconstruction_run_id == latest_run.id,
+                    orm.MomentMedia.user_locked.is_(True),
+                ),
             )
         ).all()
         contributors_by_moment: dict[UUID, set[UUID]] = {}
@@ -1524,6 +2158,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 ReconstructionMomentResponse(
                     id=moment.id,
                     position=moment.position,
+                    title=moment.title,
                     startsAt=moment.starts_at_utc,
                     endsAt=moment.ends_at_utc,
                     startsAtLocal=min(moment_local_times) if moment_local_times else None,
@@ -1543,6 +2178,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 ReconstructionStopResponse(
                     id=stop.id,
                     position=stop.position,
+                    title=stop.title,
                     startsAt=stop.starts_at_utc,
                     endsAt=stop.ends_at_utc,
                     startsAtLocal=min(stop_local_times) if stop_local_times else None,
@@ -1559,7 +2195,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 select(orm.ReviewItem)
                 .where(
                     orm.ReviewItem.trip_id == trip_id,
-                    orm.ReviewItem.reconstruction_run_id == latest_run.id,
+                    or_(
+                        orm.ReviewItem.reconstruction_run_id == latest_run.id,
+                        orm.ReviewItem.user_locked.is_(True),
+                    ),
                 )
                 .order_by(orm.ReviewItem.created_at, orm.ReviewItem.id)
             ).scalars()
@@ -1578,6 +2217,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     id=day.id,
                     date=day.day_date,
                     position=day.position,
+                    title=day.title,
                     stops=stops_by_day.get(day.id, []),
                 )
                 for day in days
@@ -1586,9 +2226,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 ReviewItemResponse(
                     id=item.id,
                     itemType=item.item_type,
+                    severity=item.severity,
+                    confidence=item.confidence,
+                    targetType=item.target_type,
+                    targetId=item.target_id,
+                    targetRefs=item.target_refs,
+                    payload=item.payload,
                     status=item.status,
                     message=item.message,
                     mediaItemId=item.media_item_id,
+                    resolution=item.resolution,
+                    resolvedBy=item.resolved_by,
+                    resolvedAt=item.resolved_at,
                 )
                 for item in review_items
             ],
@@ -1619,6 +2268,42 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> ReconstructionResponse:
         require_member_for_actor(db, trip_id, actor)
         return reconstruction_response(db, trip_id)
+
+    @app.post("/trips/{trip_id}/edit-operations", response_model=EditOperationResponse)
+    def create_edit_operation(
+        trip_id: UUID,
+        payload: EditOperationRequest,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> EditOperationResponse:
+        require_csrf(request)
+        member = require_member_for_actor(db, trip_id, actor)
+        operation = apply_edit_operation(
+            db,
+            trip_id=trip_id,
+            actor=actor,
+            member=member,
+            payload=payload,
+        )
+        return edit_operation_response(operation)
+
+    @app.post("/trips/{trip_id}/edit-operations/undo", response_model=EditOperationResponse)
+    def undo_edit_operation(
+        trip_id: UUID,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> EditOperationResponse:
+        require_csrf(request)
+        member = require_member_for_actor(db, trip_id, actor)
+        operation = undo_latest_edit_operation(
+            db,
+            trip_id=trip_id,
+            actor=actor,
+            member=member,
+        )
+        return edit_operation_response(operation)
 
     @app.get("/blob-download/{token}")
     def download_blob(token: str) -> StreamingResponse:

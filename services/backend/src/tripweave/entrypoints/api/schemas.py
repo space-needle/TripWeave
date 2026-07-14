@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -62,6 +63,15 @@ class TripCreateRequest(BaseModel):
     timezone_id: str = Field(default="UTC", alias="timezoneId", min_length=1, max_length=100)
     day_cutoff_hour: int = Field(default=4, alias="dayCutoffHour", ge=0, le=23)
 
+    @field_validator("timezone_id")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timezoneId must be an IANA time zone like Asia/Seoul") from exc
+        return value
+
     @model_validator(mode="after")
     def validate_dates(self) -> TripCreateRequest:
         if (
@@ -82,6 +92,17 @@ class TripUpdateRequest(BaseModel):
     day_cutoff_hour: int | None = Field(default=None, alias="dayCutoffHour", ge=0, le=23)
     status: str | None = Field(default=None)
     visibility: str | None = Field(default=None)
+
+    @field_validator("timezone_id")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timezoneId must be an IANA time zone like Asia/Seoul") from exc
+        return value
 
     @field_validator("status")
     @classmethod
@@ -290,6 +311,7 @@ class ReconstructionRunResponse(BaseModel):
 class ReconstructionMomentResponse(BaseModel):
     id: UUID
     position: int
+    title: str | None = None
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime = Field(alias="endsAt")
     starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
@@ -301,6 +323,7 @@ class ReconstructionMomentResponse(BaseModel):
 class ReconstructionStopResponse(BaseModel):
     id: UUID
     position: int
+    title: str | None = None
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime = Field(alias="endsAt")
     starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
@@ -315,18 +338,46 @@ class ReconstructionDayResponse(BaseModel):
     id: UUID
     date: date
     position: int
+    title: str | None = None
     stops: list[ReconstructionStopResponse]
 
 
 class ReviewItemResponse(BaseModel):
     id: UUID
     item_type: str = Field(alias="itemType")
+    severity: str
+    confidence: float | None = None
+    target_type: str | None = Field(default=None, alias="targetType")
+    target_id: UUID | None = Field(default=None, alias="targetId")
+    target_refs: dict[str, object] = Field(alias="targetRefs")
+    payload: dict[str, object]
     status: str
     message: str
     media_item_id: UUID | None = Field(default=None, alias="mediaItemId")
+    resolution: str | None = None
+    resolved_by: UUID | None = Field(default=None, alias="resolvedBy")
+    resolved_at: datetime | None = Field(default=None, alias="resolvedAt")
 
 
 class ReconstructionResponse(BaseModel):
     latest_run: ReconstructionRunResponse | None = Field(default=None, alias="latestRun")
     days: list[ReconstructionDayResponse]
     review_items: list[ReviewItemResponse] = Field(alias="reviewItems")
+
+
+class EditOperationRequest(BaseModel):
+    operation_type: str = Field(alias="operationType")
+    payload: dict[str, object] = Field(default_factory=dict)
+    review_item_id: UUID | None = Field(default=None, alias="reviewItemId")
+    expected_updated_at: datetime | None = Field(default=None, alias="expectedUpdatedAt")
+
+
+class EditOperationResponse(BaseModel):
+    id: UUID
+    operation_type: str = Field(alias="operationType")
+    status: str
+    target_type: str | None = Field(default=None, alias="targetType")
+    target_id: UUID | None = Field(default=None, alias="targetId")
+    before_values: dict[str, object] = Field(alias="beforeValues")
+    after_values: dict[str, object] = Field(alias="afterValues")
+    created_at: datetime = Field(alias="createdAt")

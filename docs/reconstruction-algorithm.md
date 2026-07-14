@@ -31,7 +31,7 @@ The algorithm resolves each usable media item into an effective trip day:
 3. If the timezone is invalid, fall back to UTC.
 4. Subtract `trips.day_cutoff_hour`, default 4, before taking the local date.
 
-Media with unusable time creates an `unusable_time` review item instead of being guessed into a day.
+Media with unusable time creates an `unknown_time` review item instead of being guessed into a day.
 
 ## Stops And Places
 
@@ -51,7 +51,7 @@ Moments split each stop using the tighter 15-minute time gap. Moment media keeps
 
 ## Missing GPS
 
-Missing GPS is assigned only when the media is tightly bracketed in time by high-confidence GPS media already assigned to the same stop. Otherwise the algorithm creates a `missing_gps_ambiguous` review item.
+Missing GPS is assigned only when the media is tightly bracketed in time by high-confidence GPS media already assigned to the same stop. Otherwise the algorithm creates an `unknown_location` review item.
 
 ## Routes
 

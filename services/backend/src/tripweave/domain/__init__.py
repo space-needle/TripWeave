@@ -1,6 +1,8 @@
 """Domain package reserved for TripWeave product concepts."""
 
 from tripweave.domain.enums import (
+    EditOperationStatus,
+    EditOperationType,
     InvitationStatus,
     LocationSource,
     MediaAssetType,
@@ -14,6 +16,7 @@ from tripweave.domain.enums import (
     ReconstructionSource,
     ReviewItemStatus,
     ReviewItemType,
+    ReviewSeverity,
     RouteSource,
     TimeSource,
     TripMemberRole,
@@ -32,6 +35,8 @@ from tripweave.domain.upload_state import (
 __all__ = [
     "ALLOWED_UPLOAD_TRANSITIONS",
     "BlobRef",
+    "EditOperationStatus",
+    "EditOperationType",
     "InvitationStatus",
     "LocationSource",
     "MediaAssetType",
@@ -45,6 +50,7 @@ __all__ = [
     "ReconstructionSource",
     "ReviewItemStatus",
     "ReviewItemType",
+    "ReviewSeverity",
     "RouteSource",
     "TERMINAL_UPLOAD_STATES",
     "TimeSource",

@@ -16,6 +16,7 @@ from tests import factories
 from tripweave.adapters import orm
 from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.reconstruction import reconstruct_trip
+from tripweave.config import get_settings
 
 
 def get_test_database_url() -> str | None:
@@ -42,6 +43,7 @@ def migrated_database(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterat
     url = get_test_database_url()
     assert url is not None
     monkeypatch.setenv("DATABASE_URL", url)
+    get_settings.cache_clear()
 
     backend_root = Path(__file__).resolve().parents[1]
     config = Config(str(backend_root / "alembic.ini"))
@@ -51,6 +53,7 @@ def migrated_database(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterat
         yield engine
     finally:
         command.downgrade(config, "base")
+        get_settings.cache_clear()
 
 
 def test_alembic_upgrade_downgrade_and_reupgrade(migrated_database: Engine) -> None:
@@ -81,6 +84,7 @@ def test_alembic_upgrade_downgrade_and_reupgrade(migrated_database: Engine) -> N
     assert "reconstruction_runs" in tables
     assert "trip_days" in tables
     assert "review_items" in tables
+    assert "edit_operations" in tables
 
 
 def test_database_constraints_reject_invalid_state_and_ownership(

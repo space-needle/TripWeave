@@ -81,6 +81,76 @@ def create_trip(client: TestClient, csrf_token: str, title: str = "Kyoto") -> di
     return dict(response.json())
 
 
+def insert_ready_media_for_reconstruction(
+    engine: Engine,
+    *,
+    trip_id: str,
+    member_id: str,
+    filename: str,
+    captured_at: datetime | None,
+    latitude: float | None,
+    longitude: float | None,
+    sha256: str,
+) -> str:
+    with engine.begin() as connection:
+        media_id = connection.execute(
+            text(
+                """
+                INSERT INTO media_items (
+                    trip_id, contributor_member_id, media_type, original_filename,
+                    declared_mime_type, byte_size, original_store_alias,
+                    original_object_key, original_captured_at_utc,
+                    original_utc_offset_minutes, effective_captured_at_utc,
+                    effective_location, time_source, location_source,
+                    time_confidence, location_confidence, sha256,
+                    processing_state, visibility
+                )
+                VALUES (
+                    CAST(:trip_id AS uuid), CAST(:member_id AS uuid), 'photo', :filename,
+                    'image/jpeg', 100, 'media_private',
+                    :object_key, CAST(:captured_at AS timestamptz),
+                    540, CAST(:captured_at AS timestamptz),
+                    CASE
+                        WHEN CAST(:latitude AS double precision) IS NULL THEN NULL
+                        ELSE ST_SetSRID(
+                            ST_MakePoint(
+                                CAST(:longitude AS double precision),
+                                CAST(:latitude AS double precision)
+                            ),
+                            4326
+                        )::geography
+                    END,
+                    CASE
+                        WHEN CAST(:captured_at AS timestamptz) IS NULL
+                        THEN 'unknown'
+                        ELSE 'original_metadata'
+                    END,
+                    CASE
+                        WHEN CAST(:latitude AS double precision) IS NULL
+                        THEN 'unknown'
+                        ELSE 'original_metadata'
+                    END,
+                    CASE WHEN CAST(:captured_at AS timestamptz) IS NULL THEN NULL ELSE 1.0 END,
+                    CASE WHEN CAST(:latitude AS double precision) IS NULL THEN NULL ELSE 1.0 END,
+                    :sha256, 'ready', 'trip'
+                )
+                RETURNING id
+                """
+            ),
+            {
+                "trip_id": trip_id,
+                "member_id": member_id,
+                "filename": filename,
+                "object_key": f"tests/{filename}",
+                "captured_at": captured_at,
+                "latitude": latitude,
+                "longitude": longitude,
+                "sha256": sha256,
+            },
+        ).scalar_one()
+    return str(media_id)
+
+
 def upload_path(grant_url: str) -> str:
     parsed = urlparse(grant_url)
     return parsed.path
@@ -171,6 +241,25 @@ def test_authentication_lifecycle_and_trip_management(client: TestClient) -> Non
     deleted = client.delete(f"/trips/{trip_id}", headers={"x-csrf-token": csrf_token})
     assert deleted.status_code == 204
     assert client.get(f"/trips/{trip_id}").status_code == 404
+
+
+def test_trip_timezone_must_be_iana_identifier(client: TestClient) -> None:
+    csrf_token = register(client, "timezone-owner@example.com")
+
+    created = client.post(
+        "/trips",
+        headers={"x-csrf-token": csrf_token},
+        json={"title": "Seoul", "timezoneId": "Korea"},
+    )
+    assert created.status_code == 422
+
+    trip = create_trip(client, csrf_token, "Seoul")
+    updated = client.patch(
+        f"/trips/{trip['id']}",
+        headers={"x-csrf-token": csrf_token},
+        json={"timezoneId": "Korea"},
+    )
+    assert updated.status_code == 422
 
 
 def test_session_revocation_on_logout(client: TestClient) -> None:
@@ -604,3 +693,156 @@ def test_worker_recovers_expired_lock(client: TestClient, engine: Engine, tmp_pa
     assert reclaimed is not None
     assert reclaimed.id == first.id
     assert reclaimed.attempts == 2
+
+
+def test_review_edit_operations_authorization_undo_and_rerun(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "review-owner@example.com")
+    trip = create_trip(client, csrf_token, "Review Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    media_specs = [
+        (1, datetime(2026, 6, 8, 1, 0, tzinfo=UTC), 35.0, 127.0),
+        (2, datetime(2026, 6, 8, 1, 20, tzinfo=UTC), 35.0, 127.0),
+        (3, datetime(2026, 6, 8, 3, 0, tzinfo=UTC), 35.01, 127.01),
+        (4, datetime(2026, 6, 8, 3, 20, tzinfo=UTC), 35.01, 127.01),
+        (5, datetime(2026, 6, 8, 6, 0, tzinfo=UTC), 35.03, 127.03),
+        (6, None, 35.04, 127.04),
+    ]
+    media_ids = [
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"review-{index}.jpg",
+            captured_at=captured_at,
+            latitude=latitude,
+            longitude=longitude,
+            sha256=str(index) * 64,
+        )
+        for index, captured_at, latitude, longitude in media_specs
+    ]
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200
+    body = reconstructed.json()
+    day_id = body["days"][0]["id"]
+    stops = body["days"][0]["stops"]
+    assert len(stops) >= 3
+    stop_one, stop_two, stop_three = stops[:3]
+    moment_one, moment_two = stop_one["moments"][:2]
+    stop_two_moment_one, stop_two_moment_two = stop_two["moments"][:2]
+    review_item_id = body["reviewItems"][0]["id"]
+
+    with engine.connect() as connection:
+        route_id = str(connection.execute(text("SELECT id FROM trip_legs LIMIT 1")).scalar_one())
+        stale_updated_at = connection.execute(
+            text("SELECT updated_at FROM stops WHERE id = CAST(:id AS uuid)"),
+            {"id": stop_three["id"]},
+        ).scalar_one()
+
+    stale = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "expectedUpdatedAt": stale_updated_at.isoformat(),
+            "payload": {"stopId": stop_three["id"], "title": "First edit"},
+        },
+    )
+    assert stale.status_code == 200
+    stale_again = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "expectedUpdatedAt": stale_updated_at.isoformat(),
+            "payload": {"stopId": stop_three["id"], "title": "Stale edit"},
+        },
+    )
+    assert stale_again.status_code == 409
+
+    operations = [
+        ("move_media", {"mediaItemId": media_ids[0], "momentId": moment_two["id"]}),
+        ("move_after_midnight_media", {"mediaItemId": media_ids[0], "direction": "previous"}),
+        ("rename_day", {"dayId": day_id, "title": "Arrival day"}),
+        ("rename_stop", {"stopId": stop_one["id"], "title": "Harbor"}),
+        ("rename_moment", {"momentId": moment_one["id"], "title": "First look"}),
+        ("move_stop_on_map", {"stopId": stop_one["id"], "latitude": 35.001, "longitude": 127.001}),
+        ("change_route_mode", {"tripLegId": route_id, "routeSource": "manual"}),
+        ("exclude_media_from_story", {"mediaItemId": media_ids[1]}),
+        ("lock_record", {"targetType": "stop", "targetId": stop_one["id"]}),
+        ("split_stop", {"stopId": stop_two["id"], "afterMomentId": stop_two_moment_one["id"]}),
+        (
+            "merge_moments",
+            {
+                "sourceMomentId": stop_two_moment_two["id"],
+                "targetMomentId": stop_two_moment_one["id"],
+            },
+        ),
+        ("merge_stops", {"sourceStopId": stop_three["id"], "targetStopId": stop_one["id"]}),
+        ("resolve_review_item", {"reviewItemId": review_item_id, "resolution": "Fixed"}),
+        ("dismiss_review_item", {"reviewItemId": review_item_id, "resolution": "Not relevant"}),
+    ]
+    for operation_type, payload in operations:
+        response = client.post(
+            f"/trips/{trip_id}/edit-operations",
+            headers={"x-csrf-token": csrf_token},
+            json={"operationType": operation_type, "payload": payload},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["operationType"] == operation_type
+
+    with engine.connect() as connection:
+        before_invalid = connection.execute(
+            text("SELECT COUNT(*) FROM edit_operations")
+        ).scalar_one()
+    invalid = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={"operationType": "merge_stops", "payload": {"sourceStopId": stop_one["id"]}},
+    )
+    assert invalid.status_code == 422
+    with engine.connect() as connection:
+        after_invalid = connection.execute(
+            text("SELECT COUNT(*) FROM edit_operations")
+        ).scalar_one()
+    assert after_invalid == before_invalid
+
+    undo = client.post(
+        f"/trips/{trip_id}/edit-operations/undo", headers={"x-csrf-token": csrf_token}
+    )
+    assert undo.status_code == 200
+    assert undo.json()["status"] == "applied"
+
+    rerun = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert rerun.status_code == 200
+    assert any(day.get("title") == "Arrival day" for day in rerun.json()["days"])
+
+    other_csrf = register(client, "review-other@example.com")
+    denied = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": other_csrf},
+        json={
+            "operationType": "rename_day",
+            "payload": {"dayId": day_id, "title": "Denied"},
+        },
+    )
+    assert denied.status_code == 404
