@@ -142,6 +142,27 @@ export type ReconstructionDayResponse = {
   position: number;
   title?: string | null;
   stops: ReconstructionStopResponse[];
+  legs?: ReconstructionLegResponse[];
+};
+
+export type ReconstructionLegResponse = {
+  id: string;
+  fromStopId: string;
+  toStopId: string;
+  routeSource: string;
+  geometry?: Record<string, unknown> | null;
+};
+
+export type ReconstructionMediaResponse = {
+  id: string;
+  filename?: string | null;
+  capturedAt?: string | null;
+  capturedAtLocal?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  contributorMemberId: string;
+  contributor: string;
+  thumbnailUrl?: string | null;
 };
 
 export type ReconstructionMomentResponse = {
@@ -154,6 +175,7 @@ export type ReconstructionMomentResponse = {
   endsAtLocal?: string | null;
   mediaCount: number;
   contributorCount: number;
+  media: ReconstructionMediaResponse[];
 };
 
 export type ReconstructionResponse = {
@@ -180,6 +202,8 @@ export type ReconstructionStopResponse = {
   startsAtLocal?: string | null;
   endsAtLocal?: string | null;
   placeName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   mediaCount: number;
   contributorCount: number;
   moments: ReconstructionMomentResponse[];

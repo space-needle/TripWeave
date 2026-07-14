@@ -374,6 +374,220 @@ p {
   gap: 14px;
 }
 
+.story-empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 18px;
+}
+
+.story-explorer {
+  display: grid;
+  gap: 12px;
+}
+
+.story-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.segmented-control button {
+  border-color: var(--border-strong);
+  background: #fff;
+  color: var(--text);
+}
+
+.segmented-control button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.compact-field {
+  min-width: min(280px, 100%);
+}
+
+.story-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 430px);
+  gap: 12px;
+  min-height: 620px;
+}
+
+.story-map-shell {
+  position: sticky;
+  top: 12px;
+  height: min(72vh, 760px);
+  min-height: 480px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #eef3f0;
+}
+
+.story-map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-mode-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  pointer-events: none;
+}
+
+.selected-photo-marker {
+  width: 30px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 22%);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.story-timeline {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  scroll-padding: 16px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.screen-reader-map-summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.timeline-day {
+  display: grid;
+  gap: 10px;
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+}
+
+.timeline-day.active {
+  border-left-color: var(--accent);
+}
+
+.timeline-day-button,
+.timeline-stop-button,
+.timeline-moment button {
+  width: 100%;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.timeline-day-button {
+  font-size: 1rem;
+}
+
+.timeline-stop {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.timeline-stop:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.timeline-stop.active {
+  border-color: var(--accent);
+  background: #eef8f4;
+}
+
+.timeline-stop-button span,
+.timeline-stop-button small {
+  display: block;
+}
+
+.timeline-stop-button small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.timeline-moments {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-moment {
+  display: grid;
+  gap: 7px;
+}
+
+.timeline-moment.active button {
+  border-color: var(--accent);
+}
+
+.perspective-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.perspective-thumb {
+  width: 54px;
+  min-height: 54px;
+  flex: 0 0 54px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-color: var(--border-strong);
+  background: #eef2f5;
+  color: var(--muted);
+  padding: 0;
+}
+
+.perspective-thumb.active {
+  border-color: var(--danger);
+}
+
+.perspective-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -535,6 +749,25 @@ p {
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  .story-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .story-map-shell {
+    position: relative;
+    top: auto;
+    height: 46vh;
+    min-height: 320px;
+  }
+
+  .story-timeline {
+    max-height: 48vh;
+    margin-top: -20px;
+    border-radius: 14px 14px 8px 8px;
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 12%);
+  }
 }
 
 @media (max-width: 640px) {
@@ -555,5 +788,11 @@ p {
 
   h1 {
     font-size: 1.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-timeline {
+    scroll-behavior: auto;
   }
 }

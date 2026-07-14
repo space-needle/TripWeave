@@ -4,12 +4,19 @@ import {
   ChangeEvent,
   DragEvent,
   FormEvent,
+  KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import maplibregl, {
+  GeoJSONSource,
+  LngLatBounds,
+  Map as MapLibreMap,
+  Marker,
+} from "maplibre-gl";
 import QRCode from "qrcode";
 import { ApiError, api, uploadWithProgress } from "./api-client";
 import type {
@@ -24,6 +31,24 @@ import type {
   UploadSessionResponse,
   UserResponse,
 } from "./api-types";
+import {
+  EVERYONE,
+  StoryMapState,
+  ViewMode,
+  advancePlayback,
+  buildStoryModel,
+  filterStoryModel,
+  followStory,
+  initialStoryMapState,
+  markUserControlled,
+  normalizeStoryMapState,
+  selectStoryDay,
+  selectStoryMedia,
+  selectStoryMoment,
+  selectStoryStop,
+  setContributorFilter,
+  startPlayback,
+} from "./story-map-state";
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
@@ -199,6 +224,9 @@ function OwnerWorkspace() {
     useState<ReconstructionResponse | null>(null);
   const [reconstructionError, setReconstructionError] = useState("");
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [storyState, setStoryState] = useState<StoryMapState>(() =>
+    initialStoryMapState(),
+  );
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [members, setMembers] = useState<MemberResponse[]>([]);
   const [collaborationError, setCollaborationError] = useState("");
@@ -247,6 +275,7 @@ function OwnerWorkspace() {
       const nextTrip = result.trips.find((trip) => trip.id === next) ?? null;
       setSelectedTripId(next);
       setSettingsForm(nextTrip ? fromTrip(nextTrip) : emptyTripForm);
+      setStoryState(initialStoryMapState());
     },
     [],
   );
@@ -1072,6 +1101,12 @@ function OwnerWorkspace() {
             {reconstructionError ? (
               <p className="error">{reconstructionError}</p>
             ) : null}
+            <TripStoryExplorer
+              reconstruction={reconstruction}
+              state={storyState}
+              onStateChange={setStoryState}
+              timezoneId={selectedTrip.timezoneId}
+            />
             <ReconstructionOutline
               reconstruction={reconstruction}
               timezoneId={selectedTrip.timezoneId}
@@ -1449,6 +1484,724 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       </section>
     </main>
   );
+}
+
+const localMapStyle: maplibregl.StyleSpecification = {
+  version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {},
+  layers: [
+    {
+      id: "local-background",
+      type: "background",
+      paint: { "background-color": "#eef3f0" },
+    },
+  ],
+};
+
+function configuredMapStyle(): string | maplibregl.StyleSpecification {
+  return process.env.NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL || localMapStyle;
+}
+
+function TripStoryExplorer({
+  reconstruction,
+  state,
+  onStateChange,
+  timezoneId,
+}: {
+  reconstruction: ReconstructionResponse | null;
+  state: StoryMapState;
+  onStateChange: (state: StoryMapState) => void;
+  timezoneId: string;
+}) {
+  const model = useMemo(
+    () => buildStoryModel(reconstruction),
+    [reconstruction],
+  );
+  const filteredModel = useMemo(
+    () => filterStoryModel(model, state.contributorFilter),
+    [model, state.contributorFilter],
+  );
+  const selectedStop = filteredModel.stops.find(
+    (stop) => stop.id === state.selectedStopId,
+  );
+  const selectedMedia = filteredModel.media.find(
+    (item) => item.id === state.selectedMediaId,
+  );
+  const activeStopRefs = useRef<Record<string, HTMLElement | null>>({});
+  const timelineRef = useRef<HTMLElement | null>(null);
+  const latestStateRef = useRef(state);
+  const skipNextTimelineScrollRef = useRef(false);
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    const normalizedState = normalizeStoryMapState(state, model);
+    if (normalizedState !== state) {
+      onStateChange(normalizedState);
+    }
+  }, [model, onStateChange, state]);
+
+  useEffect(() => {
+    if (!state.selectedStopId || reducedMotion) {
+      return;
+    }
+    if (skipNextTimelineScrollRef.current) {
+      skipNextTimelineScrollRef.current = false;
+      return;
+    }
+    activeStopRefs.current[state.selectedStopId]?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [reducedMotion, state.selectedStopId]);
+
+  useEffect(() => {
+    const elements = Object.values(activeStopRefs.current).filter(
+      (element): element is HTMLElement => element !== null,
+    );
+    if (elements.length === 0 || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const timeline = timelineRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort(
+            (left, right) => right.intersectionRatio - left.intersectionRatio,
+          )[0];
+        const stopId = visible?.target.getAttribute("data-stop-id");
+        const dayId = visible?.target.getAttribute("data-day-id");
+        const currentState = latestStateRef.current;
+        if (stopId && dayId && stopId !== currentState.selectedStopId) {
+          skipNextTimelineScrollRef.current = true;
+          onStateChange(selectStoryStop(currentState, stopId, dayId));
+        }
+      },
+      { root: timeline, threshold: [0.35, 0.7] },
+    );
+    for (const element of elements) {
+      observer.observe(element);
+    }
+    return () => observer.disconnect();
+  }, [filteredModel.stops, onStateChange]);
+
+  if (!reconstruction?.latestRun) {
+    return (
+      <div className="story-empty">
+        <p>Run reconstruction to create the synchronized map and timeline.</p>
+      </div>
+    );
+  }
+
+  function setViewMode(viewMode: ViewMode) {
+    if (viewMode === "PLAYBACK") {
+      onStateChange(startPlayback(state));
+    } else {
+      onStateChange({ ...state, viewMode, mapControlMode: "STORY_CONTROLLED" });
+    }
+  }
+
+  function handleTimelineKey(
+    event: KeyboardEvent<HTMLElement>,
+    stopId: string,
+    dayId: string,
+  ) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onStateChange(selectStoryStop(state, stopId, dayId));
+    }
+  }
+
+  const selectedLabel =
+    selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
+
+  return (
+    <div className="story-explorer">
+      <div className="story-toolbar" aria-label="Story controls">
+        <div className="segmented-control" role="group" aria-label="View mode">
+          {(
+            ["TRIP_OVERVIEW", "DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]
+          ).map((viewMode) => (
+            <button
+              aria-pressed={state.viewMode === viewMode}
+              className={state.viewMode === viewMode ? "active" : ""}
+              key={viewMode}
+              type="button"
+              onClick={() => setViewMode(viewMode)}
+            >
+              {viewMode.replace("_", " ")}
+            </button>
+          ))}
+        </div>
+        <label className="compact-field">
+          Traveler
+          <select
+            value={state.contributorFilter}
+            onChange={(event) =>
+              onStateChange(setContributorFilter(state, event.target.value))
+            }
+          >
+            <option value={EVERYONE}>Everyone</option>
+            {model.contributors.map((contributor) => (
+              <option key={contributor.id} value={contributor.id}>
+                {contributor.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => onStateChange(followStory(state))}
+          disabled={state.mapControlMode === "STORY_CONTROLLED"}
+        >
+          Follow Story
+        </button>
+        <button
+          type="button"
+          onClick={() => onStateChange(advancePlayback(state, filteredModel))}
+        >
+          Play next
+        </button>
+      </div>
+
+      <div className="story-layout">
+        <StoryMapCanvas
+          model={filteredModel}
+          state={state}
+          onStateChange={onStateChange}
+          reducedMotion={reducedMotion}
+        />
+        <section
+          className="story-timeline"
+          aria-label="Chronological timeline"
+          ref={timelineRef}
+        >
+          <p className="screen-reader-map-summary">
+            Map alternative: {filteredModel.stops.length} stops,{" "}
+            {filteredModel.media.length} media items, selected {selectedLabel}.
+          </p>
+          {reconstruction.days.map((day) => (
+            <article
+              className={`timeline-day ${
+                state.selectedDayId === day.id ? "active" : ""
+              }`}
+              key={day.id}
+            >
+              <button
+                type="button"
+                className="timeline-day-button"
+                onClick={() => onStateChange(selectStoryDay(state, day.id))}
+              >
+                {day.title ?? day.date}
+              </button>
+              {day.stops.map((stop) => (
+                <section
+                  className={`timeline-stop ${
+                    state.selectedStopId === stop.id ? "active" : ""
+                  }`}
+                  data-day-id={day.id}
+                  data-stop-id={stop.id}
+                  key={stop.id}
+                  ref={(element) => {
+                    activeStopRefs.current[stop.id] = element;
+                  }}
+                  tabIndex={0}
+                  onFocus={() =>
+                    onStateChange(selectStoryStop(state, stop.id, day.id))
+                  }
+                  onKeyDown={(event) =>
+                    handleTimelineKey(event, stop.id, day.id)
+                  }
+                >
+                  <button
+                    type="button"
+                    className="timeline-stop-button"
+                    onClick={() =>
+                      onStateChange(selectStoryStop(state, stop.id, day.id))
+                    }
+                  >
+                    <span>
+                      {stop.title ?? stop.placeName ?? `Stop ${stop.position}`}
+                    </span>
+                    <small>
+                      {formatReconstructionTime(
+                        stop.startsAt,
+                        stop.startsAtLocal ?? null,
+                        timezoneId,
+                      )}{" "}
+                      · {stop.mediaCount} media · {stop.contributorCount}{" "}
+                      travelers
+                    </small>
+                  </button>
+                  <div className="timeline-moments">
+                    {stop.moments.map((moment) => (
+                      <article
+                        className={`timeline-moment ${
+                          state.selectedMomentId === moment.id ? "active" : ""
+                        }`}
+                        key={moment.id}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onStateChange(
+                              selectStoryMoment(
+                                state,
+                                moment.id,
+                                stop.id,
+                                day.id,
+                              ),
+                            )
+                          }
+                        >
+                          {moment.title ?? `Moment ${moment.position}`} ·{" "}
+                          {moment.contributorCount} perspectives
+                        </button>
+                        <div className="perspective-strip">
+                          {moment.media.map((item) => (
+                            <button
+                              className={`perspective-thumb ${
+                                state.selectedMediaId === item.id
+                                  ? "active"
+                                  : ""
+                              }`}
+                              key={item.id}
+                              type="button"
+                              onClick={() =>
+                                onStateChange(
+                                  selectStoryMedia(
+                                    state,
+                                    item.id,
+                                    moment.id,
+                                    stop.id,
+                                    day.id,
+                                  ),
+                                )
+                              }
+                            >
+                              {item.thumbnailUrl ? (
+                                <img
+                                  src={item.thumbnailUrl}
+                                  alt={item.filename ?? "Trip photo"}
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{item.contributor.slice(0, 1)}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </article>
+          ))}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function StoryMapCanvas({
+  model,
+  state,
+  onStateChange,
+  reducedMotion,
+}: {
+  model: ReturnType<typeof buildStoryModel>;
+  state: StoryMapState;
+  onStateChange: (state: StoryMapState) => void;
+  reducedMotion: boolean;
+}) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const selectedMarkers = useRef<Marker[]>([]);
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const routeCollection = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: model.legs
+        .filter((leg) => leg.geometry)
+        .map((leg) => ({
+          type: "Feature" as const,
+          id: leg.id,
+          properties: {
+            id: leg.id,
+            dayId: leg.dayId,
+            routeSource: leg.routeSource,
+          },
+          geometry: leg.geometry,
+        })),
+    }),
+    [model.legs],
+  );
+  const stopCollection = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: model.stops
+        .filter((stop) => stop.coordinates)
+        .map((stop) => ({
+          type: "Feature" as const,
+          id: stop.id,
+          properties: {
+            id: stop.id,
+            dayId: stop.dayId,
+            label: stop.label,
+            selected: stop.id === state.selectedStopId,
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: stop.coordinates as [number, number],
+          },
+        })),
+    }),
+    [model.stops, state.selectedStopId],
+  );
+  const mediaCollection = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: model.media
+        .filter((item) => item.coordinates)
+        .map((item) => ({
+          type: "Feature" as const,
+          id: item.id,
+          properties: {
+            id: item.id,
+            dayId: item.dayId,
+            stopId: item.stopId,
+            momentId: item.momentId,
+            contributorMemberId: item.contributorMemberId,
+            selected: item.id === state.selectedMediaId,
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: item.coordinates as [number, number],
+          },
+        })),
+    }),
+    [model.media, state.selectedMediaId],
+  );
+
+  useEffect(() => {
+    if (!mapNode.current || mapRef.current) {
+      return;
+    }
+    const map = new maplibregl.Map({
+      container: mapNode.current,
+      style: configuredMapStyle(),
+      center: [0, 0],
+      zoom: 1,
+      attributionControl: { compact: true },
+    });
+    mapRef.current = map;
+    const emptyFeatureCollection = {
+      type: "FeatureCollection" as const,
+      features: [],
+    };
+
+    map.on("dragstart", () =>
+      onStateChange(markUserControlled(stateRef.current)),
+    );
+    map.on("load", () => {
+      map.addSource("trip-routes", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      map.addSource("trip-stops", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      map.addSource("trip-media", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+        cluster: true,
+        clusterRadius: 36,
+      });
+      (map.getSource("trip-routes") as GeoJSONSource | undefined)?.setData(
+        routeCollection,
+      );
+      (map.getSource("trip-stops") as GeoJSONSource | undefined)?.setData(
+        stopCollection,
+      );
+      (map.getSource("trip-media") as GeoJSONSource | undefined)?.setData(
+        mediaCollection,
+      );
+      map.addLayer({
+        id: "routes-confirmed",
+        type: "line",
+        source: "trip-routes",
+        filter: ["!=", ["get", "routeSource"], "photo_inferred"],
+        paint: {
+          "line-color": "#174d43",
+          "line-width": 4,
+          "line-opacity": 0.9,
+        },
+      });
+      map.addLayer({
+        id: "routes-inferred",
+        type: "line",
+        source: "trip-routes",
+        filter: ["==", ["get", "routeSource"], "photo_inferred"],
+        paint: {
+          "line-color": "#6e7f8f",
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+          "line-opacity": 0.75,
+        },
+      });
+      map.addLayer({
+        id: "media-clusters",
+        type: "circle",
+        source: "trip-media",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "#2457a6",
+          "circle-radius": ["step", ["get", "point_count"], 16, 20, 22, 80, 30],
+          "circle-opacity": 0.82,
+        },
+      });
+      map.addLayer({
+        id: "media-unclustered",
+        type: "circle",
+        source: "trip-media",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-color": [
+            "case",
+            ["==", ["get", "selected"], true],
+            "#9f2d20",
+            "#23695b",
+          ],
+          "circle-radius": ["case", ["==", ["get", "selected"], true], 8, 5],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.addLayer({
+        id: "stops",
+        type: "circle",
+        source: "trip-stops",
+        paint: {
+          "circle-color": [
+            "case",
+            ["==", ["get", "selected"], true],
+            "#9f2d20",
+            "#17202a",
+          ],
+          "circle-radius": ["case", ["==", ["get", "selected"], true], 11, 8],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.on("click", "stops", (event) => {
+        const feature = event.features?.[0];
+        const stopId = feature?.properties?.id as string | undefined;
+        const dayId = feature?.properties?.dayId as string | undefined;
+        if (stopId && dayId) {
+          onStateChange(selectStoryStop(stateRef.current, stopId, dayId));
+        }
+      });
+      map.on("click", "media-unclustered", (event) => {
+        const feature = event.features?.[0];
+        const mediaId = feature?.properties?.id as string | undefined;
+        const momentId = feature?.properties?.momentId as string | undefined;
+        const stopId = feature?.properties?.stopId as string | undefined;
+        const dayId = feature?.properties?.dayId as string | undefined;
+        if (mediaId && momentId && stopId && dayId) {
+          onStateChange(
+            selectStoryMedia(
+              stateRef.current,
+              mediaId,
+              momentId,
+              stopId,
+              dayId,
+            ),
+          );
+        }
+      });
+    });
+
+    return () => {
+      selectedMarkers.current.forEach((marker) => marker.remove());
+      selectedMarkers.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [mediaCollection, onStateChange, routeCollection, stopCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) {
+      return;
+    }
+    (map.getSource("trip-routes") as GeoJSONSource | undefined)?.setData(
+      routeCollection,
+    );
+    (map.getSource("trip-stops") as GeoJSONSource | undefined)?.setData(
+      stopCollection,
+    );
+    (map.getSource("trip-media") as GeoJSONSource | undefined)?.setData(
+      mediaCollection,
+    );
+  }, [mediaCollection, routeCollection, stopCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    selectedMarkers.current.forEach((marker) => marker.remove());
+    selectedMarkers.current = [];
+    const selectedStop = model.stops.find(
+      (stop) => stop.id === state.selectedStopId,
+    );
+    const selectedMedia = model.media
+      .filter(
+        (item) =>
+          item.id === state.selectedMediaId ||
+          item.momentId === state.selectedMomentId,
+      )
+      .slice(0, 5);
+    if (selectedStop?.coordinates) {
+      selectedMarkers.current.push(
+        new maplibregl.Marker({ color: "#9f2d20" })
+          .setLngLat(selectedStop.coordinates)
+          .addTo(map),
+      );
+    }
+    for (const item of selectedMedia) {
+      if (!item.coordinates) {
+        continue;
+      }
+      const element = document.createElement("div");
+      element.className = "selected-photo-marker";
+      element.textContent = item.contributor.slice(0, 1).toUpperCase();
+      selectedMarkers.current.push(
+        new maplibregl.Marker({ element })
+          .setLngLat(item.coordinates)
+          .addTo(map),
+      );
+    }
+  }, [
+    model.media,
+    model.stops,
+    state.selectedMediaId,
+    state.selectedMomentId,
+    state.selectedStopId,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || state.mapControlMode !== "STORY_CONTROLLED") {
+      return;
+    }
+    const coordinates = focusCoordinates(model, state);
+    if (coordinates.length === 0) {
+      return;
+    }
+    const bounds = new LngLatBounds(coordinates[0], coordinates[0]);
+    for (const coordinate of coordinates.slice(1)) {
+      bounds.extend(coordinate);
+    }
+    if (coordinates.length === 1) {
+      map.easeTo({
+        center: coordinates[0],
+        zoom: 14,
+        duration: reducedMotion ? 0 : 600,
+      });
+    } else {
+      map.fitBounds(bounds, {
+        padding: 56,
+        maxZoom: 14,
+        duration: reducedMotion ? 0 : 700,
+      });
+    }
+  }, [model, reducedMotion, state]);
+
+  return (
+    <div className="story-map-shell">
+      <div className="story-map" ref={mapNode} aria-hidden="true" />
+      <div className="map-mode-badge">
+        {state.mapControlMode === "USER_CONTROLLED"
+          ? "User controlled"
+          : "Story controlled"}
+      </div>
+    </div>
+  );
+}
+
+function focusCoordinates(
+  model: ReturnType<typeof buildStoryModel>,
+  state: StoryMapState,
+): [number, number][] {
+  if (state.selectedMediaId) {
+    return model.media
+      .filter((item) => item.id === state.selectedMediaId && item.coordinates)
+      .map((item) => item.coordinates as [number, number]);
+  }
+  if (state.selectedMomentId) {
+    return model.media
+      .filter(
+        (item) => item.momentId === state.selectedMomentId && item.coordinates,
+      )
+      .map((item) => item.coordinates as [number, number]);
+  }
+  if (state.selectedStopId) {
+    const mediaCoordinates = model.media
+      .filter(
+        (item) => item.stopId === state.selectedStopId && item.coordinates,
+      )
+      .map((item) => item.coordinates as [number, number]);
+    const stop = model.stops.find((item) => item.id === state.selectedStopId);
+    return stop?.coordinates
+      ? [stop.coordinates, ...mediaCoordinates]
+      : mediaCoordinates;
+  }
+  if (state.selectedDayId) {
+    return model.stops
+      .filter((item) => item.dayId === state.selectedDayId && item.coordinates)
+      .map((item) => item.coordinates as [number, number]);
+  }
+  return [
+    ...model.stops
+      .filter((item) => item.coordinates)
+      .map((item) => item.coordinates as [number, number]),
+    ...model.media
+      .filter((item) => item.coordinates)
+      .map((item) => item.coordinates as [number, number]),
+  ];
+}
+
+function useReducedMotion(): boolean {
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return false;
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const listener = (event: MediaQueryListEvent) =>
+      setReducedMotion(event.matches);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
+  }, []);
+  return reducedMotion;
 }
 
 function TripFields({

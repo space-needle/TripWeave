@@ -1,4 +1,5 @@
 # ruff: noqa: B008
+import json
 import secrets
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -74,6 +75,8 @@ from tripweave.entrypoints.api.schemas import (
     MemberRosterResponse,
     MeResponse,
     ReconstructionDayResponse,
+    ReconstructionLegResponse,
+    ReconstructionMediaResponse,
     ReconstructionMomentResponse,
     ReconstructionResponse,
     ReconstructionRunResponse,
@@ -2085,6 +2088,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if latest_run is None:
             return ReconstructionResponse(latestRun=None, days=[], reviewItems=[])
 
+        stop_lat: Any = literal_column("ST_Y(stops.centroid::geometry)").label("latitude")
+        stop_lon: Any = literal_column("ST_X(stops.centroid::geometry)").label("longitude")
         days = list(
             db.execute(
                 select(orm.TripDay)
@@ -2100,7 +2105,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         stops = list(
             db.execute(
-                select(orm.Stop, orm.Place)
+                select(orm.Stop, orm.Place, stop_lat, stop_lon)
                 .join(orm.Place, orm.Place.id == orm.Stop.place_id)
                 .where(
                     orm.Stop.trip_id == trip_id,
@@ -2125,10 +2130,24 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .order_by(orm.Moment.position)
             ).scalars()
         )
+        media_lat: Any = literal_column("ST_Y(media_items.effective_location::geometry)").label(
+            "latitude"
+        )
+        media_lon: Any = literal_column("ST_X(media_items.effective_location::geometry)").label(
+            "longitude"
+        )
         moment_media_rows = db.execute(
-            select(orm.MomentMedia.moment_id, orm.Moment.stop_id, orm.MediaItem)
+            select(
+                orm.MomentMedia.moment_id,
+                orm.Moment.stop_id,
+                orm.MediaItem,
+                orm.TripMember,
+                media_lat,
+                media_lon,
+            )
             .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
             .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+            .join(orm.TripMember, orm.TripMember.id == orm.MediaItem.contributor_member_id)
             .where(
                 orm.MomentMedia.trip_id == trip_id,
                 or_(
@@ -2136,24 +2155,80 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     orm.MomentMedia.user_locked.is_(True),
                 ),
             )
+            .order_by(orm.MediaItem.effective_captured_at_utc, orm.MediaItem.created_at)
         ).all()
         contributors_by_moment: dict[UUID, set[UUID]] = {}
-        media_count_by_moment: dict[UUID, int] = {}
+        contributors_by_stop: dict[UUID, set[UUID]] = {}
+        media_by_moment: dict[UUID, list[ReconstructionMediaResponse]] = {}
         local_times_by_moment: dict[UUID, list[datetime]] = {}
         local_times_by_stop: dict[UUID, list[datetime]] = {}
-        for moment_id, stop_id, media_item in moment_media_rows:
+        for moment_id, stop_id, media_item, contributor, latitude, longitude in moment_media_rows:
             contributor_id = media_item.contributor_member_id
-            media_count_by_moment[moment_id] = media_count_by_moment.get(moment_id, 0) + 1
             contributors_by_moment.setdefault(moment_id, set()).add(contributor_id)
+            contributors_by_stop.setdefault(stop_id, set()).add(contributor_id)
             local_capture = media_local_capture(media_item)
             if local_capture is not None:
                 local_times_by_moment.setdefault(moment_id, []).append(local_capture)
                 local_times_by_stop.setdefault(stop_id, []).append(local_capture)
+            thumbnail = next(
+                (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
+                None,
+            )
+            captured_at = (
+                media_item.effective_captured_at_utc
+                or media_item.original_captured_at_utc
+                or media_item.original_captured_at_local
+            )
+            media_by_moment.setdefault(moment_id, []).append(
+                ReconstructionMediaResponse(
+                    id=media_item.id,
+                    filename=media_item.original_filename,
+                    capturedAt=captured_at,
+                    capturedAtLocal=local_capture,
+                    latitude=float(latitude) if latitude is not None else None,
+                    longitude=float(longitude) if longitude is not None else None,
+                    contributorMemberId=contributor.id,
+                    contributor=contributor.display_name,
+                    thumbnailUrl=(
+                        media_asset_response(thumbnail).download_url
+                        if thumbnail is not None
+                        else None
+                    ),
+                )
+            )
+
+        leg_geometry: Any = literal_column("ST_AsGeoJSON(trip_legs.geometry::geometry)").label(
+            "geometry"
+        )
+        leg_rows = db.execute(
+            select(orm.TripLeg, leg_geometry)
+            .where(
+                orm.TripLeg.trip_id == trip_id,
+                or_(
+                    orm.TripLeg.reconstruction_run_id == latest_run.id,
+                    orm.TripLeg.user_locked.is_(True),
+                ),
+            )
+            .order_by(orm.TripLeg.created_at, orm.TripLeg.id)
+        ).all()
+        legs_by_day: dict[UUID, list[ReconstructionLegResponse]] = {}
+        for leg, geometry_json in leg_rows:
+            geometry = json.loads(geometry_json) if isinstance(geometry_json, str) else None
+            legs_by_day.setdefault(leg.trip_day_id, []).append(
+                ReconstructionLegResponse(
+                    id=leg.id,
+                    fromStopId=leg.from_stop_id,
+                    toStopId=leg.to_stop_id,
+                    routeSource=leg.route_source,
+                    geometry=geometry,
+                )
+            )
 
         moments_by_stop: dict[UUID, list[ReconstructionMomentResponse]] = {}
         for moment in moments:
             contributors = contributors_by_moment.get(moment.id, set())
             moment_local_times = local_times_by_moment.get(moment.id, [])
+            moment_media = media_by_moment.get(moment.id, [])
             moments_by_stop.setdefault(moment.stop_id, []).append(
                 ReconstructionMomentResponse(
                     id=moment.id,
@@ -2163,17 +2238,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     endsAt=moment.ends_at_utc,
                     startsAtLocal=min(moment_local_times) if moment_local_times else None,
                     endsAtLocal=max(moment_local_times) if moment_local_times else None,
-                    mediaCount=media_count_by_moment.get(moment.id, 0),
+                    mediaCount=len(moment_media),
                     contributorCount=len(contributors),
+                    media=moment_media,
                 )
             )
 
         stops_by_day: dict[UUID, list[ReconstructionStopResponse]] = {}
-        for stop, place in stops:
+        for stop, place, latitude, longitude in stops:
             moment_items = moments_by_stop.get(stop.id, [])
             stop_local_times = local_times_by_stop.get(stop.id, [])
             media_count = sum(item.media_count for item in moment_items)
-            contributor_count = sum(item.contributor_count for item in moment_items)
+            contributor_count = len(contributors_by_stop.get(stop.id, set()))
             stops_by_day.setdefault(stop.trip_day_id, []).append(
                 ReconstructionStopResponse(
                     id=stop.id,
@@ -2184,6 +2260,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     startsAtLocal=min(stop_local_times) if stop_local_times else None,
                     endsAtLocal=max(stop_local_times) if stop_local_times else None,
                     placeName=place.name,
+                    latitude=float(latitude) if latitude is not None else None,
+                    longitude=float(longitude) if longitude is not None else None,
                     mediaCount=media_count,
                     contributorCount=contributor_count,
                     moments=moment_items,
@@ -2219,6 +2297,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     position=day.position,
                     title=day.title,
                     stops=stops_by_day.get(day.id, []),
+                    legs=legs_by_day.get(day.id, []),
                 )
                 for day in days
             ],

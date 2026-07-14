@@ -744,8 +744,14 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     day_id = body["days"][0]["id"]
     stops = body["days"][0]["stops"]
     assert len(stops) >= 3
+    assert body["days"][0]["legs"][0]["routeSource"] == "photo_inferred"
+    assert body["days"][0]["legs"][0]["geometry"]["type"] == "LineString"
     stop_one, stop_two, stop_three = stops[:3]
+    assert stop_one["latitude"] == 35.0
+    assert stop_one["longitude"] == 127.0
     moment_one, moment_two = stop_one["moments"][:2]
+    assert moment_one["media"][0]["latitude"] == 35.0
+    assert moment_one["media"][0]["contributor"] == "Owner"
     stop_two_moment_one, stop_two_moment_two = stop_two["moments"][:2]
     review_item_id = body["reviewItems"][0]["id"]
 

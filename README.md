@@ -37,6 +37,7 @@ The planned stack is:
 - `docs/worker-state-machine.md` defines durable processing-job claiming, retry, and media-ingest behavior.
 - `docs/reconstruction-algorithm.md` defines the deterministic local trip reconstruction algorithm.
 - `docs/manual-review-walkthrough.md` defines the local review-by-exception correction walkthrough.
+- `docs/frontend-state-model.md` defines the synchronized map and timeline state model.
 - `docs/roadmap.md` defines delivery order through local MVP, provider proof, and later deployment adapters.
 - `docs/adr/` records architectural decisions.
 

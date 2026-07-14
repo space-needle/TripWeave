@@ -308,6 +308,18 @@ class ReconstructionRunResponse(BaseModel):
     finished_at: datetime | None = Field(default=None, alias="finishedAt")
 
 
+class ReconstructionMediaResponse(BaseModel):
+    id: UUID
+    filename: str | None = None
+    captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    captured_at_local: datetime | None = Field(default=None, alias="capturedAtLocal")
+    latitude: float | None = None
+    longitude: float | None = None
+    contributor_member_id: UUID = Field(alias="contributorMemberId")
+    contributor: str
+    thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
+
+
 class ReconstructionMomentResponse(BaseModel):
     id: UUID
     position: int
@@ -318,6 +330,7 @@ class ReconstructionMomentResponse(BaseModel):
     ends_at_local: datetime | None = Field(default=None, alias="endsAtLocal")
     media_count: int = Field(alias="mediaCount")
     contributor_count: int = Field(alias="contributorCount")
+    media: list[ReconstructionMediaResponse]
 
 
 class ReconstructionStopResponse(BaseModel):
@@ -329,9 +342,19 @@ class ReconstructionStopResponse(BaseModel):
     starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
     ends_at_local: datetime | None = Field(default=None, alias="endsAtLocal")
     place_name: str | None = Field(default=None, alias="placeName")
+    latitude: float | None = None
+    longitude: float | None = None
     media_count: int = Field(alias="mediaCount")
     contributor_count: int = Field(alias="contributorCount")
     moments: list[ReconstructionMomentResponse]
+
+
+class ReconstructionLegResponse(BaseModel):
+    id: UUID
+    from_stop_id: UUID = Field(alias="fromStopId")
+    to_stop_id: UUID = Field(alias="toStopId")
+    route_source: str = Field(alias="routeSource")
+    geometry: dict[str, object] | None = None
 
 
 class ReconstructionDayResponse(BaseModel):
@@ -340,6 +363,7 @@ class ReconstructionDayResponse(BaseModel):
     position: int
     title: str | None = None
     stops: list[ReconstructionStopResponse]
+    legs: list[ReconstructionLegResponse] = Field(default_factory=list)
 
 
 class ReviewItemResponse(BaseModel):
