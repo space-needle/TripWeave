@@ -218,6 +218,12 @@ p {
   flex-wrap: wrap;
 }
 
+.button-row button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .danger {
   border-color: var(--danger);
   background: var(--danger-bg);
@@ -367,6 +373,37 @@ p {
 .simple-row small {
   color: var(--muted);
   margin-top: 3px;
+}
+
+.publication-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compact-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compact-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.compact-row small {
+  color: var(--muted);
+}
+
+.public-story-shell {
+  width: min(1280px, calc(100% - 32px));
 }
 
 .outline {
@@ -659,6 +696,30 @@ p {
   margin: 0;
 }
 
+.compact-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.compact-facts div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.compact-facts dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.compact-facts dd {
+  margin: 2px 0 0;
+  font-weight: 800;
+}
+
 .moment-row {
   display: flex;
   flex-wrap: wrap;
@@ -671,6 +732,36 @@ p {
   padding: 4px 8px;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.similarity-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.similarity-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.similarity-group summary {
+  cursor: pointer;
+}
+
+.similarity-group summary strong,
+.similarity-group summary small {
+  display: block;
+}
+
+.similarity-group summary small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.similarity-group > p {
+  margin: 10px 0;
 }
 
 .media-list {
@@ -714,6 +805,11 @@ p {
   gap: 8px;
 }
 
+.media-state {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .media-details strong,
 .media-details small {
   overflow-wrap: anywhere;
@@ -747,6 +843,10 @@ p {
 
 @media (max-width: 920px) {
   .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .publication-grid {
     grid-template-columns: 1fr;
   }
 

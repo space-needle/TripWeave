@@ -42,6 +42,10 @@ from tripweave.domain.enums import (
     ReviewItemType,
     ReviewSeverity,
     RouteSource,
+    ShareLinkStatus,
+    SimilarityGroupType,
+    StoryVersionState,
+    SuggestionStatus,
     TimeSource,
     TripMemberRole,
     TripStatus,
@@ -364,6 +368,9 @@ class MediaItem(Base, TimestampMixin):
         PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
     )
     contributor_member_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False)
+    capture_device_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("capture_devices.id", ondelete="SET NULL")
+    )
     media_type: Mapped[str] = mapped_column(String(40), nullable=False)
     original_filename: Mapped[str | None] = mapped_column(Text)
     declared_mime_type: Mapped[str | None] = mapped_column(String(255))
@@ -405,6 +412,28 @@ class MediaItem(Base, TimestampMixin):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     assets: Mapped[list[MediaAsset]] = relationship(back_populates="media_item")
+
+
+class CaptureDevice(Base, TimestampMixin):
+    __tablename__ = "capture_devices"
+    __table_args__ = (UniqueConstraint("trip_id", "device_key"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    contributor_member_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_members.id", ondelete="SET NULL")
+    )
+    device_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    make: Mapped[str | None] = mapped_column(String(160))
+    model: Mapped[str | None] = mapped_column(String(160))
+    software: Mapped[str | None] = mapped_column(String(160))
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    accepted_clock_offset_seconds: Mapped[int | None] = mapped_column(Integer)
+    accepted_suggestion_id: Mapped[UUID | None] = mapped_column(PostgresUUID(as_uuid=True))
 
 
 class MediaAsset(Base):
@@ -491,6 +520,103 @@ class GeneratedRecordMixin(TimestampMixin):
         nullable=False,
     )
     user_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
+class SimilarityGroup(Base, GeneratedRecordMixin):
+    __tablename__ = "similarity_groups"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(f"group_type IN ({enum_values(SimilarityGroupType)})", name="group_type"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    group_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    representative_media_item_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="SET NULL")
+    )
+    member_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class SimilarityGroupMember(Base):
+    __tablename__ = "similarity_group_members"
+    __table_args__ = (
+        CheckConstraint(
+            "similarity_score IS NULL OR (similarity_score >= 0 AND similarity_score <= 1)",
+            name="similarity_score",
+        ),
+        CheckConstraint(
+            "technical_score IS NULL OR (technical_score >= 0 AND technical_score <= 1)",
+            name="technical_score",
+        ),
+        UniqueConstraint("similarity_group_id", "media_item_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    similarity_group_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("similarity_groups.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    media_item_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False
+    )
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    similarity_score: Mapped[float | None] = mapped_column(Float)
+    technical_score: Mapped[float | None] = mapped_column(Float)
+    is_representative: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    user_selected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    signals: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class DeviceClockOffsetSuggestion(Base, GeneratedRecordMixin):
+    __tablename__ = "device_clock_offset_suggestions"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(f"status IN ({enum_values(SuggestionStatus)})", name="status"),
+        CheckConstraint("support_count >= 0", name="support_count"),
+        CheckConstraint("dispersion_seconds >= 0", name="dispersion_seconds"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    capture_device_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("capture_devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    offset_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    support_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    dispersion_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'open'"))
+    evidence: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ReconstructionRun(Base, TimestampMixin):
@@ -789,6 +915,73 @@ class EditOperation(Base, TimestampMixin):
     )
 
 
+class StoryVersion(Base, TimestampMixin):
+    __tablename__ = "story_versions"
+    __table_args__ = (
+        CheckConstraint(f"state IN ({enum_values(StoryVersionState)})", name="state"),
+        CheckConstraint("version_number > 0", name="version_number_positive"),
+        UniqueConstraint("trip_id", "version_number"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'pending'"))
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    manifest_store_alias: Mapped[str | None] = mapped_column(String(100))
+    manifest_object_key: Mapped[str | None] = mapped_column(Text)
+    manifest_checksum: Mapped[str | None] = mapped_column(Text)
+    manifest_byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    asset_prefix: Mapped[str] = mapped_column(Text, nullable=False)
+    source_reconstruction_run_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("reconstruction_runs.id", ondelete="SET NULL")
+    )
+    created_by_member_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_members.id", ondelete="SET NULL")
+    )
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    publication_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    audit: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class ShareLink(Base, TimestampMixin):
+    __tablename__ = "share_links"
+    __table_args__ = (
+        CheckConstraint(f"status IN ({enum_values(ShareLinkStatus)})", name="status"),
+        UniqueConstraint("token_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    story_version_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("story_versions.id", ondelete="SET NULL")
+    )
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'active'"))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 Index("ix_sessions_user_id", Session.user_id)
 Index("ix_trips_created_by", Trip.created_by)
 Index("ix_trip_members_trip_id", TripMember.trip_id)
@@ -807,10 +1000,14 @@ Index("ix_upload_sessions_trip_id", UploadSession.trip_id)
 Index("ix_upload_sessions_member_id", UploadSession.member_id)
 Index("ix_upload_files_upload_session_id", UploadFile.upload_session_id)
 Index("ix_upload_files_media_item_id", UploadFile.media_item_id)
+Index("ix_capture_devices_trip_id", CaptureDevice.trip_id)
+Index("ix_capture_devices_member_id", CaptureDevice.contributor_member_id)
 Index("ix_media_items_trip_id", MediaItem.trip_id)
 Index("ix_media_items_contributor_member_id", MediaItem.contributor_member_id)
+Index("ix_media_items_capture_device_id", MediaItem.capture_device_id)
 Index("ix_media_items_effective_captured_at_utc", MediaItem.effective_captured_at_utc)
 Index("ix_media_items_sha256", MediaItem.sha256)
+Index("ix_media_items_perceptual_hash", MediaItem.perceptual_hash)
 Index("ix_media_items_original_location_gist", MediaItem.original_location, postgresql_using="gist")
 Index(
     "ix_media_items_effective_location_gist", MediaItem.effective_location, postgresql_using="gist"
@@ -823,6 +1020,18 @@ Index(
     ProcessingJob.run_after,
 )
 Index("ix_processing_jobs_target", ProcessingJob.target_type, ProcessingJob.target_id)
+Index("ix_similarity_groups_trip_id", SimilarityGroup.trip_id)
+Index("ix_similarity_groups_representative", SimilarityGroup.representative_media_item_id)
+Index("ix_similarity_group_members_media", SimilarityGroupMember.media_item_id)
+Index(
+    "ix_clock_offset_suggestions_trip_status",
+    DeviceClockOffsetSuggestion.trip_id,
+    DeviceClockOffsetSuggestion.status,
+)
+Index(
+    "ix_clock_offset_suggestions_device",
+    DeviceClockOffsetSuggestion.capture_device_id,
+)
 Index("ix_reconstruction_runs_trip_id", ReconstructionRun.trip_id)
 Index("ix_trip_days_trip_id", TripDay.trip_id)
 Index("ix_places_trip_id", Place.trip_id)
@@ -841,3 +1050,7 @@ Index("ix_review_items_media_item_id", ReviewItem.media_item_id)
 Index("ix_review_items_trip_status", ReviewItem.trip_id, ReviewItem.status)
 Index("ix_edit_operations_trip_created", EditOperation.trip_id, EditOperation.created_at)
 Index("ix_edit_operations_review_item_id", EditOperation.review_item_id)
+Index("ix_story_versions_trip_version", StoryVersion.trip_id, StoryVersion.version_number)
+Index("ix_story_versions_trip_state", StoryVersion.trip_id, StoryVersion.state)
+Index("ix_share_links_trip_id", ShareLink.trip_id)
+Index("ix_share_links_story_version_id", ShareLink.story_version_id)

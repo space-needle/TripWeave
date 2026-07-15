@@ -157,6 +157,9 @@ class EditOperationType(StrEnum):
     LOCK_RECORD = "lock_record"
     RESOLVE_REVIEW_ITEM = "resolve_review_item"
     DISMISS_REVIEW_ITEM = "dismiss_review_item"
+    SET_SIMILARITY_REPRESENTATIVE = "set_similarity_representative"
+    ACCEPT_CLOCK_OFFSET_SUGGESTION = "accept_clock_offset_suggestion"
+    REJECT_CLOCK_OFFSET_SUGGESTION = "reject_clock_offset_suggestion"
 
 
 class EditOperationStatus(StrEnum):
@@ -170,3 +173,27 @@ class ProcessingJobState(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class SimilarityGroupType(StrEnum):
+    EXACT_DUPLICATE = "exact_duplicate"
+    VISUALLY_SIMILAR = "visually_similar"
+
+
+class SuggestionStatus(StrEnum):
+    OPEN = "open"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class StoryVersionState(StrEnum):
+    PENDING = "pending"
+    PUBLISHING = "publishing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class ShareLinkStatus(StrEnum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"

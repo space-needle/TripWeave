@@ -25,7 +25,10 @@ import type {
   InvitationResponse,
   MediaItemResponse,
   MemberResponse,
+  PublicationsListResponse,
+  PublicStoryResponse,
   ReconstructionResponse,
+  SimilarityGroupResponse,
   TripResponse,
   UploadFileResponse,
   UploadSessionResponse,
@@ -197,6 +200,13 @@ export default function TripWeaveApp() {
       />
     );
   }
+  if (path.startsWith("/story/")) {
+    return (
+      <PublicStoryViewer
+        token={decodeURIComponent(path.slice("/story/".length))}
+      />
+    );
+  }
   return <OwnerWorkspace />;
 }
 
@@ -219,6 +229,9 @@ function OwnerWorkspace() {
   );
   const [uploadError, setUploadError] = useState("");
   const [media, setMedia] = useState<MediaItemResponse[]>([]);
+  const [similarityGroups, setSimilarityGroups] = useState<
+    SimilarityGroupResponse[]
+  >([]);
   const [mediaError, setMediaError] = useState("");
   const [reconstruction, setReconstruction] =
     useState<ReconstructionResponse | null>(null);
@@ -230,6 +243,10 @@ function OwnerWorkspace() {
   const [invitations, setInvitations] = useState<InvitationResponse[]>([]);
   const [members, setMembers] = useState<MemberResponse[]>([]);
   const [collaborationError, setCollaborationError] = useState("");
+  const [publications, setPublications] =
+    useState<PublicationsListResponse | null>(null);
+  const [publicationError, setPublicationError] = useState("");
+  const [latestShareUrl, setLatestShareUrl] = useState("");
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [uploadProgress, setUploadProgress] = useState<
@@ -292,10 +309,15 @@ function OwnerWorkspace() {
   const loadMedia = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setMedia([]);
+      setSimilarityGroups([]);
       return;
     }
-    const result = await api.media(tripId);
+    const [result, groupResult] = await Promise.all([
+      api.media(tripId),
+      api.similarityGroups(tripId),
+    ]);
     setMedia(result.media);
+    setSimilarityGroups(groupResult.groups);
   }, []);
 
   const loadReconstruction = useCallback(async (tripId: string | null) => {
@@ -321,6 +343,14 @@ function OwnerWorkspace() {
     setMembers(memberResult.members);
   }, []);
 
+  const loadPublications = useCallback(async (tripId: string | null) => {
+    if (!tripId) {
+      setPublications(null);
+      return;
+    }
+    setPublications(await api.publications(tripId));
+  }, []);
+
   function selectTrip(trip: TripResponse) {
     setSelectedTripId(trip.id);
     setSettingsForm(fromTrip(trip));
@@ -328,6 +358,7 @@ function OwnerWorkspace() {
     void loadMedia(trip.id);
     void loadReconstruction(trip.id);
     void loadCollaboration(trip.id);
+    void loadPublications(trip.id);
   }
 
   function removeTripFromState(tripId: string) {
@@ -339,9 +370,12 @@ function OwnerWorkspace() {
     if (!nextTrip) {
       setUploadSessions([]);
       setMedia([]);
+      setSimilarityGroups([]);
       setReconstruction(null);
       setInvitations([]);
       setMembers([]);
+      setPublications(null);
+      setLatestShareUrl("");
     }
   }
 
@@ -412,6 +446,16 @@ function OwnerWorkspace() {
       );
     }
   }, [loadCollaboration, selectedTrip?.id, selectedTrip?.role]);
+
+  useEffect(() => {
+    if (selectedTrip?.id && ["owner", "editor"].includes(selectedTrip.role)) {
+      void Promise.resolve().then(() =>
+        loadPublications(selectedTrip.id).catch((error) =>
+          setPublicationError(messageFrom(error)),
+        ),
+      );
+    }
+  }, [loadPublications, selectedTrip?.id, selectedTrip?.role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -506,8 +550,11 @@ function OwnerWorkspace() {
       setSelectedTripId(null);
       setUploadSessions([]);
       setMedia([]);
+      setSimilarityGroups([]);
       setInvitations([]);
       setMembers([]);
+      setPublications(null);
+      setLatestShareUrl("");
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -728,6 +775,38 @@ function OwnerWorkspace() {
     }
   }
 
+  async function updateMediaVisibility(
+    item: MediaItemResponse,
+    visibility: string,
+  ) {
+    if (!selectedTrip) {
+      return;
+    }
+    setMediaError("");
+    setMedia((current) =>
+      current.map((mediaItem) =>
+        mediaItem.id === item.id
+          ? {
+              ...mediaItem,
+              visibility,
+              includeInStory: visibility === "story",
+            }
+          : mediaItem,
+      ),
+    );
+    try {
+      await api.updateMedia(item.id, {
+        visibility,
+        includeInStory: visibility === "story",
+      });
+      await loadMedia(selectedTrip.id);
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setMediaError(messageFrom(error));
+      await loadMedia(selectedTrip.id);
+    }
+  }
+
   async function createInvite() {
     if (!selectedTrip) {
       return;
@@ -785,6 +864,51 @@ function OwnerWorkspace() {
     try {
       const result = await api.startReconstruction(selectedTrip.id);
       setReconstruction(result);
+      await loadMedia(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function changeSimilarityRepresentative(
+    groupId: string,
+    mediaId: string,
+  ) {
+    if (!selectedTrip) {
+      return;
+    }
+    setMediaError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "set_similarity_representative",
+        payload: { similarityGroupId: groupId, mediaItemId: mediaId },
+      });
+      await loadMedia(selectedTrip.id);
+    } catch (error) {
+      setMediaError(messageFrom(error));
+    }
+  }
+
+  async function acceptClockOffset(reviewItemId: string) {
+    const reviewItem = reconstruction?.reviewItems.find(
+      (item) => item.id === reviewItemId,
+    );
+    const suggestionId = reviewItem?.payload.suggestionId;
+    if (!selectedTrip || typeof suggestionId !== "string") {
+      return;
+    }
+    setReconstructionError("");
+    setIsBusy(true);
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "accept_clock_offset_suggestion",
+        reviewItemId,
+        payload: { suggestionId },
+      });
+      await loadReconstruction(selectedTrip.id);
+      await loadMedia(selectedTrip.id);
     } catch (error) {
       setReconstructionError(messageFrom(error));
     } finally {
@@ -802,6 +926,24 @@ function OwnerWorkspace() {
     setReconstructionError("");
     setIsBusy(true);
     try {
+      const reviewItem = reconstruction?.reviewItems.find(
+        (item) => item.id === reviewItemId,
+      );
+      const suggestionId = reviewItem?.payload.suggestionId;
+      if (
+        operationType === "dismiss_review_item" &&
+        reviewItem?.itemType === "possible_clock_offset" &&
+        typeof suggestionId === "string"
+      ) {
+        await api.createEditOperation(selectedTrip.id, {
+          operationType: "reject_clock_offset_suggestion",
+          reviewItemId,
+          payload: { suggestionId, resolution: "Rejected by organizer" },
+        });
+        await loadReconstruction(selectedTrip.id);
+        await loadMedia(selectedTrip.id);
+        return;
+      }
       await api.createEditOperation(selectedTrip.id, {
         operationType,
         reviewItemId,
@@ -814,6 +956,7 @@ function OwnerWorkspace() {
         },
       });
       await loadReconstruction(selectedTrip.id);
+      await loadMedia(selectedTrip.id);
     } catch (error) {
       setReconstructionError(messageFrom(error));
     } finally {
@@ -832,6 +975,53 @@ function OwnerWorkspace() {
       await loadReconstruction(selectedTrip.id);
     } catch (error) {
       setReconstructionError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function publishTrip() {
+    if (!selectedTrip) {
+      return;
+    }
+    setPublicationError("");
+    setIsBusy(true);
+    try {
+      const result = await api.publishTrip(selectedTrip.id);
+      setLatestShareUrl(result.shareLink.shareUrl ?? "");
+      await loadPublications(selectedTrip.id);
+    } catch (error) {
+      setPublicationError(messageFrom(error));
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function revokeShareLink(id: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setPublicationError("");
+    try {
+      await api.revokeShareLink(id);
+      await loadPublications(selectedTrip.id);
+    } catch (error) {
+      setPublicationError(messageFrom(error));
+    }
+  }
+
+  async function unpublishTrip() {
+    if (!selectedTrip) {
+      return;
+    }
+    setPublicationError("");
+    setIsBusy(true);
+    try {
+      await api.unpublishTrip(selectedTrip.id);
+      setLatestShareUrl("");
+      await loadPublications(selectedTrip.id);
+    } catch (error) {
+      setPublicationError(messageFrom(error));
     } finally {
       setIsBusy(false);
     }
@@ -1118,7 +1308,44 @@ function OwnerWorkspace() {
               onDismissReview={(id) =>
                 void applyReviewDecision(id, "dismiss_review_item")
               }
+              onAcceptClockOffset={(id) => void acceptClockOffset(id)}
               onUndo={undoLatestEdit}
+            />
+          </section>
+        ) : null}
+
+        {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+          <section className="panel stack" aria-labelledby="publication-title">
+            <div className="section-heading">
+              <div>
+                <h2 id="publication-title">Publication</h2>
+                <p>Publish an immutable story version with sanitized assets.</p>
+              </div>
+              <div className="button-row">
+                <button type="button" onClick={publishTrip} disabled={isBusy}>
+                  Publish story
+                </button>
+                <button
+                  className="danger"
+                  type="button"
+                  onClick={unpublishTrip}
+                  disabled={isBusy}
+                >
+                  Unpublish
+                </button>
+              </div>
+            </div>
+            {publicationError ? (
+              <p className="error">{publicationError}</p>
+            ) : null}
+            {latestShareUrl ? (
+              <div className="invite-card">
+                <code>{latestShareUrl}</code>
+              </div>
+            ) : null}
+            <PublicationList
+              publications={publications}
+              onRevoke={revokeShareLink}
             />
           </section>
         ) : null}
@@ -1135,7 +1362,14 @@ function OwnerWorkspace() {
           <MediaList
             media={media}
             onRetry={retryMedia}
+            onVisibilityChange={updateMediaVisibility}
             timezoneId={selectedTrip?.timezoneId}
+          />
+          <SimilarityGroupsPanel
+            groups={similarityGroups}
+            onChangeRepresentative={(groupId, mediaId) =>
+              void changeSimilarityRepresentative(groupId, mediaId)
+            }
           />
         </section>
       </section>
@@ -2434,6 +2668,150 @@ function MemberRoster({
   );
 }
 
+function PublicationList({
+  publications,
+  onRevoke,
+}: {
+  publications: PublicationsListResponse | null;
+  onRevoke: (id: string) => void;
+}) {
+  if (!publications) {
+    return <p>No publication data loaded.</p>;
+  }
+  return (
+    <div className="publication-grid">
+      <div>
+        <h3>Versions</h3>
+        {publications.versions.length === 0 ? (
+          <p>No versions yet.</p>
+        ) : (
+          <div className="compact-list">
+            {publications.versions.map((version) => (
+              <div className="compact-row" key={version.id}>
+                <span>v{version.versionNumber}</span>
+                <small>{version.state}</small>
+                {version.errorMessage ? (
+                  <small className="error">{version.errorMessage}</small>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <h3>Share links</h3>
+        {publications.shareLinks.length === 0 ? (
+          <p>No links yet.</p>
+        ) : (
+          <div className="compact-list">
+            {publications.shareLinks.map((link) => (
+              <div className="compact-row" key={link.id}>
+                <span>{link.status}</span>
+                <small>
+                  {link.storyVersionId ? "version assigned" : "publishing"}
+                </small>
+                {link.status === "active" ? (
+                  <button type="button" onClick={() => onRevoke(link.id)}>
+                    Revoke
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PublicStoryViewer({ token }: { token: string }) {
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [story, setStory] = useState<PublicStoryResponse | null>(null);
+  const [error, setError] = useState("");
+  const [storyState, setStoryState] = useState<StoryMapState>(() =>
+    initialStoryMapState(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .publicStory(token)
+      .then((result) => {
+        if (!cancelled) {
+          setStory(result);
+          setError("");
+        }
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setError(messageFrom(reason));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadState("ready");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (loadState === "loading") {
+    return (
+      <main className="app-shell">
+        <p className="eyebrow">Published story</p>
+        <h1>Loading story</h1>
+      </main>
+    );
+  }
+
+  if (error || !story) {
+    return (
+      <main className="app-shell">
+        <section className="panel stack">
+          <p className="eyebrow">Published story</p>
+          <h1>Story unavailable</h1>
+          <p>{error || "This story is not available."}</p>
+        </section>
+      </main>
+    );
+  }
+
+  const trip = story.trip as {
+    title?: unknown;
+    description?: unknown;
+    timezoneId?: unknown;
+  };
+  const title = typeof trip.title === "string" ? trip.title : "Trip story";
+  const description =
+    typeof trip.description === "string" ? trip.description : null;
+  const timezoneId =
+    typeof trip.timezoneId === "string" ? trip.timezoneId : "UTC";
+
+  return (
+    <main className="app-shell public-story-shell">
+      <header className="app-header">
+        <div>
+          <p className="eyebrow">
+            Published story · v{story.version.versionNumber}
+          </p>
+          <h1>{title}</h1>
+          {description ? <p>{description}</p> : null}
+        </div>
+      </header>
+      <section className="panel stack media-panel">
+        <TripStoryExplorer
+          reconstruction={story.story}
+          state={storyState}
+          onStateChange={setStoryState}
+          timezoneId={timezoneId}
+        />
+      </section>
+    </main>
+  );
+}
+
 function ReconstructionOutline({
   reconstruction,
   timezoneId,
@@ -2441,6 +2819,7 @@ function ReconstructionOutline({
   onSkipReview,
   onResolveReview,
   onDismissReview,
+  onAcceptClockOffset,
   onUndo,
 }: {
   reconstruction: ReconstructionResponse | null;
@@ -2449,6 +2828,7 @@ function ReconstructionOutline({
   onSkipReview: () => void;
   onResolveReview: (id: string) => void;
   onDismissReview: (id: string) => void;
+  onAcceptClockOffset: (id: string) => void;
   onUndo: () => void;
 }) {
   if (!reconstruction?.latestRun) {
@@ -2517,13 +2897,40 @@ function ReconstructionOutline({
               </small>
             </div>
             <p>{currentReview.message}</p>
+            {currentReview.itemType === "possible_clock_offset" ? (
+              <dl className="compact-facts">
+                <div>
+                  <dt>Offset</dt>
+                  <dd>{String(currentReview.payload.offsetSeconds ?? "?")}s</dd>
+                </div>
+                <div>
+                  <dt>Support</dt>
+                  <dd>{String(currentReview.payload.supportCount ?? "?")}</dd>
+                </div>
+                <div>
+                  <dt>Dispersion</dt>
+                  <dd>
+                    {String(currentReview.payload.dispersionSeconds ?? "?")}s
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
             <div className="button-row">
-              <button
-                type="button"
-                onClick={() => onResolveReview(currentReview.id)}
-              >
-                Resolve
-              </button>
+              {currentReview.itemType === "possible_clock_offset" ? (
+                <button
+                  type="button"
+                  onClick={() => onAcceptClockOffset(currentReview.id)}
+                >
+                  Accept offset
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onResolveReview(currentReview.id)}
+                >
+                  Resolve
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onDismissReview(currentReview.id)}
@@ -2596,6 +3003,67 @@ function ReconstructionOutline({
   );
 }
 
+function SimilarityGroupsPanel({
+  groups,
+  onChangeRepresentative,
+}: {
+  groups: SimilarityGroupResponse[];
+  onChangeRepresentative: (groupId: string, mediaId: string) => void;
+}) {
+  if (groups.length === 0) {
+    return null;
+  }
+  return (
+    <section className="similarity-panel" aria-labelledby="similarity-title">
+      <div>
+        <h3 id="similarity-title">Similar photo stacks</h3>
+        <p>Duplicate and near-duplicate versions stay preserved.</p>
+      </div>
+      <div className="simple-list">
+        {groups.map((group) => (
+          <details className="similarity-group" key={group.id}>
+            <summary>
+              <strong>{group.memberCount} versions</strong>
+              <small>
+                {group.groupType.replace("_", " ")} · confidence{" "}
+                {group.confidence ?? "unknown"}
+              </small>
+            </summary>
+            <p>{group.reason}</p>
+            <div className="simple-list">
+              {group.members.map((member) => (
+                <div className="simple-row" key={member.mediaItemId}>
+                  <div>
+                    <strong>
+                      {member.filename ?? "Untitled image"}
+                      {member.isRepresentative ? " · representative" : ""}
+                    </strong>
+                    <small>
+                      {member.contributor} · technical{" "}
+                      {member.technicalScore ?? "unknown"} · similarity{" "}
+                      {member.similarityScore ?? "unknown"}
+                    </small>
+                  </div>
+                  {!member.isRepresentative ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChangeRepresentative(group.id, member.mediaItemId)
+                      }
+                    >
+                      Use as representative
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function MediaList({
   media,
   onRetry,
@@ -2612,6 +3080,12 @@ function MediaList({
   if (media.length === 0) {
     return <p>No processed media yet.</p>;
   }
+  const visibilityLabels: Record<string, string> = {
+    trip: "Trip members",
+    story: "Publishable",
+    private: "Private",
+    excluded: "Excluded",
+  };
   return (
     <div className="media-list" role="list">
       {media.map((item) => (
@@ -2627,6 +3101,15 @@ function MediaList({
             <strong>{item.filename ?? "Untitled image"}</strong>
             <small>
               {item.processingState} · {item.contributor}
+              {(item.similarityGroupCount ?? 1) > 1
+                ? ` · stack of ${item.similarityGroupCount ?? 1}${
+                    item.isSimilarityRepresentative ? " · representative" : ""
+                  }`
+                : ""}
+            </small>
+            <small className="media-state">
+              {visibilityLabels[item.visibility] ?? item.visibility}
+              {item.includeInStory ? " · included in story" : ""}
             </small>
             <dl>
               <div>
@@ -2658,24 +3141,38 @@ function MediaList({
               <div className="button-row">
                 <button
                   type="button"
+                  className={item.visibility === "trip" ? "active" : ""}
+                  aria-pressed={item.visibility === "trip"}
                   onClick={() => onVisibilityChange(item, "trip")}
                 >
                   Trip members
                 </button>
                 <button
                   type="button"
+                  className={
+                    item.visibility === "story" && item.includeInStory
+                      ? "active"
+                      : ""
+                  }
+                  aria-pressed={
+                    item.visibility === "story" && item.includeInStory
+                  }
                   onClick={() => onVisibilityChange(item, "story")}
                 >
                   Publishable
                 </button>
                 <button
                   type="button"
+                  className={item.visibility === "private" ? "active" : ""}
+                  aria-pressed={item.visibility === "private"}
                   onClick={() => onVisibilityChange(item, "private")}
                 >
                   Private
                 </button>
                 <button
                   type="button"
+                  className={item.visibility === "excluded" ? "active" : ""}
+                  aria-pressed={item.visibility === "excluded"}
                   onClick={() => onVisibilityChange(item, "excluded")}
                 >
                   Exclude

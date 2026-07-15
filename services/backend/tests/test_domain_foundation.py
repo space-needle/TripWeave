@@ -49,6 +49,8 @@ def test_upload_state_transitions_are_explicit() -> None:
 
 def test_schema_has_expected_domain_tables() -> None:
     assert set(Base.metadata.tables) == {
+        "capture_devices",
+        "device_clock_offset_suggestions",
         "guest_sessions",
         "edit_operations",
         "media_assets",
@@ -61,7 +63,11 @@ def test_schema_has_expected_domain_tables() -> None:
         "reconstruction_runs",
         "review_items",
         "sessions",
+        "similarity_group_members",
+        "similarity_groups",
+        "share_links",
         "stops",
+        "story_versions",
         "trip_days",
         "trip_invitations",
         "trip_legs",

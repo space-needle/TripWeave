@@ -12,8 +12,12 @@ import type {
   MediaListResponse,
   MemberRosterResponse,
   MeResponse,
+  PublicationResponse,
+  PublicationsListResponse,
+  PublicStoryResponse,
   ReconstructionResponse,
   RegisterRequest,
+  SimilarityGroupsResponse,
   TripCreateRequest,
   TripResponse,
   TripsListResponse,
@@ -166,6 +170,11 @@ export const api = {
   media(tripId: string): Promise<MediaListResponse> {
     return apiRequest<MediaListResponse>(`/trips/${tripId}/media`);
   },
+  similarityGroups(tripId: string): Promise<SimilarityGroupsResponse> {
+    return apiRequest<SimilarityGroupsResponse>(
+      `/trips/${tripId}/similarity-groups`,
+    );
+  },
   reconstruction(tripId: string): Promise<ReconstructionResponse> {
     return apiRequest<ReconstructionResponse>(
       `/trips/${tripId}/reconstruction`,
@@ -193,6 +202,27 @@ export const api = {
     return apiRequest<EditOperationResponse>(
       `/trips/${tripId}/edit-operations/undo`,
       { method: "POST" },
+    );
+  },
+  publishTrip(tripId: string): Promise<PublicationResponse> {
+    return apiRequest<PublicationResponse>(`/trips/${tripId}/publications`, {
+      method: "POST",
+    });
+  },
+  publications(tripId: string): Promise<PublicationsListResponse> {
+    return apiRequest<PublicationsListResponse>(
+      `/trips/${tripId}/publications`,
+    );
+  },
+  revokeShareLink(id: string): Promise<void> {
+    return apiRequest<void>(`/share-links/${id}`, { method: "DELETE" });
+  },
+  unpublishTrip(tripId: string): Promise<void> {
+    return apiRequest<void>(`/trips/${tripId}/unpublish`, { method: "POST" });
+  },
+  publicStory(token: string): Promise<PublicStoryResponse> {
+    return apiRequest<PublicStoryResponse>(
+      `/public/shares/${encodeURIComponent(token)}`,
     );
   },
   updateMedia(

@@ -11,6 +11,7 @@ from sqlalchemy import ColumnElement, delete, literal_column, select
 from sqlalchemy.orm import Session
 
 from tripweave.adapters import orm
+from tripweave.adapters.collaboration_intelligence import analyze_collaboration
 from tripweave.domain.enums import (
     ProcessingState,
     ReconstructionRunState,
@@ -134,6 +135,8 @@ def reconstruct_trip(
     review_count += assign_missing_gps(db, run, trip.id, usable, gps_points)
     moments = persist_moments(db, run, created, usable)
     legs = persist_legs(db, run, created)
+    intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
+    review_count += intelligence.review_items
 
     run.state = ReconstructionRunState.SUCCEEDED.value
     run.finished_at = datetime.now(UTC)
@@ -142,6 +145,8 @@ def reconstruct_trip(
         "stops": sum(len(stops) for stops in created.values()),
         "moments": moments,
         "legs": legs,
+        "similarityGroups": intelligence.similarity_groups,
+        "clockOffsetSuggestions": intelligence.clock_suggestions,
         "reviewItems": review_count,
     }
     db.commit()

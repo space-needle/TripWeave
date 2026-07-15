@@ -104,6 +104,8 @@ export type MediaItemResponse = {
   filename: string | null;
   processingState: string;
   errorMessage?: string | null;
+  visibility: string;
+  includeInStory: boolean;
   capturedAt?: string | null;
   gpsPresent: boolean;
   width?: number | null;
@@ -111,6 +113,11 @@ export type MediaItemResponse = {
   contributor: string;
   contributorMemberId: string;
   thumbnail?: MediaAssetResponse | null;
+  similarityGroupId?: string | null;
+  similarityGroupCount?: number;
+  similarityGroupType?: string | null;
+  isSimilarityRepresentative?: boolean;
+  representativeMediaItemId?: string | null;
 };
 
 export type MediaListResponse = {
@@ -134,6 +141,23 @@ export type MemberResponse = {
 
 export type MemberRosterResponse = {
   members: MemberResponse[];
+};
+
+export type PublicStoryResponse = {
+  version: StoryVersionResponse;
+  story: ReconstructionResponse;
+  trip: Record<string, unknown>;
+  participants: Record<string, unknown>[];
+};
+
+export type PublicationResponse = {
+  version: StoryVersionResponse;
+  shareLink: ShareLinkResponse;
+};
+
+export type PublicationsListResponse = {
+  versions: StoryVersionResponse[];
+  shareLinks: ShareLinkResponse[];
 };
 
 export type ReconstructionDayResponse = {
@@ -230,6 +254,50 @@ export type ReviewItemResponse = {
   resolution?: string | null;
   resolvedBy?: string | null;
   resolvedAt?: string | null;
+};
+
+export type ShareLinkResponse = {
+  id: string;
+  tripId: string;
+  storyVersionId?: string | null;
+  status: string;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  shareUrl?: string | null;
+};
+
+export type SimilarityGroupResponse = {
+  id: string;
+  groupType: string;
+  representativeMediaItemId: string | null;
+  memberCount: number;
+  reason: string;
+  confidence?: number | null;
+  members: SimilarityMemberResponse[];
+};
+
+export type SimilarityGroupsResponse = {
+  groups: SimilarityGroupResponse[];
+};
+
+export type SimilarityMemberResponse = {
+  mediaItemId: string;
+  filename?: string | null;
+  contributor: string;
+  isRepresentative: boolean;
+  technicalScore?: number | null;
+  similarityScore?: number | null;
+  signals: Record<string, unknown>;
+};
+
+export type StoryVersionResponse = {
+  id: string;
+  tripId: string;
+  versionNumber: number;
+  state: string;
+  title: string;
+  publishedAt?: string | null;
+  errorMessage?: string | null;
 };
 
 export type TripCreateRequest = {

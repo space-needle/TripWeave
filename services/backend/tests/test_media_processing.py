@@ -66,6 +66,9 @@ def test_no_exif_still_creates_derivatives() -> None:
 
     assert result.captured_at_local is None
     assert len(result.derivatives) == 2
+    assert len(result.perceptual_hash) == 16
+    assert result.quality_signals["resolution"] == 32 * 24
+    assert result.raw_metadata["perceptual_hash_algorithm"] == "average_hash_8x8.v1"
 
 
 def test_invalid_image_renamed_as_jpeg_is_rejected() -> None:

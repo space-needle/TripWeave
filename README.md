@@ -38,6 +38,8 @@ The planned stack is:
 - `docs/reconstruction-algorithm.md` defines the deterministic local trip reconstruction algorithm.
 - `docs/manual-review-walkthrough.md` defines the local review-by-exception correction walkthrough.
 - `docs/frontend-state-model.md` defines the synchronized map and timeline state model.
+- `docs/collaboration-intelligence.md` defines similarity grouping and clock-offset suggestions.
+- `docs/publication.md` defines immutable local story publication and revocation.
 - `docs/roadmap.md` defines delivery order through local MVP, provider proof, and later deployment adapters.
 - `docs/adr/` records architectural decisions.
 

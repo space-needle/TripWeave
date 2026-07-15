@@ -3,7 +3,7 @@ import json
 import secrets
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
 from uuid import UUID
@@ -12,7 +12,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, literal_column, or_, select
+from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -26,6 +26,7 @@ from tripweave.adapters.local_blob_store import (
     InvalidGrantError,
 )
 from tripweave.adapters.manual_geocoder import ManualGeocoder
+from tripweave.adapters.publication import PublicationError, blob_ref_from_manifest, load_manifest
 from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
@@ -42,12 +43,17 @@ from tripweave.domain.enums import (
     EditOperationStatus,
     EditOperationType,
     InvitationStatus,
+    MediaAssetType,
     MediaType,
     MediaVisibility,
     ProcessingJobState,
     ProcessingJobType,
     ProcessingState,
     ProcessingTargetType,
+    ReviewItemStatus,
+    ShareLinkStatus,
+    StoryVersionState,
+    SuggestionStatus,
     TripMemberRole,
     TripStatus,
     TripVisibility,
@@ -74,6 +80,9 @@ from tripweave.entrypoints.api.schemas import (
     MemberResponse,
     MemberRosterResponse,
     MeResponse,
+    PublicationResponse,
+    PublicationsListResponse,
+    PublicStoryResponse,
     ReconstructionDayResponse,
     ReconstructionLegResponse,
     ReconstructionMediaResponse,
@@ -83,6 +92,11 @@ from tripweave.entrypoints.api.schemas import (
     ReconstructionStopResponse,
     RegisterRequest,
     ReviewItemResponse,
+    ShareLinkResponse,
+    SimilarityGroupResponse,
+    SimilarityGroupsResponse,
+    SimilarityMemberResponse,
+    StoryVersionResponse,
     TripCreateRequest,
     TripResponse,
     TripsListResponse,
@@ -484,6 +498,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             return f"{origin}/invite/{token}"
         return f"http://localhost:3000/invite/{token}"
 
+    def share_url(request: Request, token: str) -> str:
+        origin = request.headers.get("origin")
+        if origin in resolved_settings.cors_origins:
+            return f"{origin}/story/{token}"
+        return f"http://localhost:3000/story/{token}"
+
     def invitation_response(
         invitation: orm.TripInvitation, invite_url: str | None = None
     ) -> InvitationResponse:
@@ -505,6 +525,344 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             acceptedAt=invitation.accepted_at,
             inviteUrl=invite_url,
         )
+
+    def story_version_response(version: orm.StoryVersion) -> StoryVersionResponse:
+        return StoryVersionResponse(
+            id=version.id,
+            tripId=version.trip_id,
+            versionNumber=version.version_number,
+            state=version.state,
+            title=version.title,
+            publishedAt=version.published_at,
+            errorMessage=version.error_message,
+        )
+
+    def share_link_response(link: orm.ShareLink, url: str | None = None) -> ShareLinkResponse:
+        status_value = link.status
+        if (
+            status_value == ShareLinkStatus.ACTIVE.value
+            and link.expires_at is not None
+            and link.expires_at <= datetime.now(UTC)
+        ):
+            status_value = ShareLinkStatus.EXPIRED.value
+        return ShareLinkResponse(
+            id=link.id,
+            tripId=link.trip_id,
+            storyVersionId=link.story_version_id,
+            status=status_value,
+            expiresAt=link.expires_at,
+            revokedAt=link.revoked_at,
+            shareUrl=url,
+        )
+
+    def next_story_version_number(db: DbSession, trip_id: UUID) -> int:
+        current = db.scalar(
+            select(func.max(orm.StoryVersion.version_number)).where(
+                orm.StoryVersion.trip_id == trip_id
+            )
+        )
+        return int(current or 0) + 1
+
+    def active_share_link_for_trip(db: DbSession, trip_id: UUID) -> orm.ShareLink | None:
+        return db.execute(
+            select(orm.ShareLink)
+            .where(
+                orm.ShareLink.trip_id == trip_id,
+                orm.ShareLink.status == ShareLinkStatus.ACTIVE.value,
+                orm.ShareLink.revoked_at.is_(None),
+            )
+            .order_by(orm.ShareLink.created_at.desc(), orm.ShareLink.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+    def latest_reconstruction_run_id_or_none(db: DbSession, trip_id: UUID) -> UUID | None:
+        return db.scalar(
+            select(orm.ReconstructionRun.id)
+            .where(
+                orm.ReconstructionRun.trip_id == trip_id,
+                orm.ReconstructionRun.state == "succeeded",
+            )
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        )
+
+    def validate_publishable(db: DbSession, trip_id: UUID) -> UUID:
+        run_id = latest_reconstruction_run_id_or_none(db, trip_id)
+        if run_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Run reconstruction before publishing",
+            )
+        publishable_media_count = db.scalar(
+            select(func.count())
+            .select_from(orm.MediaItem)
+            .where(
+                orm.MediaItem.trip_id == trip_id,
+                orm.MediaItem.processing_state == ProcessingState.READY.value,
+                orm.MediaItem.deleted_at.is_(None),
+                orm.MediaItem.include_in_story.is_(True),
+                orm.MediaItem.visibility == MediaVisibility.STORY.value,
+            )
+        )
+        if int(publishable_media_count or 0) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Mark at least one ready media item as Story before publishing",
+            )
+        assigned_media_count = db.scalar(
+            select(func.count(func.distinct(orm.MomentMedia.media_item_id)))
+            .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+            .where(
+                orm.MomentMedia.trip_id == trip_id,
+                or_(
+                    orm.MomentMedia.reconstruction_run_id == run_id,
+                    orm.MomentMedia.user_locked.is_(True),
+                ),
+                orm.MediaItem.processing_state == ProcessingState.READY.value,
+                orm.MediaItem.deleted_at.is_(None),
+                orm.MediaItem.include_in_story.is_(True),
+                orm.MediaItem.visibility == MediaVisibility.STORY.value,
+            )
+        )
+        if int(assigned_media_count or 0) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Run reconstruction after choosing story media",
+            )
+        missing_derivative_count = db.scalar(
+            select(func.count())
+            .select_from(orm.MediaItem)
+            .where(
+                orm.MediaItem.trip_id == trip_id,
+                orm.MediaItem.processing_state == ProcessingState.READY.value,
+                orm.MediaItem.deleted_at.is_(None),
+                orm.MediaItem.include_in_story.is_(True),
+                orm.MediaItem.visibility == MediaVisibility.STORY.value,
+                or_(
+                    ~orm.MediaItem.assets.any(
+                        and_(
+                            orm.MediaAsset.asset_type == MediaAssetType.THUMBNAIL.value,
+                            orm.MediaAsset.metadata_stripped.is_(True),
+                        )
+                    ),
+                    ~orm.MediaItem.assets.any(
+                        and_(
+                            orm.MediaAsset.asset_type == MediaAssetType.DISPLAY.value,
+                            orm.MediaAsset.metadata_stripped.is_(True),
+                        )
+                    ),
+                ),
+            )
+        )
+        if int(missing_derivative_count or 0) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Wait for media processing to finish before publishing",
+            )
+        return run_id
+
+    def active_share_link_for_token(db: DbSession, token: str) -> orm.ShareLink:
+        link = db.execute(
+            select(orm.ShareLink).where(orm.ShareLink.token_hash == hash_token(token))
+        ).scalar_one_or_none()
+        now = datetime.now(UTC)
+        if (
+            link is None
+            or link.revoked_at is not None
+            or link.status != ShareLinkStatus.ACTIVE.value
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        if link.expires_at is not None and link.expires_at <= now:
+            link.status = ShareLinkStatus.EXPIRED.value
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Story link expired")
+        if link.story_version_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Story is publishing"
+            )
+        link.last_accessed_at = now
+        db.flush()
+        return link
+
+    def public_story_response(
+        token: str,
+        link: orm.ShareLink,
+        version: orm.StoryVersion,
+        manifest: dict[str, object],
+    ) -> PublicStoryResponse:
+        asset_urls = public_asset_urls(token, manifest)
+        story = reconstruction_from_manifest(manifest, asset_urls)
+        trip = dict_or_empty(manifest.get("trip"))
+        return PublicStoryResponse(
+            version=story_version_response(version),
+            story=story,
+            trip=trip,
+            participants=list_of_dicts(manifest.get("participants")),
+        )
+
+    def public_asset_urls(token: str, manifest: dict[str, object]) -> dict[str, str]:
+        assets = manifest.get("assets")
+        if not isinstance(assets, list):
+            return {}
+        return {
+            str(
+                asset["id"]
+            ): f"{resolved_settings.public_api_base_url}/public/shares/{token}/assets/{asset['id']}"
+            for asset in assets
+            if isinstance(asset, dict) and isinstance(asset.get("id"), str)
+        }
+
+    def public_asset_for_id(manifest: dict[str, object], asset_id: str) -> dict[str, object]:
+        assets = manifest.get("assets")
+        if not isinstance(assets, list):
+            raise PublicationError("asset_not_found", "Asset not found")
+        for asset in assets:
+            if isinstance(asset, dict) and asset.get("id") == asset_id:
+                return dict(asset)
+        raise PublicationError("asset_not_found", "Asset not found")
+
+    def reconstruction_from_manifest(
+        manifest: dict[str, object], asset_urls: dict[str, str]
+    ) -> ReconstructionResponse:
+        days_payload = manifest.get("days")
+        days_list = days_payload if isinstance(days_payload, list) else []
+        days: list[ReconstructionDayResponse] = []
+        for day_payload in days_list:
+            if not isinstance(day_payload, dict):
+                continue
+            stops: list[ReconstructionStopResponse] = []
+            for stop_payload in list_payload(day_payload, "stops"):
+                moments: list[ReconstructionMomentResponse] = []
+                for moment_payload in list_payload(stop_payload, "moments"):
+                    media = [
+                        ReconstructionMediaResponse(
+                            id=UUID(str(media_payload["id"])),
+                            filename=None,
+                            capturedAt=parse_datetime(media_payload.get("capturedAt")),
+                            capturedAtLocal=parse_datetime(media_payload.get("capturedAtLocal")),
+                            latitude=number_or_none(media_payload.get("latitude")),
+                            longitude=number_or_none(media_payload.get("longitude")),
+                            contributorMemberId=UUID(str(media_payload["contributorMemberId"])),
+                            contributor=str(media_payload.get("contributor") or "Traveler"),
+                            thumbnailUrl=asset_urls.get(str(media_payload.get("thumbnailAssetId"))),
+                        )
+                        for media_payload in list_payload(moment_payload, "media")
+                        if isinstance(media_payload.get("id"), str)
+                        and isinstance(media_payload.get("contributorMemberId"), str)
+                    ]
+                    moments.append(
+                        ReconstructionMomentResponse(
+                            id=UUID(str(moment_payload["id"])),
+                            position=int_or_zero(moment_payload.get("position")),
+                            title=str(moment_payload["title"])
+                            if moment_payload.get("title") is not None
+                            else None,
+                            startsAt=parse_datetime_required(moment_payload.get("startsAt")),
+                            endsAt=parse_datetime_required(moment_payload.get("endsAt")),
+                            startsAtLocal=parse_datetime(moment_payload.get("startsAtLocal")),
+                            endsAtLocal=parse_datetime(moment_payload.get("endsAtLocal")),
+                            mediaCount=int_or_zero(
+                                moment_payload.get("mediaCount"), fallback=len(media)
+                            ),
+                            contributorCount=int_or_zero(moment_payload.get("contributorCount")),
+                            media=media,
+                        )
+                    )
+                stops.append(
+                    ReconstructionStopResponse(
+                        id=UUID(str(stop_payload["id"])),
+                        position=int_or_zero(stop_payload.get("position")),
+                        title=str(stop_payload["title"])
+                        if stop_payload.get("title") is not None
+                        else None,
+                        startsAt=parse_datetime_required(stop_payload.get("startsAt")),
+                        endsAt=parse_datetime_required(stop_payload.get("endsAt")),
+                        startsAtLocal=parse_datetime(stop_payload.get("startsAtLocal")),
+                        endsAtLocal=parse_datetime(stop_payload.get("endsAtLocal")),
+                        placeName=str(stop_payload["placeName"])
+                        if stop_payload.get("placeName") is not None
+                        else None,
+                        latitude=number_or_none(stop_payload.get("latitude")),
+                        longitude=number_or_none(stop_payload.get("longitude")),
+                        mediaCount=int_or_zero(stop_payload.get("mediaCount")),
+                        contributorCount=int_or_zero(stop_payload.get("contributorCount")),
+                        moments=moments,
+                    )
+                )
+            legs = [
+                ReconstructionLegResponse(
+                    id=UUID(str(leg_payload["id"])),
+                    fromStopId=UUID(str(leg_payload["fromStopId"])),
+                    toStopId=UUID(str(leg_payload["toStopId"])),
+                    routeSource=str(leg_payload.get("routeSource") or "photo_inferred"),
+                    geometry=dict_or_none(leg_payload.get("geometry")),
+                )
+                for leg_payload in list_payload(day_payload, "legs")
+                if isinstance(leg_payload.get("id"), str)
+                and isinstance(leg_payload.get("fromStopId"), str)
+                and isinstance(leg_payload.get("toStopId"), str)
+            ]
+            days.append(
+                ReconstructionDayResponse(
+                    id=UUID(str(day_payload["id"])),
+                    date=date.fromisoformat(str(day_payload["date"])),
+                    position=int_or_zero(day_payload.get("position")),
+                    title=str(day_payload["title"])
+                    if day_payload.get("title") is not None
+                    else None,
+                    stops=stops,
+                    legs=legs,
+                )
+            )
+        published_at = parse_datetime(str(manifest.get("publishedAt")))
+        return ReconstructionResponse(
+            latestRun=ReconstructionRunResponse(
+                id=UUID(str(manifest["storyVersionId"])),
+                state="published",
+                algorithmVersion=str(manifest.get("algorithmVersion") or "publication.v1"),
+                summary={"versionNumber": manifest.get("versionNumber")},
+                startedAt=published_at or datetime.now(UTC),
+                finishedAt=published_at,
+            ),
+            days=days,
+            reviewItems=[],
+        )
+
+    def list_payload(payload: dict[str, object], key: str) -> list[dict[str, object]]:
+        value = payload.get(key)
+        if not isinstance(value, list):
+            return []
+        return [dict(item) for item in value if isinstance(item, dict)]
+
+    def parse_datetime(value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        return datetime.fromisoformat(value)
+
+    def parse_datetime_required(value: object) -> datetime:
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Story is unavailable"
+            )
+        return parsed
+
+    def number_or_none(value: object) -> float | None:
+        return float(value) if isinstance(value, int | float) else None
+
+    def int_or_zero(value: object, fallback: int = 0) -> int:
+        return value if isinstance(value, int) else fallback
+
+    def dict_or_empty(value: object) -> dict[str, object]:
+        return dict(value) if isinstance(value, dict) else {}
+
+    def dict_or_none(value: object) -> dict[str, object] | None:
+        return dict(value) if isinstance(value, dict) else None
+
+    def list_of_dicts(value: object) -> list[dict[str, object]]:
+        if not isinstance(value, list):
+            return []
+        return [dict(item) for item in value if isinstance(item, dict)]
 
     def member_response(member: orm.TripMember) -> MemberResponse:
         return MemberResponse(
@@ -936,7 +1294,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return job.error_message
 
     def media_item_response(
-        db: DbSession, media_item: orm.MediaItem, contributor: orm.TripMember
+        db: DbSession,
+        media_item: orm.MediaItem,
+        contributor: orm.TripMember,
+        group_summary: dict[str, object] | None = None,
     ) -> MediaItemResponse:
         thumbnail = next(
             (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
@@ -945,11 +1306,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         dimensions = media_item.original_metadata_json.get("dimensions", {})
         width = dimensions.get("width") if isinstance(dimensions, dict) else None
         height = dimensions.get("height") if isinstance(dimensions, dict) else None
+        group_id = group_summary.get("group_id") if group_summary else None
+        representative_id = (
+            group_summary.get("representative_media_item_id") if group_summary else None
+        )
+        member_count = group_summary.get("member_count", 1) if group_summary else 1
+        group_type = group_summary.get("group_type") if group_summary else None
         return MediaItemResponse(
             id=media_item.id,
             filename=media_item.original_filename,
             processingState=media_item.processing_state,
             errorMessage=media_error_for(db, media_item.id),
+            visibility=media_item.visibility,
+            includeInStory=media_item.include_in_story,
             capturedAt=media_item.effective_captured_at_utc
             or media_item.original_captured_at_utc
             or media_item.original_captured_at_local,
@@ -960,7 +1329,36 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             contributor=contributor.display_name,
             contributorMemberId=contributor.id,
             thumbnail=media_asset_response(thumbnail) if thumbnail is not None else None,
+            similarityGroupId=group_id if isinstance(group_id, UUID) else None,
+            similarityGroupCount=member_count if isinstance(member_count, int) else 1,
+            similarityGroupType=group_type if isinstance(group_type, str) else None,
+            isSimilarityRepresentative=bool(group_summary.get("is_representative"))
+            if group_summary
+            else False,
+            representativeMediaItemId=representative_id
+            if isinstance(representative_id, UUID)
+            else None,
         )
+
+    def similarity_summary_by_media(db: DbSession, trip_id: UUID) -> dict[UUID, dict[str, object]]:
+        rows = db.execute(
+            select(orm.SimilarityGroup, orm.SimilarityGroupMember)
+            .join(
+                orm.SimilarityGroupMember,
+                orm.SimilarityGroupMember.similarity_group_id == orm.SimilarityGroup.id,
+            )
+            .where(orm.SimilarityGroup.trip_id == trip_id)
+        ).all()
+        return {
+            member.media_item_id: {
+                "group_id": group.id,
+                "member_count": group.member_count,
+                "group_type": group.group_type,
+                "is_representative": member.is_representative,
+                "representative_media_item_id": group.representative_media_item_id,
+            }
+            for group, member in rows
+        }
 
     def media_local_capture(media_item: orm.MediaItem) -> datetime | None:
         if media_item.original_captured_at_local is not None:
@@ -1154,6 +1552,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         contributor_ops = {
             EditOperationType.MOVE_AFTER_MIDNIGHT_MEDIA.value,
             EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value,
+            EditOperationType.SET_SIMILARITY_REPRESENTATIVE.value,
         }
         if not organizer and operation_type not in contributor_ops:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
@@ -1429,6 +1828,147 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             lock_reconstruction_parents(db, record)
             after = record_values(record, ["user_locked"])
             target_id = record.id
+
+        elif operation_type == EditOperationType.SET_SIMILARITY_REPRESENTATIVE.value:
+            group = db.get(orm.SimilarityGroup, payload_uuid(data, "similarityGroupId"))
+            media = db.get(orm.MediaItem, payload_uuid(data, "mediaItemId"))
+            if (
+                group is None
+                or media is None
+                or group.trip_id != trip_id
+                or media.trip_id != trip_id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Similarity group not found"
+                )
+            group_link = db.execute(
+                select(orm.SimilarityGroupMember).where(
+                    orm.SimilarityGroupMember.similarity_group_id == group.id,
+                    orm.SimilarityGroupMember.media_item_id == media.id,
+                )
+            ).scalar_one_or_none()
+            if group_link is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Media not in group"
+                )
+            if not organizer and media.contributor_member_id != member.id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            before = {
+                "representativeMediaItemId": str(group.representative_media_item_id)
+                if group.representative_media_item_id
+                else None
+            }
+            for group_member in db.scalars(
+                select(orm.SimilarityGroupMember).where(
+                    orm.SimilarityGroupMember.similarity_group_id == group.id
+                )
+            ):
+                group_member.is_representative = group_member.media_item_id == media.id
+                group_member.user_selected = group_member.media_item_id == media.id
+            group.representative_media_item_id = media.id
+            group.user_locked = True
+            group.updated_at = datetime.now(UTC)
+            after = {"representativeMediaItemId": str(media.id)}
+            target_type, target_id = "similarity_group", group.id
+
+        elif operation_type in {
+            EditOperationType.ACCEPT_CLOCK_OFFSET_SUGGESTION.value,
+            EditOperationType.REJECT_CLOCK_OFFSET_SUGGESTION.value,
+        }:
+            if not organizer:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+            suggestion = db.get(
+                orm.DeviceClockOffsetSuggestion,
+                payload_uuid(data, "suggestionId"),
+            )
+            if suggestion is None or suggestion.trip_id != trip_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found"
+                )
+            expected_fresh(suggestion, payload.expected_updated_at)
+            before = record_values(
+                suggestion,
+                [
+                    "status",
+                    "offset_seconds",
+                    "support_count",
+                    "dispersion_seconds",
+                    "accepted_at",
+                    "rejected_at",
+                ],
+            )
+            now = datetime.now(UTC)
+            affected_media_ids: list[str] = []
+            if operation_type == EditOperationType.ACCEPT_CLOCK_OFFSET_SUGGESTION.value:
+                suggestion.status = SuggestionStatus.ACCEPTED.value
+                suggestion.accepted_at = now
+                suggestion.user_locked = True
+                device = db.get(orm.CaptureDevice, suggestion.capture_device_id)
+                if device is not None:
+                    device.accepted_clock_offset_seconds = suggestion.offset_seconds
+                    device.accepted_suggestion_id = suggestion.id
+                    device.updated_at = now
+                for media in db.scalars(
+                    select(orm.MediaItem).where(
+                        orm.MediaItem.trip_id == trip_id,
+                        orm.MediaItem.capture_device_id == suggestion.capture_device_id,
+                        orm.MediaItem.deleted_at.is_(None),
+                    )
+                ):
+                    if media.original_captured_at_utc is None:
+                        continue
+                    media.effective_captured_at_utc = media.original_captured_at_utc + timedelta(
+                        seconds=suggestion.offset_seconds
+                    )
+                    media.time_source = "automation"
+                    media.time_confidence = suggestion.confidence
+                    media.updated_at = now
+                    affected_media_ids.append(str(media.id))
+                idempotency_key = f"reconstruct-trip:{trip_id}:{suggestion.id}"
+                existing_job = db.execute(
+                    select(orm.ProcessingJob).where(
+                        orm.ProcessingJob.idempotency_key == idempotency_key
+                    )
+                ).scalar_one_or_none()
+                if existing_job is None:
+                    db.add(
+                        orm.ProcessingJob(
+                            job_type=ProcessingJobType.RECONSTRUCT_TRIP.value,
+                            target_type=ProcessingTargetType.TRIP.value,
+                            target_id=trip_id,
+                            idempotency_key=idempotency_key,
+                        )
+                    )
+                resolution = "Accepted clock offset suggestion"
+            else:
+                suggestion.status = SuggestionStatus.REJECTED.value
+                suggestion.rejected_at = now
+                suggestion.user_locked = True
+                resolution = payload_str(data, "resolution")
+            suggestion.updated_at = now
+            if review_item is None:
+                review_item = db.execute(
+                    select(orm.ReviewItem).where(
+                        orm.ReviewItem.target_type == "device_clock_offset_suggestion",
+                        orm.ReviewItem.target_id == suggestion.id,
+                        orm.ReviewItem.trip_id == trip_id,
+                    )
+                ).scalar_one_or_none()
+            if review_item is not None:
+                review_item.status = ReviewItemStatus.RESOLVED.value
+                review_item.resolution = resolution
+                review_item.resolved_by = actor.user.id if actor.user is not None else None
+                review_item.resolved_at = now
+                review_item.user_locked = True
+                review_item.updated_at = now
+            after = {
+                **record_values(
+                    suggestion,
+                    ["status", "accepted_at", "rejected_at"],
+                ),
+                "affectedMediaItemIds": affected_media_ids,
+            }
+            target_type, target_id = "device_clock_offset_suggestion", suggestion.id
 
         elif operation_type in {
             EditOperationType.RESOLVE_REVIEW_ITEM.value,
@@ -1890,6 +2430,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             original_store_alias=upload_file.store_alias,
             original_object_key=upload_file.object_key,
             sha256=metadata.checksum,
+            visibility=MediaVisibility.STORY.value,
+            include_in_story=True,
         )
         db.add(media_item)
         db.flush()
@@ -1968,9 +2510,68 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
             statement = statement.where(orm.MediaItem.contributor_member_id == member.id)
         rows = db.execute(statement).all()
+        group_summary = similarity_summary_by_media(db, trip_id)
         return MediaListResponse(
             media=[
-                media_item_response(db, media_item, contributor) for media_item, contributor in rows
+                media_item_response(
+                    db,
+                    media_item,
+                    contributor,
+                    group_summary.get(media_item.id),
+                )
+                for media_item, contributor in rows
+            ]
+        )
+
+    @app.get("/trips/{trip_id}/similarity-groups", response_model=SimilarityGroupsResponse)
+    def list_similarity_groups(
+        trip_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> SimilarityGroupsResponse:
+        member = require_member_for_actor(db, trip_id, actor)
+        statement = (
+            select(orm.SimilarityGroup, orm.SimilarityGroupMember, orm.MediaItem, orm.TripMember)
+            .join(
+                orm.SimilarityGroupMember,
+                orm.SimilarityGroupMember.similarity_group_id == orm.SimilarityGroup.id,
+            )
+            .join(orm.MediaItem, orm.MediaItem.id == orm.SimilarityGroupMember.media_item_id)
+            .join(orm.TripMember, orm.TripMember.id == orm.MediaItem.contributor_member_id)
+            .where(
+                orm.SimilarityGroup.trip_id == trip_id,
+                orm.MediaItem.deleted_at.is_(None),
+            )
+            .order_by(orm.SimilarityGroup.created_at, orm.SimilarityGroupMember.rank)
+        )
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            statement = statement.where(orm.MediaItem.contributor_member_id == member.id)
+        rows = db.execute(statement).all()
+        by_group: dict[UUID, tuple[orm.SimilarityGroup, list[SimilarityMemberResponse]]] = {}
+        for group, group_member, media_item, contributor in rows:
+            by_group.setdefault(group.id, (group, []))[1].append(
+                SimilarityMemberResponse(
+                    mediaItemId=media_item.id,
+                    filename=media_item.original_filename,
+                    contributor=contributor.display_name,
+                    isRepresentative=group_member.is_representative,
+                    technicalScore=group_member.technical_score,
+                    similarityScore=group_member.similarity_score,
+                    signals=group_member.signals,
+                )
+            )
+        return SimilarityGroupsResponse(
+            groups=[
+                SimilarityGroupResponse(
+                    id=group.id,
+                    groupType=group.group_type,
+                    representativeMediaItemId=group.representative_media_item_id,
+                    memberCount=group.member_count,
+                    reason=group.reason,
+                    confidence=group.confidence,
+                    members=members,
+                )
+                for group, members in by_group.values()
             ]
         )
 
@@ -2347,6 +2948,200 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> ReconstructionResponse:
         require_member_for_actor(db, trip_id, actor)
         return reconstruction_response(db, trip_id)
+
+    @app.post("/trips/{trip_id}/publications", response_model=PublicationResponse)
+    def create_publication(
+        trip_id: UUID,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> PublicationResponse:
+        require_csrf(request)
+        member = require_member_for_actor(db, trip_id, actor)
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        trip = db.get(orm.Trip, trip_id)
+        if trip is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        source_run_id = validate_publishable(db, trip_id)
+        version_number = next_story_version_number(db, trip_id)
+        version = orm.StoryVersion(
+            trip_id=trip_id,
+            version_number=version_number,
+            state=StoryVersionState.PENDING.value,
+            title=trip.title,
+            asset_prefix=f"trips/{trip_id}/story/v{version_number}",
+            source_reconstruction_run_id=source_run_id,
+            created_by_member_id=member.id,
+            created_by_user_id=actor.user.id if actor.user is not None else None,
+            audit={
+                "requestedAt": datetime.now(UTC).isoformat(),
+                "requestedByMemberId": str(member.id),
+            },
+        )
+        db.add(version)
+        db.flush()
+        token = secrets.token_urlsafe(32)
+        link = orm.ShareLink(
+            trip_id=trip_id,
+            story_version_id=version.id,
+            token_hash=hash_token(token),
+            status=ShareLinkStatus.ACTIVE.value,
+            created_by_user_id=actor.user.id if actor.user is not None else None,
+        )
+        db.add(link)
+        db.add(
+            orm.ProcessingJob(
+                job_type=ProcessingJobType.PUBLICATION.value,
+                target_type=ProcessingTargetType.STORY_PUBLICATION.value,
+                target_id=version.id,
+                priority=40,
+                idempotency_key=f"publish-story:{version.id}",
+            )
+        )
+        db.commit()
+        return PublicationResponse(
+            version=story_version_response(version),
+            shareLink=share_link_response(link, share_url(request, token)),
+        )
+
+    @app.get("/trips/{trip_id}/publications", response_model=PublicationsListResponse)
+    def list_publications(
+        trip_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> PublicationsListResponse:
+        member = require_member_for_actor(db, trip_id, actor)
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        versions = list(
+            db.scalars(
+                select(orm.StoryVersion)
+                .where(orm.StoryVersion.trip_id == trip_id)
+                .order_by(orm.StoryVersion.version_number.desc())
+            )
+        )
+        links = list(
+            db.scalars(
+                select(orm.ShareLink)
+                .where(orm.ShareLink.trip_id == trip_id)
+                .order_by(orm.ShareLink.created_at.desc(), orm.ShareLink.id.desc())
+            )
+        )
+        return PublicationsListResponse(
+            versions=[story_version_response(version) for version in versions],
+            shareLinks=[share_link_response(link) for link in links],
+        )
+
+    @app.delete("/share-links/{share_link_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def revoke_share_link(
+        share_link_id: UUID,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> Response:
+        require_csrf(request)
+        link = db.get(orm.ShareLink, share_link_id)
+        if link is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
+        member = require_member_for_actor(db, link.trip_id, actor)
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
+        now = datetime.now(UTC)
+        link.status = ShareLinkStatus.REVOKED.value
+        link.revoked_at = now
+        link.updated_at = now
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post("/trips/{trip_id}/unpublish", status_code=status.HTTP_204_NO_CONTENT)
+    def unpublish_trip(
+        trip_id: UUID,
+        request: Request,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> Response:
+        require_csrf(request)
+        member = require_member_for_actor(db, trip_id, actor)
+        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        now = datetime.now(UTC)
+        for link in db.scalars(
+            select(orm.ShareLink).where(
+                orm.ShareLink.trip_id == trip_id,
+                orm.ShareLink.status == ShareLinkStatus.ACTIVE.value,
+                orm.ShareLink.revoked_at.is_(None),
+            )
+        ):
+            link.status = ShareLinkStatus.REVOKED.value
+            link.revoked_at = now
+            link.updated_at = now
+        trip = db.get(orm.Trip, trip_id)
+        if trip is not None:
+            trip.visibility = TripVisibility.PRIVATE.value
+            trip.updated_at = now
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/public/shares/{token}", response_model=PublicStoryResponse)
+    def get_public_story(token: str, db: DbSession = Depends(db_session)) -> PublicStoryResponse:
+        link = active_share_link_for_token(db, token)
+        version = db.get(orm.StoryVersion, link.story_version_id)
+        if version is None or version.state == StoryVersionState.FAILED.value:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        if version.state != StoryVersionState.PUBLISHED.value:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Story is publishing"
+            )
+        try:
+            manifest = load_manifest(app.state.blob_store, version)
+        except PublicationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
+            ) from exc
+        db.commit()
+        return public_story_response(token, link, version, manifest)
+
+    @app.get("/public/shares/{token}/assets/{asset_id}")
+    def get_public_story_asset(
+        token: str,
+        asset_id: str,
+        db: DbSession = Depends(db_session),
+    ) -> StreamingResponse:
+        link = active_share_link_for_token(db, token)
+        version = db.get(orm.StoryVersion, link.story_version_id)
+        if version is None or version.state != StoryVersionState.PUBLISHED.value:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        try:
+            manifest = load_manifest(app.state.blob_store, version)
+            asset = public_asset_for_id(manifest, asset_id)
+            blob_ref = blob_ref_from_manifest(asset.get("blobRef"))
+            if blob_ref.store_alias != "story_published":
+                raise PublicationError("publication_invalid", "Story asset is invalid")
+            metadata = app.state.blob_store.stat(blob_ref)
+        except PublicationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=exc.safe_message
+            ) from exc
+        except BlobNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
+            ) from exc
+        db.commit()
+
+        def body() -> Iterator[bytes]:
+            with app.state.blob_store.open_reader(blob_ref) as reader:
+                while True:
+                    chunk = reader.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return StreamingResponse(
+            body(),
+            media_type=metadata.content_type or "application/octet-stream",
+            headers={"cache-control": "public, max-age=300"},
+        )
 
     @app.post("/trips/{trip_id}/edit-operations", response_model=EditOperationResponse)
     def create_edit_operation(

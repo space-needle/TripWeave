@@ -99,6 +99,11 @@ erDiagram
     reconstruction_runs ||--o{ trip_legs : generates
     reconstruction_runs ||--o{ review_items : flags
     trips ||--o{ edit_operations : audits
+    trips ||--o{ capture_devices : observes
+    trips ||--o{ similarity_groups : groups
+    trips ||--o{ device_clock_offset_suggestions : suggests
+    trips ||--o{ story_versions : publishes
+    trips ||--o{ share_links : shares
     trips ||--o{ trip_days : has
     trips ||--o{ places : has
     trip_days ||--o{ stops : contains
@@ -111,7 +116,12 @@ erDiagram
     stops ||--o{ trip_legs : from_stop
     stops ||--o{ trip_legs : to_stop
     media_items ||--o{ review_items : may_need_review
+    capture_devices ||--o{ media_items : captured
+    similarity_groups ||--o{ similarity_group_members : contains
+    media_items ||--o{ similarity_group_members : appears_in
+    capture_devices ||--o{ device_clock_offset_suggestions : has
     review_items ||--o{ edit_operations : may_be_resolved_by
+    story_versions ||--o{ share_links : accessible_by
 
     reconstruction_runs {
         uuid id
@@ -165,6 +175,34 @@ erDiagram
         string status
         jsonb before_values
         jsonb after_values
+    }
+    similarity_groups {
+        uuid id
+        string group_type
+        uuid representative_media_item_id
+        int member_count
+    }
+    device_clock_offset_suggestions {
+        uuid id
+        uuid capture_device_id
+        int offset_seconds
+        int support_count
+        string status
+    }
+    story_versions {
+        uuid id
+        int version_number
+        string state
+        string manifest_store_alias
+        string manifest_object_key
+        string asset_prefix
+    }
+    share_links {
+        uuid id
+        uuid story_version_id
+        string token_hash
+        string status
+        timestamptz revoked_at
     }
 ```
 
@@ -222,3 +260,8 @@ A story version may include:
 - visibility rules
 
 Publication must not expose original files, original metadata dumps, private storage paths, signed URLs as permanent records, or provider-specific details.
+
+Publication versions are immutable snapshots. `share_links` store only token hashes and
+point to a version. Revoking a link removes public access without deleting the version
+audit record. Published manifests reference `story_published` BlobRefs for sanitized
+derivatives only.

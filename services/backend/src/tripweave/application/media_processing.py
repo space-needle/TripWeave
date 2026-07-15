@@ -46,6 +46,7 @@ class Derivative:
 class ProcessedMedia:
     detected_mime_type: str
     sha256: str
+    perceptual_hash: str
     width: int
     height: int
     orientation: int | None
@@ -55,6 +56,7 @@ class ProcessedMedia:
     latitude: float | None
     longitude: float | None
     camera_hints: dict[str, str]
+    quality_signals: dict[str, object]
     raw_metadata: dict[str, object]
     derivatives: tuple[Derivative, ...]
 
@@ -80,6 +82,13 @@ def process_image_bytes(
             exif = image.getexif()
             metadata = extract_metadata(payload, exif, width, height)
             normalized = ImageOps.exif_transpose(image).convert("RGB")
+            perceptual_hash = average_hash(normalized)
+            quality_signals = estimate_quality_signals(normalized)
+            raw_metadata = {
+                **metadata.raw_metadata,
+                "quality": quality_signals,
+                "perceptual_hash_algorithm": "average_hash_8x8.v1",
+            }
             derivatives = (
                 make_derivative(normalized, "thumbnail", thumbnail_max_px),
                 make_derivative(normalized, "display", preview_max_px),
@@ -94,6 +103,7 @@ def process_image_bytes(
     return ProcessedMedia(
         detected_mime_type=detected_mime_type,
         sha256=sha256,
+        perceptual_hash=perceptual_hash,
         width=width,
         height=height,
         orientation=metadata.orientation,
@@ -103,7 +113,8 @@ def process_image_bytes(
         latitude=metadata.latitude,
         longitude=metadata.longitude,
         camera_hints=metadata.camera_hints,
-        raw_metadata=metadata.raw_metadata,
+        quality_signals=quality_signals,
+        raw_metadata=raw_metadata,
         derivatives=derivatives,
     )
 
@@ -293,6 +304,31 @@ def make_derivative(image: Image.Image, asset_type: str, max_px: int) -> Derivat
         height=derivative.height,
         payload=payload,
     )
+
+
+def average_hash(image: Image.Image) -> str:
+    grayscale = image.convert("L").resize((8, 8), Image.Resampling.LANCZOS)
+    values = list(grayscale.getdata())
+    average = sum(values) / len(values)
+    bits = "".join("1" if value >= average else "0" for value in values)
+    return f"{int(bits, 2):016x}"
+
+
+def estimate_quality_signals(image: Image.Image) -> dict[str, object]:
+    grayscale = image.convert("L").resize((256, 256), Image.Resampling.BILINEAR)
+    values = list(grayscale.getdata())
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    clipping = sum(1 for value in values if value <= 2 or value >= 253) / len(values)
+    resolution = image.width * image.height
+    return {
+        "resolution": resolution,
+        "width": image.width,
+        "height": image.height,
+        "sharpness": round(variance / (255 * 255), 6),
+        "exposureClipping": round(clipping, 6),
+        "orientation": "landscape" if image.width >= image.height else "portrait",
+    }
 
 
 def extract_xmp(payload: bytes) -> str | None:

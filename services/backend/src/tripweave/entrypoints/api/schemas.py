@@ -273,6 +273,8 @@ class MediaItemResponse(BaseModel):
     filename: str | None
     processing_state: str = Field(alias="processingState")
     error_message: str | None = Field(default=None, alias="errorMessage")
+    visibility: str
+    include_in_story: bool = Field(alias="includeInStory")
     captured_at: datetime | None = Field(default=None, alias="capturedAt")
     gps_present: bool = Field(alias="gpsPresent")
     width: int | None = None
@@ -280,10 +282,41 @@ class MediaItemResponse(BaseModel):
     contributor: str
     contributor_member_id: UUID = Field(alias="contributorMemberId")
     thumbnail: MediaAssetResponse | None = None
+    similarity_group_id: UUID | None = Field(default=None, alias="similarityGroupId")
+    similarity_group_count: int = Field(default=1, alias="similarityGroupCount")
+    similarity_group_type: str | None = Field(default=None, alias="similarityGroupType")
+    is_similarity_representative: bool = Field(default=False, alias="isSimilarityRepresentative")
+    representative_media_item_id: UUID | None = Field(
+        default=None, alias="representativeMediaItemId"
+    )
 
 
 class MediaListResponse(BaseModel):
     media: list[MediaItemResponse]
+
+
+class SimilarityMemberResponse(BaseModel):
+    media_item_id: UUID = Field(alias="mediaItemId")
+    filename: str | None = None
+    contributor: str
+    is_representative: bool = Field(alias="isRepresentative")
+    technical_score: float | None = Field(default=None, alias="technicalScore")
+    similarity_score: float | None = Field(default=None, alias="similarityScore")
+    signals: dict[str, object]
+
+
+class SimilarityGroupResponse(BaseModel):
+    id: UUID
+    group_type: str = Field(alias="groupType")
+    representative_media_item_id: UUID | None = Field(alias="representativeMediaItemId")
+    member_count: int = Field(alias="memberCount")
+    reason: str
+    confidence: float | None = None
+    members: list[SimilarityMemberResponse]
+
+
+class SimilarityGroupsResponse(BaseModel):
+    groups: list[SimilarityGroupResponse]
 
 
 class MediaUpdateRequest(BaseModel):
@@ -405,3 +438,40 @@ class EditOperationResponse(BaseModel):
     before_values: dict[str, object] = Field(alias="beforeValues")
     after_values: dict[str, object] = Field(alias="afterValues")
     created_at: datetime = Field(alias="createdAt")
+
+
+class StoryVersionResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    version_number: int = Field(alias="versionNumber")
+    state: str
+    title: str
+    published_at: datetime | None = Field(default=None, alias="publishedAt")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+
+
+class ShareLinkResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    story_version_id: UUID | None = Field(default=None, alias="storyVersionId")
+    status: str
+    expires_at: datetime | None = Field(default=None, alias="expiresAt")
+    revoked_at: datetime | None = Field(default=None, alias="revokedAt")
+    share_url: str | None = Field(default=None, alias="shareUrl")
+
+
+class PublicationResponse(BaseModel):
+    version: StoryVersionResponse
+    share_link: ShareLinkResponse = Field(alias="shareLink")
+
+
+class PublicationsListResponse(BaseModel):
+    versions: list[StoryVersionResponse]
+    share_links: list[ShareLinkResponse] = Field(alias="shareLinks")
+
+
+class PublicStoryResponse(BaseModel):
+    version: StoryVersionResponse
+    story: ReconstructionResponse
+    trip: dict[str, object]
+    participants: list[dict[str, object]]

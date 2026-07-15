@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import signal
@@ -19,6 +20,9 @@ from tripweave.adapters import orm
 from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.database import check_database, create_database_engine
 from tripweave.adapters.local_blob_store import BlobNotFoundError, LocalBlobStore
+from tripweave.adapters.manual_geocoder import ManualGeocoder
+from tripweave.adapters.publication import PublicationError, publish_story_version
+from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.worker_heartbeat import write_heartbeat
 from tripweave.application.media_processing import (
     MediaProcessingError,
@@ -201,8 +205,31 @@ def handle_job(
             with session_factory() as db:
                 ingest_media(db, settings, blob_store, job.target_id)
                 complete_job(db, job.id)
+        elif (
+            job.job_type == ProcessingJobType.RECONSTRUCT_TRIP.value
+            and job.target_type == ProcessingTargetType.TRIP.value
+        ):
+            with session_factory() as db:
+                reconstruct_queued_trip(db, job.target_id)
+                complete_job(db, job.id)
+        elif (
+            job.job_type == ProcessingJobType.PUBLICATION.value
+            and job.target_type == ProcessingTargetType.STORY_PUBLICATION.value
+        ):
+            with session_factory() as db:
+                publish_story_version(db, blob_store=blob_store, story_version_id=job.target_id)
+                complete_job(db, job.id)
         else:
             raise MediaProcessingError("unknown_job_type", "Job type is not supported")
+    except PublicationError as exc:
+        with session_factory() as db:
+            fail_job(
+                db,
+                job,
+                error_code=exc.code,
+                safe_message=exc.safe_message,
+                retryable=True,
+            )
     except MediaProcessingError as exc:
         with session_factory() as db:
             fail_job(
@@ -268,6 +295,13 @@ def ingest_media(
     db.commit()
 
 
+def reconstruct_queued_trip(db: Session, trip_id: UUID) -> None:
+    trip = db.get(orm.Trip, trip_id)
+    if trip is None:
+        raise MediaProcessingError("trip_not_found", "Trip was not found")
+    reconstruct_trip(db=db, trip=trip, geocoder=ManualGeocoder())
+
+
 def apply_processed_media(
     db: Session,
     blob_store: LocalBlobStore,
@@ -277,6 +311,8 @@ def apply_processed_media(
     now = datetime.now(UTC)
     media_item.detected_mime_type = processed.detected_mime_type
     media_item.sha256 = processed.sha256
+    media_item.perceptual_hash = processed.perceptual_hash
+    media_item.capture_device_id = capture_device_for_media(db, media_item, processed)
     media_item.original_captured_at_local = processed.captured_at_local
     media_item.original_captured_at_utc = processed.captured_at_utc
     media_item.original_utc_offset_minutes = processed.utc_offset_minutes
@@ -349,6 +385,55 @@ def apply_processed_media(
         asset.metadata_stripped = derivative.metadata_stripped
 
 
+def capture_device_for_media(
+    db: Session, media_item: orm.MediaItem, processed: ProcessedMedia
+) -> UUID | None:
+    hints = processed.camera_hints
+    make = normalized_hint(hints.get("Make"))
+    model = normalized_hint(hints.get("Model"))
+    software = normalized_hint(hints.get("Software"))
+    if not any((make, model, software)):
+        return None
+    fingerprint = "|".join(
+        [
+            str(media_item.trip_id),
+            str(media_item.contributor_member_id),
+            make or "",
+            model or "",
+            software or "",
+        ]
+    )
+    device_key = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:40]
+    display_bits = [part for part in (make, model) if part]
+    display_name = " ".join(display_bits) if display_bits else "Unknown camera"
+    device = db.execute(
+        select(orm.CaptureDevice).where(
+            orm.CaptureDevice.trip_id == media_item.trip_id,
+            orm.CaptureDevice.device_key == device_key,
+        )
+    ).scalar_one_or_none()
+    if device is None:
+        device = orm.CaptureDevice(
+            trip_id=media_item.trip_id,
+            contributor_member_id=media_item.contributor_member_id,
+            device_key=device_key,
+            make=make,
+            model=model,
+            software=software,
+            display_name=display_name,
+        )
+        db.add(device)
+        db.flush()
+    return device.id
+
+
+def normalized_hint(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = " ".join(value.split())[:160]
+    return stripped or None
+
+
 def assets_complete(db: Session, media_item_id: UUID) -> bool:
     asset_types = set(
         db.scalars(
@@ -389,7 +474,8 @@ def fail_job(
     if final:
         job_record.state = ProcessingJobState.FAILED.value
         job_record.finished_at = now
-        mark_media_failed(db, job.target_id, safe_message)
+        if job.target_type == ProcessingTargetType.MEDIA_ITEM.value:
+            mark_media_failed(db, job.target_id, safe_message)
     else:
         job_record.state = ProcessingJobState.PENDING.value
         job_record.run_after = now + backoff_delay(job.attempts)
