@@ -116,9 +116,9 @@ export function normalizeStoryMapState(
     ...state,
     viewMode: firstStop ? "DAY" : "TRIP_OVERVIEW",
     selectedDayId: firstStop?.dayId ?? null,
-    selectedStopId: firstStop?.id ?? null,
-    selectedMomentId: firstMedia?.momentId ?? null,
-    selectedMediaId: firstMedia?.id ?? null,
+    selectedStopId: null,
+    selectedMomentId: null,
+    selectedMediaId: null,
     timeCursor: firstMedia?.capturedAt ?? null,
     mapControlMode: "STORY_CONTROLLED",
   };

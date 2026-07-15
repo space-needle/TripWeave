@@ -9,6 +9,7 @@ import {
   initialStoryMapState,
   markUserControlled,
   normalizeStoryMapState,
+  selectStoryDay,
   selectStoryStop,
   setContributorFilter,
 } from "../app/story-map-state";
@@ -141,12 +142,28 @@ describe("story map state", () => {
     expect(normalized).toMatchObject({
       viewMode: "DAY",
       selectedDayId: "day-1",
-      selectedStopId: "stop-1",
-      selectedMomentId: "moment-1",
-      selectedMediaId: "media-1",
+      selectedStopId: null,
+      selectedMomentId: null,
+      selectedMediaId: null,
       mapControlMode: "STORY_CONTROLLED",
     });
-    expect(stale.selectedStopId).toBe("stop-1");
+    expect(stale.selectedStopId).toBeNull();
+  });
+
+  it("keeps day selection scoped to the full day", () => {
+    const selected = selectStoryDay(
+      selectStoryStop(initialStoryMapState(), "stop-1", "day-1"),
+      "day-1",
+    );
+
+    expect(selected).toMatchObject({
+      viewMode: "DAY",
+      selectedDayId: "day-1",
+      selectedStopId: null,
+      selectedMomentId: null,
+      selectedMediaId: null,
+      mapControlMode: "STORY_CONTROLLED",
+    });
   });
 
   it("advances playback through chronological media", () => {
