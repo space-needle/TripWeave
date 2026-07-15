@@ -313,9 +313,10 @@ def accept_invitation(client: TestClient, token: str, display_name: str = "Guest
 def test_authentication_lifecycle_and_trip_management(client: TestClient) -> None:
     csrf_token = register(client)
 
-    me = client.get("/auth/me")
+    me = client.get("/auth/me", headers={"x-request-id": "test-request-id"})
     assert me.status_code == 200
     assert me.json()["user"]["email"] == "owner@example.com"
+    assert me.headers["x-request-id"] == "test-request-id"
 
     forbidden = client.post("/trips", json={"title": "No CSRF"})
     assert forbidden.status_code == 403
@@ -335,6 +336,20 @@ def test_authentication_lifecycle_and_trip_management(client: TestClient) -> Non
     deleted = client.delete(f"/trips/{trip_id}", headers={"x-csrf-token": csrf_token})
     assert deleted.status_code == 204
     assert client.get(f"/trips/{trip_id}").status_code == 404
+
+
+def test_local_ops_endpoint_is_authenticated(client: TestClient) -> None:
+    assert client.get("/ops/local-mvp").status_code == 401
+
+    register(client, "ops-owner@example.com")
+    response = client.get("/ops/local-mvp")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "jobStates" in body
+    assert "mediaStates" in body
+    assert "storage" in body
+    assert "worker" in body
 
 
 def test_trip_timezone_must_be_iana_identifier(client: TestClient) -> None:
@@ -485,6 +500,62 @@ def test_invitation_rejects_expired_revoked_and_malformed(
     assert (
         client.post(f"/invitations/{token}/accept", json={"displayName": "Nope"}).status_code == 404
     )
+
+
+def test_action_rate_limits_cover_invites_uploads_and_publication(
+    engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    backend_root = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_root / "alembic.ini"))
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+    settings = Settings(
+        DATABASE_URL=PostgresDsn(url),
+        TRIPWEAVE_BLOB_DIR=tmp_path,
+        TRIPWEAVE_AUTH_RATE_LIMIT_MAX_ATTEMPTS=100,
+        TRIPWEAVE_ACTION_RATE_LIMIT_WINDOW_SECONDS=60,
+        TRIPWEAVE_INVITATION_RATE_LIMIT_MAX_ATTEMPTS=1,
+        TRIPWEAVE_UPLOAD_REGISTRATION_RATE_LIMIT_MAX_ATTEMPTS=1,
+        TRIPWEAVE_PUBLICATION_RATE_LIMIT_MAX_ATTEMPTS=1,
+    )
+    with TestClient(create_app(settings=settings, engine=engine)) as limited_client:
+        csrf_token = register(limited_client, "rate-limited-owner@example.com")
+        trip = create_trip(limited_client, csrf_token)
+
+        assert create_invitation(limited_client, csrf_token, trip["id"])["status"] == "pending"
+        second_invite = limited_client.post(
+            f"/trips/{trip['id']}/invitations",
+            headers={"x-csrf-token": csrf_token},
+            json={},
+        )
+        assert second_invite.status_code == 429
+
+        first_upload = limited_client.post(
+            f"/trips/{trip['id']}/upload-sessions",
+            headers={"x-csrf-token": csrf_token},
+            json={"files": [{"filename": "a.jpg", "byteSize": 1, "mimeType": "image/jpeg"}]},
+        )
+        assert first_upload.status_code == 201
+        second_upload = limited_client.post(
+            f"/trips/{trip['id']}/upload-sessions",
+            headers={"x-csrf-token": csrf_token},
+            json={"files": [{"filename": "b.jpg", "byteSize": 1, "mimeType": "image/jpeg"}]},
+        )
+        assert second_upload.status_code == 429
+
+        first_publish = limited_client.post(
+            f"/trips/{trip['id']}/publications",
+            headers={"x-csrf-token": csrf_token},
+        )
+        assert first_publish.status_code == 409
+        second_publish = limited_client.post(
+            f"/trips/{trip['id']}/publications",
+            headers={"x-csrf-token": csrf_token},
+        )
+        assert second_publish.status_code == 429
+    command.downgrade(config, "base")
 
 
 def test_guest_cannot_access_other_trip_or_alter_other_contributor_media(

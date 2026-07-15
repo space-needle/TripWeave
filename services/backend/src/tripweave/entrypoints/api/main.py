@@ -1,7 +1,8 @@
 # ruff: noqa: B008
 import json
+import os
 import secrets
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import PurePosixPath
@@ -150,6 +151,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         max_attempts=resolved_settings.auth_rate_limit_max_attempts,
         window_seconds=resolved_settings.auth_rate_limit_window_seconds,
     )
+    app.state.invitation_rate_limiter = FixedWindowRateLimiter(
+        max_attempts=resolved_settings.invitation_rate_limit_max_attempts,
+        window_seconds=resolved_settings.action_rate_limit_window_seconds,
+    )
+    app.state.upload_registration_rate_limiter = FixedWindowRateLimiter(
+        max_attempts=resolved_settings.upload_registration_rate_limit_max_attempts,
+        window_seconds=resolved_settings.action_rate_limit_window_seconds,
+    )
+    app.state.publication_rate_limiter = FixedWindowRateLimiter(
+        max_attempts=resolved_settings.publication_rate_limit_max_attempts,
+        window_seconds=resolved_settings.action_rate_limit_window_seconds,
+    )
     app.state.blob_store = create_blob_store(resolved_settings)
     app.state.geocoder = ManualGeocoder()
 
@@ -158,8 +171,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         allow_origins=resolved_settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["content-type", "x-csrf-token"],
+        allow_headers=["content-type", "x-csrf-token", "x-request-id"],
     )
+
+    @app.middleware("http")
+    async def request_id_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        request_id = request.headers.get("x-request-id") or secrets.token_hex(16)
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["x-request-id"] = request_id
+        return response
 
     @app.get("/health/live")
     def live() -> dict[str, str]:
@@ -353,6 +376,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Try again later"
             )
 
+    def rate_limit_action(request: Request, limiter_name: str, action: str, actor_key: str) -> None:
+        client_host = request.client.host if request.client else "unknown"
+        limiter = getattr(app.state, limiter_name)
+        key = f"{action}:{client_host}:{actor_key}"
+        if not limiter.allow(key):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Try again later"
+            )
+
     def user_response(user: orm.User) -> UserResponse:
         return UserResponse(id=user.id, email=user.email, display_name=user.display_name)
 
@@ -439,6 +471,31 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     @app.get("/auth/me", response_model=MeResponse)
     def me(auth: AuthenticatedUser = Depends(current_user)) -> MeResponse:
         return MeResponse(user=user_response(auth.user))
+
+    @app.get("/ops/local-mvp")
+    def local_mvp_operations(
+        _auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> dict[str, object]:
+        job_rows = db.execute(
+            select(orm.ProcessingJob.state, func.count())
+            .group_by(orm.ProcessingJob.state)
+            .order_by(orm.ProcessingJob.state)
+        ).all()
+        media_rows = db.execute(
+            select(orm.MediaItem.processing_state, func.count())
+            .where(orm.MediaItem.deleted_at.is_(None))
+            .group_by(orm.MediaItem.processing_state)
+            .order_by(orm.MediaItem.processing_state)
+        ).all()
+        storage = local_storage_usage(resolved_settings)
+        return {
+            "jobStates": {str(state): int(count) for state, count in job_rows},
+            "mediaStates": {str(state): int(count) for state, count in media_rows},
+            "worker": worker_status(resolved_settings),
+            "storage": storage,
+            "softLimitWarning": storage["totalBytes"] >= resolved_settings.upload_max_trip_bytes,
+        }
 
     def member_for_trip(db: DbSession, trip_id: UUID, user_id: UUID) -> orm.TripMember | None:
         return db.execute(
@@ -940,7 +997,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> InvitationResponse:
         require_csrf(request)
-        require_owner_member(db, trip_id, auth.user.id)
+        owner_member = require_owner_member(db, trip_id, auth.user.id)
+        rate_limit_action(
+            request,
+            "invitation_rate_limiter",
+            "create-invitation",
+            f"{trip_id}:{owner_member.id}",
+        )
         trip = db.get(orm.Trip, trip_id)
         if trip is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
@@ -2244,6 +2307,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> UploadSessionResponse:
         require_csrf(request)
         member = require_member_for_actor(db, trip_id, actor)
+        rate_limit_action(
+            request,
+            "upload_registration_rate_limiter",
+            "create-upload-session",
+            f"{trip_id}:{member.id}",
+        )
         if member.role == TripMemberRole.VIEWER.value:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
 
@@ -2958,6 +3027,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> PublicationResponse:
         require_csrf(request)
         member = require_member_for_actor(db, trip_id, actor)
+        rate_limit_action(
+            request,
+            "publication_rate_limiter",
+            "create-publication",
+            f"{trip_id}:{member.id}",
+        )
         if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
         trip = db.get(orm.Trip, trip_id)
@@ -3249,6 +3324,39 @@ def worker_status(settings: Settings) -> dict[str, Any]:
         "status": heartbeat["status"],
         "updated_at": heartbeat["updated_at"],
         "age_seconds": round(age_seconds, 3),
+    }
+
+
+def local_storage_usage(settings: Settings) -> dict[str, Any]:
+    aliases: dict[str, dict[str, int]] = {}
+    total_bytes = 0
+    total_files = 0
+    root = settings.blob_dir
+    for alias in sorted(settings.store_aliases):
+        alias_dir = root / alias
+        alias_bytes = 0
+        alias_files = 0
+        if alias_dir.exists():
+            for dirpath, _, filenames in os.walk(alias_dir, followlinks=False):
+                base = os.fspath(dirpath)
+                for filename in filenames:
+                    path = os.path.join(base, filename)
+                    try:
+                        stat_result = os.stat(path, follow_symlinks=False)
+                    except OSError:
+                        continue
+                    if not os.path.isfile(path):
+                        continue
+                    alias_bytes += stat_result.st_size
+                    alias_files += 1
+        aliases[alias] = {"bytes": alias_bytes, "files": alias_files}
+        total_bytes += alias_bytes
+        total_files += alias_files
+    return {
+        "root": str(root),
+        "totalBytes": total_bytes,
+        "totalFiles": total_files,
+        "aliases": aliases,
     }
 
 

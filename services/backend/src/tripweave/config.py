@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     auth_rate_limit_max_attempts: int = Field(
         default=10, ge=1, alias="TRIPWEAVE_AUTH_RATE_LIMIT_MAX_ATTEMPTS"
     )
+    action_rate_limit_window_seconds: int = Field(
+        default=60, ge=1, alias="TRIPWEAVE_ACTION_RATE_LIMIT_WINDOW_SECONDS"
+    )
+    invitation_rate_limit_max_attempts: int = Field(
+        default=30, ge=1, alias="TRIPWEAVE_INVITATION_RATE_LIMIT_MAX_ATTEMPTS"
+    )
+    upload_registration_rate_limit_max_attempts: int = Field(
+        default=60, ge=1, alias="TRIPWEAVE_UPLOAD_REGISTRATION_RATE_LIMIT_MAX_ATTEMPTS"
+    )
+    publication_rate_limit_max_attempts: int = Field(
+        default=20, ge=1, alias="TRIPWEAVE_PUBLICATION_RATE_LIMIT_MAX_ATTEMPTS"
+    )
     allowed_web_origins: str = Field(
         default="http://localhost:3000", alias="TRIPWEAVE_ALLOWED_WEB_ORIGINS"
     )

@@ -90,6 +90,18 @@ make typecheck
 make test
 make build
 make check
+make demo
+make seed-demo
+make smoke
+make e2e
+make backup-restore-drill
 ```
 
 The local database migrations enable PostGIS and create the first provider-neutral domain tables for users, sessions, trips, trip membership, invitations, uploads, media records, media assets, and processing jobs. The current product flow lets an owner register, sign in, create trips, edit trip settings, upload JPEG/HEIC images into local storage, watch processing status, view generated thumbnails and extracted metadata, retry failed processing, delete their own trips, and sign out.
+
+Local MVP release-candidate commands:
+
+- `make demo` starts Docker Compose in the background and seeds a deterministic local demo.
+- `make smoke` checks the local web/API health, authenticated ops summary, and lock files for cloud SDK markers.
+- `make e2e` runs the Playwright local MVP scenario against the running local stack.
+- `make backup-restore-drill` runs a local `pg_dump` and restores it into a temporary database.

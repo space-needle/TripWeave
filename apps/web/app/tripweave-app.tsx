@@ -829,6 +829,13 @@ function OwnerWorkspace() {
     await navigator.clipboard.writeText(latestInviteUrl);
   }
 
+  async function copyLatestShareUrl() {
+    if (!latestShareUrl || typeof navigator === "undefined") {
+      return;
+    }
+    await navigator.clipboard.writeText(latestShareUrl);
+  }
+
   async function revokeInvite(invitation: InvitationResponse) {
     if (!selectedTrip) {
       return;
@@ -1341,6 +1348,9 @@ function OwnerWorkspace() {
             {latestShareUrl ? (
               <div className="invite-card">
                 <code>{latestShareUrl}</code>
+                <button type="button" onClick={copyLatestShareUrl}>
+                  Copy link
+                </button>
               </div>
             ) : null}
             <PublicationList
@@ -2710,6 +2720,7 @@ function PublicationList({
                 <small>
                   {link.storyVersionId ? "version assigned" : "publishing"}
                 </small>
+                <small>URL hidden after creation</small>
                 {link.status === "active" ? (
                   <button type="button" onClick={() => onRevoke(link.id)}>
                     Revoke
