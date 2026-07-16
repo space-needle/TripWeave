@@ -184,6 +184,36 @@ p {
   gap: 6px;
 }
 
+.workspace-header {
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.workspace-header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.workspace-header strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.workspace-header span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.workspace-header button {
+  min-height: 34px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 7px 10px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(230px, 300px) minmax(
@@ -285,22 +315,28 @@ p {
 
 .trip-stage-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  padding: 16px;
+  gap: 12px;
+  padding: 0 2px;
 }
 
 .trip-stage-header > div:first-child {
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 
 .trip-stage-header h2 {
-  font-size: 1.48rem;
+  font-size: 1.08rem;
+}
+
+.trip-stage-header p {
+  font-size: 0.86rem;
+}
+
+.trip-stage-header .button-row button {
+  min-height: 34px;
+  padding: 7px 10px;
 }
 
 .trip-management {

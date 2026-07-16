@@ -1115,11 +1115,10 @@ function OwnerWorkspace() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
+      <header className="app-header workspace-header">
         <div>
-          <p className="eyebrow">TripWeave</p>
-          <h1>My trips</h1>
-          <p>{user.display_name}</p>
+          <strong>TripWeave</strong>
+          <span>{user.display_name}</span>
         </div>
         <button type="button" onClick={logout} disabled={isBusy}>
           Logout
@@ -1195,7 +1194,6 @@ function OwnerWorkspace() {
             <>
               <div className="trip-stage-header">
                 <div>
-                  <p className="eyebrow">Trip story</p>
                   <h2 id="trip-stage-title">{selectedTrip.title}</h2>
                   <p>
                     {selectedTrip.startDate} - {selectedTrip.endDate}
