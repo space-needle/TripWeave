@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import and_, func, literal_column, or_, select
+from sqlalchemy import and_, func, literal_column, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -1524,6 +1524,68 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if day is not None:
                 lock_record(day)
 
+    def route_line_wkt(db: DbSession, from_stop_id: UUID, to_stop_id: UUID) -> str | None:
+        return db.execute(
+            text(
+                """
+                SELECT ST_AsEWKT(ST_MakeLine(source.centroid::geometry, target.centroid::geometry))
+                FROM stops source, stops target
+                WHERE source.id = CAST(:from_stop_id AS uuid)
+                    AND target.id = CAST(:to_stop_id AS uuid)
+                """
+            ),
+            {"from_stop_id": str(from_stop_id), "to_stop_id": str(to_stop_id)},
+        ).scalar_one_or_none()
+
+    def replace_stop_leg_endpoint(
+        db: DbSession, leg: orm.TripLeg, from_stop: orm.Stop, to_stop: orm.Stop
+    ) -> None:
+        duplicate = db.execute(
+            select(orm.TripLeg).where(
+                orm.TripLeg.id != leg.id,
+                orm.TripLeg.from_stop_id == from_stop.id,
+                orm.TripLeg.to_stop_id == to_stop.id,
+                orm.TripLeg.reconstruction_run_id == leg.reconstruction_run_id,
+            )
+        ).scalar_one_or_none()
+        if duplicate is not None:
+            lock_record(duplicate)
+            db.delete(leg)
+            return
+        leg.from_stop_id = from_stop.id
+        leg.to_stop_id = to_stop.id
+        leg.trip_day_id = from_stop.trip_day_id
+        leg.geometry = route_line_wkt(db, from_stop.id, to_stop.id)
+        lock_record(leg)
+
+    def rewire_merged_stop_legs(db: DbSession, source: orm.Stop, target: orm.Stop) -> None:
+        legs = list(
+            db.scalars(
+                select(orm.TripLeg).where(
+                    orm.TripLeg.trip_id == source.trip_id,
+                    or_(
+                        orm.TripLeg.from_stop_id == source.id,
+                        orm.TripLeg.to_stop_id == source.id,
+                    ),
+                )
+            )
+        )
+        for leg in legs:
+            if leg.from_stop_id == target.id or leg.to_stop_id == target.id:
+                continue
+            if leg.from_stop_id == source.id:
+                to_stop = db.get(orm.Stop, leg.to_stop_id)
+                if to_stop is None:
+                    db.delete(leg)
+                    continue
+                replace_stop_leg_endpoint(db, leg, target, to_stop)
+                continue
+            from_stop = db.get(orm.Stop, leg.from_stop_id)
+            if from_stop is None:
+                db.delete(leg)
+                continue
+            replace_stop_leg_endpoint(db, leg, from_stop, target)
+
     def get_trip_record(
         db: DbSession, model: type[object], record_id: UUID, trip_id: UUID, label: str
     ) -> Any:
@@ -1710,6 +1772,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 lock_record(moment)
             target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
             target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
+            rewire_merged_stop_legs(db, source, target)
             lock_record(target)
             lock_reconstruction_parents(db, target)
             db.delete(source)

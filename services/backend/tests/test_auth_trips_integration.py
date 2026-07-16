@@ -1155,6 +1155,76 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     assert denied.status_code == 404
 
 
+def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engine) -> None:
+    csrf_token = register(client, "merge-route-owner@example.com")
+    trip = create_trip(client, csrf_token, "Merge Route Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    for index, captured_at, latitude, longitude in [
+        (1, datetime(2026, 6, 8, 1, 0, tzinfo=UTC), 35.0, 127.0),
+        (2, datetime(2026, 6, 8, 3, 0, tzinfo=UTC), 35.01, 127.01),
+        (3, datetime(2026, 6, 8, 6, 0, tzinfo=UTC), 35.03, 127.03),
+    ]:
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"merge-route-{index}.jpg",
+            captured_at=captured_at,
+            latitude=latitude,
+            longitude=longitude,
+            sha256=f"{index:064d}",
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200
+    stops = reconstructed.json()["days"][0]["stops"]
+    assert len(stops) == 3
+    stop_one, stop_two, stop_three = stops
+
+    merge = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "merge_stops",
+            "payload": {"sourceStopId": stop_two["id"], "targetStopId": stop_one["id"]},
+        },
+    )
+    assert merge.status_code == 200, merge.text
+
+    with engine.connect() as connection:
+        legs = connection.execute(
+            text(
+                """
+                SELECT from_stop_id::text, to_stop_id::text, ST_AsText(geometry::geometry)
+                FROM trip_legs
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                ORDER BY created_at, id
+                """
+            ),
+            {"trip_id": trip_id},
+        ).all()
+
+    assert (stop_one["id"], stop_three["id"], "LINESTRING(127 35,127.03 35.03)") in legs
+    assert all(
+        stop_two["id"] not in (from_stop_id, to_stop_id) for from_stop_id, to_stop_id, _ in legs
+    )
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:
