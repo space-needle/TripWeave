@@ -144,7 +144,7 @@ p {
 
 .auth-shell,
 .app-shell {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 32px));
   margin: 0 auto;
   padding: 40px 0;
 }
@@ -193,6 +193,122 @@ p {
   gap: 14px;
   margin-top: 20px;
   align-items: start;
+}
+
+.trip-workspace {
+  grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 360px);
+  gap: 16px;
+}
+
+.trip-nav,
+.trip-management {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.trip-nav {
+  align-content: start;
+  gap: 18px;
+}
+
+.trip-brand {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+
+.trip-brand strong {
+  font-size: 1.32rem;
+}
+
+.trip-brand span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.trip-stage {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.trip-stage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 16px;
+}
+
+.trip-stage-header > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.trip-stage-header h2 {
+  font-size: 1.48rem;
+}
+
+.trip-management {
+  display: grid;
+  gap: 10px;
+}
+
+.trip-management .media-list {
+  grid-template-columns: 1fr;
+}
+
+.trip-management .media-row {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.trip-management .button-row,
+.trip-management .action-row {
+  align-items: stretch;
+}
+
+.trip-management .button-row button,
+.trip-management .action-row button {
+  flex: 1 1 140px;
+}
+
+.management-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.management-panel > summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 800;
+  list-style-position: outside;
+  padding: 14px 16px;
+}
+
+.management-panel > summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.management-panel[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.management-panel > :not(summary) {
+  padding: 16px;
+}
+
+.trip-start {
+  min-height: 420px;
+  align-content: center;
 }
 
 .panel {
@@ -909,6 +1025,25 @@ p {
 @media (max-width: 920px) {
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .trip-nav,
+  .trip-management {
+    position: relative;
+    top: auto;
+    max-height: none;
+  }
+
+  .trip-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-stage {
+    order: -1;
+  }
+
+  .trip-stage-header {
+    flex-direction: column;
   }
 
   .publication-grid {

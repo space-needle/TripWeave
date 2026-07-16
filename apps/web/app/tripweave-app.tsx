@@ -1128,260 +1128,296 @@ function OwnerWorkspace() {
 
       {tripError ? <p className="error">{tripError}</p> : null}
 
-      <section className="workspace">
-        <form
-          className="panel stack"
-          onSubmit={createTrip}
-          aria-labelledby="create-title"
-        >
-          <h2 id="create-title">Create trip</h2>
-          <TripFields form={createForm} onChange={setCreateForm} />
-          <button type="submit" disabled={isBusy}>
-            Create trip
-          </button>
-        </form>
-
-        <section className="panel" aria-labelledby="trip-list-title">
-          <h2 id="trip-list-title">Your trips</h2>
-          {trips.length === 0 ? (
-            <p>No trips yet.</p>
-          ) : (
-            <div className="trip-list" role="list">
-              {trips.map((trip) => (
-                <button
-                  className={
-                    trip.id === selectedTrip?.id
-                      ? "trip-row trip-row-active"
-                      : "trip-row"
-                  }
-                  key={trip.id}
-                  type="button"
-                  onClick={() => selectTrip(trip)}
-                >
-                  <span>{trip.title}</span>
-                  <small>{trip.role}</small>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <form
-          className="panel stack"
-          onSubmit={updateTrip}
-          aria-labelledby="settings-title"
-        >
-          <h2 id="settings-title">Trip settings</h2>
-          {selectedTrip ? (
-            <>
-              <TripFields form={settingsForm} onChange={setSettingsForm} />
-              <div className="button-row">
-                <button type="submit" disabled={isBusy}>
-                  Save changes
-                </button>
-                <button
-                  className="danger"
-                  type="button"
-                  onClick={deleteTrip}
-                  disabled={isBusy}
-                >
-                  Delete trip
-                </button>
+      <section className="workspace trip-workspace">
+        <aside className="trip-nav panel" aria-label="Trip navigation">
+          <div className="trip-brand">
+            <strong>My Trip</strong>
+            <span>{trips.length} trip{trips.length === 1 ? "" : "s"}</span>
+          </div>
+          <section aria-labelledby="trip-list-title">
+            <h2 id="trip-list-title">Trips</h2>
+            {trips.length === 0 ? (
+              <p>No trips yet.</p>
+            ) : (
+              <div className="trip-list" role="list">
+                {trips.map((trip) => (
+                  <button
+                    className={
+                      trip.id === selectedTrip?.id
+                        ? "trip-row trip-row-active"
+                        : "trip-row"
+                    }
+                    key={trip.id}
+                    type="button"
+                    onClick={() => selectTrip(trip)}
+                  >
+                    <span>{trip.title}</span>
+                    <small>{trip.role}</small>
+                  </button>
+                ))}
               </div>
-            </>
-          ) : (
-            <p>Select a trip to edit its settings.</p>
-          )}
-        </form>
-
-        <section className="panel stack" aria-labelledby="uploads-title">
-          <h2 id="uploads-title">Uploads</h2>
-          {selectedTrip ? (
-            <>
-              <div
-                className="drop-zone"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={onDrop}
-              >
-                <label>
-                  Add JPEG or HEIC images
-                  <input
-                    accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
-                    multiple
-                    type="file"
-                    onChange={onFileInput}
-                  />
-                </label>
-                <p>Drag files here or use the file picker.</p>
-              </div>
-              {uploadError ? <p className="error">{uploadError}</p> : null}
-              {overallProgress > 0 ? (
-                <div>
-                  <label htmlFor="overall-upload-progress">
-                    Overall progress
-                  </label>
-                  <progress
-                    id="overall-upload-progress"
-                    max={100}
-                    value={overallProgress}
-                  />
-                </div>
-              ) : null}
-              <UploadFileList
-                files={selectedUploadFiles}
-                progress={uploadProgress}
-                onCancel={cancelUpload}
-                onRetry={retryUpload}
-              />
-            </>
-          ) : (
-            <p>Create or select a trip before uploading.</p>
-          )}
-        </section>
-
-        {selectedTrip?.role === "owner" ? (
-          <section className="panel stack" aria-labelledby="sharing-title">
-            <div>
-              <h2 id="sharing-title">Travelers</h2>
-              <p>Invite guest contributors and manage trip access.</p>
-            </div>
-            {collaborationError ? (
-              <p className="error">{collaborationError}</p>
-            ) : null}
-            <div className="action-row">
-              <button type="button" onClick={createInvite} disabled={isBusy}>
-                Create contributor link
+            )}
+          </section>
+          <details className="management-panel">
+            <summary>Create trip</summary>
+            <form className="stack" onSubmit={createTrip}>
+              <TripFields form={createForm} onChange={setCreateForm} />
+              <button type="submit" disabled={isBusy}>
+                Create trip
               </button>
-              {latestInviteUrl ? (
-                <button type="button" onClick={copyInviteUrl}>
-                  Copy link
-                </button>
-              ) : null}
-            </div>
-            {latestInviteUrl ? (
-              <div className="invite-card">
-                <code>{latestInviteUrl}</code>
-                {latestInviteQrUrl ? (
-                  <img
-                    className="qr-block"
-                    src={latestInviteQrUrl}
-                    alt="Invitation QR code"
-                  />
+            </form>
+          </details>
+        </aside>
+
+        <section className="trip-stage" aria-labelledby="trip-stage-title">
+          {selectedTrip ? (
+            <>
+              <div className="trip-stage-header">
+                <div>
+                  <p className="eyebrow">Trip story</p>
+                  <h2 id="trip-stage-title">{selectedTrip.title}</h2>
+                  <p>
+                    {selectedTrip.startDate} - {selectedTrip.endDate}
+                  </p>
+                </div>
+                {["owner", "editor"].includes(selectedTrip.role) ? (
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      onClick={runReconstruction}
+                      disabled={isBusy}
+                    >
+                      Refresh story
+                    </button>
+                    <button
+                      type="button"
+                      onClick={publishTrip}
+                      disabled={isBusy}
+                    >
+                      Publish
+                    </button>
+                  </div>
                 ) : null}
               </div>
-            ) : null}
-            <InvitationList invitations={invitations} onRevoke={revokeInvite} />
-            <MemberRoster members={members} onRemove={removeMember} />
-          </section>
-        ) : null}
-
-        {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-          <section
-            className="panel stack media-panel"
-            aria-labelledby="reconstruction-title"
-          >
-            <div className="section-heading">
-              <div>
-                <h2 id="reconstruction-title">Reconstruction</h2>
-                <p>
-                  Build days, stops, moments, inferred legs, and review items.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={runReconstruction}
-                disabled={isBusy}
-              >
-                Run reconstruction
-              </button>
+              {reconstructionError ? (
+                <p className="error">{reconstructionError}</p>
+              ) : null}
+              {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+                <TripStoryExplorer
+                  reconstruction={reconstruction}
+                  state={storyState}
+                  onStateChange={setStoryState}
+                  timezoneId={selectedTrip.timezoneId}
+                />
+              ) : (
+                <div className="story-empty">
+                  <p>This trip is not editable from this workspace.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="story-empty trip-start">
+              <p className="eyebrow">Start here</p>
+              <h2 id="trip-stage-title">Choose or create a trip</h2>
+              <p>
+                TripWeave turns shared photos into a map and timeline once a
+                trip has media.
+              </p>
             </div>
-            {reconstructionError ? (
-              <p className="error">{reconstructionError}</p>
-            ) : null}
-            <TripStoryExplorer
-              reconstruction={reconstruction}
-              state={storyState}
-              onStateChange={setStoryState}
-              timezoneId={selectedTrip.timezoneId}
-            />
-            <ReconstructionOutline
-              reconstruction={reconstruction}
-              timezoneId={selectedTrip.timezoneId}
-              reviewIndex={reviewIndex}
-              onSkipReview={() => setReviewIndex((current) => current + 1)}
-              onResolveReview={(id) =>
-                void applyReviewDecision(id, "resolve_review_item")
-              }
-              onDismissReview={(id) =>
-                void applyReviewDecision(id, "dismiss_review_item")
-              }
-              onAcceptClockOffset={(id) => void acceptClockOffset(id)}
-              onUndo={undoLatestEdit}
-            />
-          </section>
-        ) : null}
-
-        {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-          <section className="panel stack" aria-labelledby="publication-title">
-            <div className="section-heading">
-              <div>
-                <h2 id="publication-title">Publication</h2>
-                <p>Publish an immutable story version with sanitized assets.</p>
-              </div>
-              <div className="button-row">
-                <button type="button" onClick={publishTrip} disabled={isBusy}>
-                  Publish story
-                </button>
-                <button
-                  className="danger"
-                  type="button"
-                  onClick={unpublishTrip}
-                  disabled={isBusy}
-                >
-                  Unpublish
-                </button>
-              </div>
-            </div>
-            {publicationError ? (
-              <p className="error">{publicationError}</p>
-            ) : null}
-            {latestShareUrl ? (
-              <div className="invite-card">
-                <code>{latestShareUrl}</code>
-                <button type="button" onClick={copyLatestShareUrl}>
-                  Copy link
-                </button>
-              </div>
-            ) : null}
-            <PublicationList
-              publications={publications}
-              onRevoke={revokeShareLink}
-            />
-          </section>
-        ) : null}
-
-        <section
-          className="panel stack media-panel"
-          aria-labelledby="media-title"
-        >
-          <div>
-            <h2 id="media-title">Media</h2>
-            {hasProcessingMedia ? <p>Processing uploads...</p> : null}
-          </div>
-          {mediaError ? <p className="error">{mediaError}</p> : null}
-          <MediaList
-            media={media}
-            onRetry={retryMedia}
-            onVisibilityChange={updateMediaVisibility}
-            timezoneId={selectedTrip?.timezoneId}
-          />
-          <SimilarityGroupsPanel
-            groups={similarityGroups}
-            onChangeRepresentative={(groupId, mediaId) =>
-              void changeSimilarityRepresentative(groupId, mediaId)
-            }
-          />
+          )}
         </section>
+
+        <aside className="trip-management" aria-label="Trip management">
+          <details className="management-panel" open>
+            <summary>Photos</summary>
+            {selectedTrip ? (
+              <div className="stack">
+                <div
+                  className="drop-zone"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={onDrop}
+                >
+                  <label>
+                    Add JPEG or HEIC images
+                    <input
+                      accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
+                      multiple
+                      type="file"
+                      onChange={onFileInput}
+                    />
+                  </label>
+                  <p>Drag files here or use the file picker.</p>
+                </div>
+                {uploadError ? <p className="error">{uploadError}</p> : null}
+                {overallProgress > 0 ? (
+                  <div>
+                    <label htmlFor="overall-upload-progress">
+                      Overall progress
+                    </label>
+                    <progress
+                      id="overall-upload-progress"
+                      max={100}
+                      value={overallProgress}
+                    />
+                  </div>
+                ) : null}
+                <UploadFileList
+                  files={selectedUploadFiles}
+                  progress={uploadProgress}
+                  onCancel={cancelUpload}
+                  onRetry={retryUpload}
+                />
+                <div>
+                  <h2 id="media-title">Media</h2>
+                  {hasProcessingMedia ? <p>Processing uploads...</p> : null}
+                </div>
+                {mediaError ? <p className="error">{mediaError}</p> : null}
+                <MediaList
+                  media={media}
+                  onRetry={retryMedia}
+                  onVisibilityChange={updateMediaVisibility}
+                  timezoneId={selectedTrip?.timezoneId}
+                />
+                <SimilarityGroupsPanel
+                  groups={similarityGroups}
+                  onChangeRepresentative={(groupId, mediaId) =>
+                    void changeSimilarityRepresentative(groupId, mediaId)
+                  }
+                />
+              </div>
+            ) : (
+              <p>Select a trip before uploading photos.</p>
+            )}
+          </details>
+
+          {selectedTrip?.role === "owner" ? (
+            <details className="management-panel">
+              <summary>Travelers</summary>
+              <div className="stack">
+                <p>Invite guest contributors and manage trip access.</p>
+                {collaborationError ? (
+                  <p className="error">{collaborationError}</p>
+                ) : null}
+                <div className="action-row">
+                  <button
+                    type="button"
+                    onClick={createInvite}
+                    disabled={isBusy}
+                  >
+                    Create contributor link
+                  </button>
+                  {latestInviteUrl ? (
+                    <button type="button" onClick={copyInviteUrl}>
+                      Copy link
+                    </button>
+                  ) : null}
+                </div>
+                {latestInviteUrl ? (
+                  <div className="invite-card">
+                    <code>{latestInviteUrl}</code>
+                    {latestInviteQrUrl ? (
+                      <img
+                        className="qr-block"
+                        src={latestInviteQrUrl}
+                        alt="Invitation QR code"
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                <InvitationList
+                  invitations={invitations}
+                  onRevoke={revokeInvite}
+                />
+                <MemberRoster members={members} onRemove={removeMember} />
+              </div>
+            </details>
+          ) : null}
+
+          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+            <details className="management-panel">
+              <summary>Review</summary>
+              <div className="stack">
+                <ReconstructionOutline
+                  reconstruction={reconstruction}
+                  timezoneId={selectedTrip.timezoneId}
+                  reviewIndex={reviewIndex}
+                  onSkipReview={() => setReviewIndex((current) => current + 1)}
+                  onResolveReview={(id) =>
+                    void applyReviewDecision(id, "resolve_review_item")
+                  }
+                  onDismissReview={(id) =>
+                    void applyReviewDecision(id, "dismiss_review_item")
+                  }
+                  onAcceptClockOffset={(id) => void acceptClockOffset(id)}
+                  onUndo={undoLatestEdit}
+                />
+              </div>
+            </details>
+          ) : null}
+
+          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+            <details className="management-panel">
+              <summary>Publish</summary>
+              <div className="stack">
+                <p>Publish an immutable story version with sanitized assets.</p>
+                <div className="button-row">
+                  <button type="button" onClick={publishTrip} disabled={isBusy}>
+                    Publish story
+                  </button>
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={unpublishTrip}
+                    disabled={isBusy}
+                  >
+                    Unpublish
+                  </button>
+                </div>
+                {publicationError ? (
+                  <p className="error">{publicationError}</p>
+                ) : null}
+                {latestShareUrl ? (
+                  <div className="invite-card">
+                    <code>{latestShareUrl}</code>
+                    <button type="button" onClick={copyLatestShareUrl}>
+                      Copy link
+                    </button>
+                  </div>
+                ) : null}
+                <PublicationList
+                  publications={publications}
+                  onRevoke={revokeShareLink}
+                />
+              </div>
+            </details>
+          ) : null}
+
+          <details className="management-panel">
+            <summary>Settings</summary>
+            <form className="stack" onSubmit={updateTrip}>
+              {selectedTrip ? (
+                <>
+                  <TripFields form={settingsForm} onChange={setSettingsForm} />
+                  <div className="button-row">
+                    <button type="submit" disabled={isBusy}>
+                      Save changes
+                    </button>
+                    <button
+                      className="danger"
+                      type="button"
+                      onClick={deleteTrip}
+                      disabled={isBusy}
+                    >
+                      Delete trip
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>Select a trip to edit its settings.</p>
+              )}
+            </form>
+          </details>
+        </aside>
       </section>
     </main>
   );
