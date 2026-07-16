@@ -1036,23 +1036,38 @@ p {
   font-weight: 900;
 }
 
-.photo-stop-marker small {
+.photo-stop-flow-badge {
   position: absolute;
-  right: -7px;
-  bottom: -3px;
+  right: -14px;
+  bottom: -4px;
   z-index: 1;
-  min-width: 22px;
-  min-height: 22px;
+  min-width: 26px;
+  min-height: 24px;
   display: grid;
   place-items: center;
   border: 2px solid #fff;
   border-radius: 999px;
   background: var(--text);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 900;
   line-height: 1;
-  padding: 2px 5px;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.photo-stop-flow-badge.start {
+  background: #267563;
+}
+
+.photo-stop-flow-badge.end {
+  background: #9f2d20;
+}
+
+.photo-stop-flow-badge.step {
+  right: -8px;
+  min-width: 24px;
+  padding: 3px 6px;
 }
 
 .photo-stop-marker-label {

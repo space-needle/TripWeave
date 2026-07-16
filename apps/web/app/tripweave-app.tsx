@@ -2966,6 +2966,17 @@ function StoryMapCanvas({
         .filter((item) => item.coordinates),
     [dayColorMap, model.media, model.stops, stopDisplayCoordinates],
   );
+  const displayStopOrder = useMemo(() => {
+    const order = new Map<string, { position: number; count: number }>();
+    const dayIds = Array.from(new Set(model.stops.map((stop) => stop.dayId)));
+    for (const dayId of dayIds) {
+      const dayStops = model.stops.filter((stop) => stop.dayId === dayId);
+      dayStops.forEach((stop, index) => {
+        order.set(stop.id, { position: index + 1, count: dayStops.length });
+      });
+    }
+    return order;
+  }, [model.stops]);
   const stopMarkerData = useMemo(
     () =>
       model.stops
@@ -2982,16 +2993,32 @@ function StoryMapCanvas({
           );
           const featuredMedia =
             stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
+          const order = displayStopOrder.get(stop.id);
+          const displayPosition = order?.position ?? stop.position;
+          const displayCount = order?.count ?? 1;
           return {
             stop,
             coordinates,
             featuredMedia,
             count: stopMedia.length,
+            flowLabel:
+              displayPosition === 1
+                ? "Start"
+                : displayPosition === displayCount
+                  ? "End"
+                  : String(displayPosition),
+            flowTone:
+              displayPosition === 1
+                ? "start"
+                : displayPosition === displayCount
+                  ? "end"
+                  : "step",
             color: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
           };
         }),
     [
       dayColorMap,
+      displayStopOrder,
       model.media,
       model.stops,
       state.selectedDayId,
@@ -3215,12 +3242,12 @@ function StoryMapCanvas({
         if (!coordinates) {
           continue;
         }
-      const markerAnchor = document.createElement("div");
-      markerAnchor.className = "photo-map-marker-anchor";
-      const element = document.createElement("button");
-      element.type = "button";
-      element.className =
-        dayId === state.selectedDayId
+        const markerAnchor = document.createElement("div");
+        markerAnchor.className = "photo-map-marker-anchor";
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className =
+          dayId === state.selectedDayId
             ? "photo-day-marker active"
             : "photo-day-marker";
         element.setAttribute("aria-label", `Explore stops for ${label}`);
@@ -3264,7 +3291,8 @@ function StoryMapCanvas({
       stop,
       coordinates,
       featuredMedia,
-      count,
+      flowLabel,
+      flowTone,
       color,
     } of stopMarkerData) {
       if (!coordinates) {
@@ -3278,7 +3306,10 @@ function StoryMapCanvas({
         stop.id === state.selectedStopId
           ? "photo-stop-marker active"
           : "photo-stop-marker";
-      element.setAttribute("aria-label", `Open photos for ${stop.label}`);
+      element.setAttribute(
+        "aria-label",
+        `Open photos for ${stop.label}, ${flowLabel} stop`,
+      );
       element.style.setProperty("--stop-color", color);
       const bubble = document.createElement("span");
       bubble.className = "photo-stop-marker-image";
@@ -3296,11 +3327,10 @@ function StoryMapCanvas({
         mediaFrame.appendChild(fallback);
       }
       bubble.appendChild(mediaFrame);
-      if (count > 1) {
-        const badge = document.createElement("small");
-        badge.textContent = String(count);
-        bubble.appendChild(badge);
-      }
+      const badge = document.createElement("small");
+      badge.className = `photo-stop-flow-badge ${flowTone}`;
+      badge.textContent = flowLabel;
+      bubble.appendChild(badge);
       const label = document.createElement("strong");
       label.className = "photo-stop-marker-label";
       label.textContent = stop.label;
@@ -3398,7 +3428,7 @@ function StoryMapCanvas({
         (stop) => stop.id === state.selectedStopId,
       );
       const selectedStopCoordinate = selectedStopCoordinates
-        ? stopDisplayCoordinates.get(selectedStopCoordinates.id) ?? null
+        ? (stopDisplayCoordinates.get(selectedStopCoordinates.id) ?? null)
         : null;
       if (dayCoordinates.length > 1 && selectedStopCoordinate) {
         map.fitBounds(boundsForCoordinates(dayCoordinates), {
@@ -3561,7 +3591,7 @@ function focusCoordinates(
       )
       .map((item) => item.coordinates as [number, number]);
     const stop = model.stops.find((item) => item.id === state.selectedStopId);
-    const stopCoordinate = stop ? stopCoordinates.get(stop.id) ?? null : null;
+    const stopCoordinate = stop ? (stopCoordinates.get(stop.id) ?? null) : null;
     return stopCoordinate
       ? [stopCoordinate, ...mediaCoordinates]
       : mediaCoordinates;
