@@ -2124,40 +2124,6 @@ function TripStoryExplorer({
           onStopMarkerClick={openStopPhotos}
           reducedMotion={reducedMotion}
         />
-        <div className="story-map-header">
-          <div>
-            <p className="eyebrow">Map story</p>
-            <h3>{activeDay?.title ?? activeDay?.date ?? "Whole trip"}</h3>
-            <p>
-              {filteredModel.stops.length} stops · {filteredModel.media.length}{" "}
-              photos
-            </p>
-          </div>
-          <div className="story-day-tabs" role="group" aria-label="Story days">
-            <button
-              type="button"
-              className={state.viewMode === "TRIP_OVERVIEW" ? "active" : ""}
-              onClick={() => setViewMode("TRIP_OVERVIEW")}
-            >
-              All
-            </button>
-            {reconstruction.days.map((day) => (
-              <button
-                aria-pressed={state.selectedDayId === day.id}
-                className={
-                  state.viewMode === "DAY" && state.selectedDayId === day.id
-                    ? "active"
-                    : ""
-                }
-                key={day.id}
-                type="button"
-                onClick={() => onStateChange(selectStoryDay(state, day.id))}
-              >
-                Day {day.position}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       <aside className="story-side-panel">
@@ -2199,6 +2165,37 @@ function TripStoryExplorer({
           </div>
         </div>
         <div className="story-toolbar" aria-label="Story controls">
+          <div className="story-scope-summary">
+            <span>{activeDay?.title ?? activeDay?.date ?? "Whole trip"}</span>
+            <small>
+              {filteredModel.stops.length} stops · {filteredModel.media.length}{" "}
+              photos
+            </small>
+          </div>
+          <div className="story-day-tabs" role="group" aria-label="Story days">
+            <button
+              type="button"
+              className={state.viewMode === "TRIP_OVERVIEW" ? "active" : ""}
+              onClick={() => setViewMode("TRIP_OVERVIEW")}
+            >
+              All
+            </button>
+            {reconstruction.days.map((day) => (
+              <button
+                aria-pressed={state.selectedDayId === day.id}
+                className={
+                  state.viewMode === "DAY" && state.selectedDayId === day.id
+                    ? "active"
+                    : ""
+                }
+                key={day.id}
+                type="button"
+                onClick={() => onStateChange(selectStoryDay(state, day.id))}
+              >
+                Day {day.position}
+              </button>
+            ))}
+          </div>
           <div className="segmented-control" role="group" aria-label="View mode">
             {(
               ["DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]

@@ -692,33 +692,6 @@ p {
   background: #e7efe9;
 }
 
-.story-map-header {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  right: 16px;
-  z-index: 5;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  pointer-events: none;
-}
-
-.story-map-header > div:first-child {
-  min-width: 190px;
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgb(255 255 255 / 86%);
-  padding: 13px 15px;
-  box-shadow: 0 10px 32px rgb(23 32 42 / 10%);
-  backdrop-filter: blur(8px);
-}
-
-.story-map-header h3,
 .story-panel-header h3 {
   margin: 0;
   color: var(--text);
@@ -726,27 +699,43 @@ p {
   line-height: 1.1;
 }
 
-.story-map-header p,
 .story-panel-header p {
   font-size: 0.86rem;
+}
+
+.story-scope-summary {
+  display: grid;
+  gap: 3px;
+}
+
+.story-scope-summary span {
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.story-scope-summary small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
 }
 
 .story-day-tabs {
   display: flex;
   gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 88%);
+  border-radius: 12px;
+  background: #fff;
   padding: 4px;
-  box-shadow: 0 10px 32px rgb(23 32 42 / 10%);
-  backdrop-filter: blur(8px);
-  pointer-events: auto;
 }
 
 .story-day-tabs button {
+  flex: 0 0 auto;
   min-height: 34px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text);
   padding: 7px 13px;
@@ -1736,22 +1725,11 @@ button.thumb-frame:focus-visible {
   .story-side-panel {
     border-left: 0;
     border-top: 1px solid var(--border);
-    border-radius: 18px 18px 0 0;
-    margin-top: -28px;
+    border-radius: 0 0 18px 18px;
+    margin-top: 0;
     position: relative;
-    z-index: 6;
-    box-shadow: 0 -14px 32px rgb(23 32 42 / 13%);
-  }
-
-  .story-map-header {
-    position: absolute;
-    inset: 12px 12px auto;
-    padding: 0;
-  }
-
-  .story-map-header > div:first-child {
-    min-width: 0;
-    max-width: min(100%, 280px);
+    z-index: 1;
+    box-shadow: none;
   }
 
   .story-day-tabs {
@@ -1806,11 +1784,6 @@ button.thumb-frame:focus-visible {
 
   h1 {
     font-size: 1.7rem;
-  }
-
-  .story-map-header {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .story-day-tabs {
