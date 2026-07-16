@@ -369,11 +369,30 @@ p {
 }
 
 .management-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   cursor: pointer;
   color: var(--text);
   font-weight: 800;
   list-style-position: outside;
   padding: 14px 16px;
+}
+
+.management-panel > summary span {
+  min-width: 0;
+}
+
+.management-panel > summary small {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 8px;
 }
 
 .management-panel > summary:focus-visible {
@@ -537,6 +556,27 @@ p {
 .section-heading p {
   margin-top: 4px;
   color: var(--muted);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-heading h2,
+.panel-heading h3 {
+  font-size: 1rem;
+}
+
+.panel-heading span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 8px;
 }
 
 .invite-card,

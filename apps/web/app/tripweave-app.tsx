@@ -279,6 +279,13 @@ function OwnerWorkspace() {
       ),
     [media],
   );
+  const openReviewCount =
+    reconstruction?.reviewItems.filter((item) => item.status === "open")
+      .length ?? 0;
+  const activeMemberCount = members.filter((member) => !member.removedAt).length;
+  const activeShareCount =
+    publications?.shareLinks.filter((link) => link.status === "active").length ??
+    0;
 
   const loadTrips = useCallback(
     async (preferredTripId: string | null = null) => {
@@ -1248,7 +1255,14 @@ function OwnerWorkspace() {
 
         <aside className="trip-management" aria-label="Trip management">
           <details className="management-panel" id="photos-panel" open>
-            <summary>Photos</summary>
+            <summary>
+              <span>Photos</span>
+              {selectedTrip ? (
+                <small>
+                  {media.length} photo{media.length === 1 ? "" : "s"}
+                </small>
+              ) : null}
+            </summary>
             {selectedTrip ? (
               <div className="stack">
                 <div
@@ -1257,7 +1271,7 @@ function OwnerWorkspace() {
                   onDrop={onDrop}
                 >
                   <label>
-                    Add JPEG or HEIC images
+                    Add photos
                     <input
                       accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
                       multiple
@@ -1265,7 +1279,7 @@ function OwnerWorkspace() {
                       onChange={onFileInput}
                     />
                   </label>
-                  <p>Drag files here or use the file picker.</p>
+                  <p>JPEG and HEIC</p>
                 </div>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
                 {overallProgress > 0 ? (
@@ -1286,9 +1300,11 @@ function OwnerWorkspace() {
                   onCancel={cancelUpload}
                   onRetry={retryUpload}
                 />
-                <div>
+                <div className="panel-heading">
                   <h2 id="media-title">Photo library</h2>
-                  {hasProcessingMedia ? <p>Preparing new photos...</p> : null}
+                  <span>
+                    {hasProcessingMedia ? "Preparing" : "Ready"}
+                  </span>
                 </div>
                 {mediaError ? <p className="error">{mediaError}</p> : null}
                 <MediaList
@@ -1311,9 +1327,14 @@ function OwnerWorkspace() {
 
           {selectedTrip?.role === "owner" ? (
             <details className="management-panel" id="travelers-panel">
-              <summary>Travelers</summary>
+              <summary>
+                <span>Travelers</span>
+                <small>
+                  {activeMemberCount} member
+                  {activeMemberCount === 1 ? "" : "s"}
+                </small>
+              </summary>
               <div className="stack">
-                <p>Invite travelers to add their photos to this trip.</p>
                 {collaborationError ? (
                   <p className="error">{collaborationError}</p>
                 ) : null}
@@ -1354,7 +1375,12 @@ function OwnerWorkspace() {
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <details className="management-panel" id="review-panel">
-              <summary>Review</summary>
+              <summary>
+                <span>Review</span>
+                <small>
+                  {openReviewCount} issue{openReviewCount === 1 ? "" : "s"}
+                </small>
+              </summary>
               <div className="stack">
                 <ReconstructionOutline
                   reconstruction={reconstruction}
@@ -1376,9 +1402,14 @@ function OwnerWorkspace() {
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <details className="management-panel" id="publish-panel">
-              <summary>Publish</summary>
+              <summary>
+                <span>Publish</span>
+                <small>
+                  {activeShareCount} active link
+                  {activeShareCount === 1 ? "" : "s"}
+                </small>
+              </summary>
               <div className="stack">
-                <p>Create a shareable story link with private originals hidden.</p>
                 <div className="button-row">
                   <button type="button" onClick={publishTrip} disabled={isBusy}>
                     Publish
@@ -1412,7 +1443,10 @@ function OwnerWorkspace() {
           ) : null}
 
           <details className="management-panel" id="settings-panel">
-            <summary>Settings</summary>
+            <summary>
+              <span>Settings</span>
+              {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
+            </summary>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (
                 <>
