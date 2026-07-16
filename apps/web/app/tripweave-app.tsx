@@ -2330,6 +2330,26 @@ function storyViewLabel(viewMode: ViewMode): string {
   }
 }
 
+const storyDayColors = ["#e87856", "#8467b7", "#2fa7a2", "#d1a13d", "#4b7cc4"];
+
+function storyDayColorMap(
+  model: ReturnType<typeof buildStoryModel>,
+): Map<string, string> {
+  const dayIds = Array.from(
+    new Set([
+      ...model.stops.map((stop) => stop.dayId),
+      ...model.media.map((item) => item.dayId),
+      ...model.legs.map((leg) => leg.dayId),
+    ]),
+  );
+  return new Map(
+    dayIds.map((dayId, index) => [
+      dayId,
+      storyDayColors[index % storyDayColors.length],
+    ]),
+  );
+}
+
 function StoryMapCanvas({
   model,
   state,
@@ -2351,6 +2371,7 @@ function StoryMapCanvas({
     stateRef.current = state;
   }, [state]);
 
+  const dayColorMap = useMemo(() => storyDayColorMap(model), [model]);
   const routeCollection = useMemo(
     () => ({
       type: "FeatureCollection" as const,
@@ -2362,12 +2383,13 @@ function StoryMapCanvas({
           properties: {
             id: leg.id,
             dayId: leg.dayId,
+            dayColor: dayColorMap.get(leg.dayId) ?? storyDayColors[0],
             routeSource: leg.routeSource,
           },
           geometry: leg.geometry,
         })),
     }),
-    [model.legs],
+    [dayColorMap, model.legs],
   );
   const stopCollection = useMemo(
     () => ({
@@ -2380,6 +2402,7 @@ function StoryMapCanvas({
           properties: {
             id: stop.id,
             dayId: stop.dayId,
+            dayColor: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
             label: stop.label,
             selected: stop.id === state.selectedStopId,
           },
@@ -2389,7 +2412,7 @@ function StoryMapCanvas({
           },
         })),
     }),
-    [model.stops, state.selectedStopId],
+    [dayColorMap, model.stops, state.selectedStopId],
   );
   const mediaCollection = useMemo(
     () => ({
@@ -2402,6 +2425,7 @@ function StoryMapCanvas({
           properties: {
             id: item.id,
             dayId: item.dayId,
+            dayColor: dayColorMap.get(item.dayId) ?? storyDayColors[0],
             stopId: item.stopId,
             momentId: item.momentId,
             contributorMemberId: item.contributorMemberId,
@@ -2413,7 +2437,7 @@ function StoryMapCanvas({
           },
         })),
     }),
-    [model.media, state.selectedMediaId],
+    [dayColorMap, model.media, state.selectedMediaId],
   );
   const hasMapData =
     routeCollection.features.length > 0 ||
@@ -2470,7 +2494,7 @@ function StoryMapCanvas({
         source: "trip-routes",
         filter: ["!=", ["get", "routeSource"], "photo_inferred"],
         paint: {
-          "line-color": "#174d43",
+          "line-color": ["get", "dayColor"],
           "line-width": 4,
           "line-opacity": 0.9,
         },
@@ -2481,10 +2505,10 @@ function StoryMapCanvas({
         source: "trip-routes",
         filter: ["==", ["get", "routeSource"], "photo_inferred"],
         paint: {
-          "line-color": "#6e7f8f",
-          "line-width": 3,
+          "line-color": ["get", "dayColor"],
+          "line-width": 3.4,
           "line-dasharray": [2, 2],
-          "line-opacity": 0.75,
+          "line-opacity": 0.82,
         },
       });
       map.addLayer({
@@ -2493,7 +2517,7 @@ function StoryMapCanvas({
         source: "trip-media",
         filter: ["has", "point_count"],
         paint: {
-          "circle-color": "#2457a6",
+          "circle-color": "#2f6f75",
           "circle-radius": ["step", ["get", "point_count"], 16, 20, 22, 80, 30],
           "circle-opacity": 0.82,
         },
@@ -2508,7 +2532,7 @@ function StoryMapCanvas({
             "case",
             ["==", ["get", "selected"], true],
             "#9f2d20",
-            "#23695b",
+            ["get", "dayColor"],
           ],
           "circle-radius": ["case", ["==", ["get", "selected"], true], 8, 5],
           "circle-stroke-color": "#ffffff",
@@ -2524,11 +2548,11 @@ function StoryMapCanvas({
             "case",
             ["==", ["get", "selected"], true],
             "#9f2d20",
-            "#17202a",
+            ["get", "dayColor"],
           ],
-          "circle-radius": ["case", ["==", ["get", "selected"], true], 11, 8],
+          "circle-radius": ["case", ["==", ["get", "selected"], true], 13, 10],
           "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 3,
         },
       });
       map.on("click", "stops", (event) => {
