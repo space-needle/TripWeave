@@ -36,6 +36,7 @@ import type {
 } from "./api-types";
 import {
   EVERYONE,
+  StoryMediaPoint,
   StoryMapState,
   ViewMode,
   advancePlayback,
@@ -52,6 +53,14 @@ import {
   setContributorFilter,
   startPlayback,
 } from "./story-map-state";
+
+type GalleryPhoto = {
+  id: string;
+  imageUrl: string | null;
+  filename: string | null;
+  contributor: string;
+  capturedAt: string | null;
+};
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
@@ -1930,6 +1939,11 @@ function TripStoryExplorer({
   const latestStateRef = useRef(state);
   const skipNextTimelineScrollRef = useRef(false);
   const reducedMotion = useReducedMotion();
+  const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
+  const galleryPhotos = useMemo(
+    () => filteredModel.media.map(galleryPhotoFromStoryMedia),
+    [filteredModel.media],
+  );
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -2047,6 +2061,16 @@ function TripStoryExplorer({
     }
   }
 
+  function openTimelinePhoto(
+    mediaId: string,
+    momentId: string,
+    stopId: string,
+    dayId: string,
+  ) {
+    onStateChange(selectStoryMedia(state, mediaId, momentId, stopId, dayId));
+    setGalleryMediaId(mediaId);
+  }
+
   const selectedLabel =
     selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
   const activeDay = reconstruction.days.find(
@@ -2121,6 +2145,18 @@ function TripStoryExplorer({
             >
               Play
             </button>
+            {galleryPhotos.length > 0 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setGalleryMediaId(
+                    state.selectedMediaId ?? galleryPhotos[0]?.id ?? null,
+                  )
+                }
+              >
+                Browse photos
+              </button>
+            ) : null}
           </div>
         </div>
         <div className="story-toolbar" aria-label="Story controls">
@@ -2244,14 +2280,11 @@ function TripStoryExplorer({
                           type="button"
                           disabled={!canSelectTimelineStop()}
                           onClick={() =>
-                            onStateChange(
-                              selectStoryMedia(
-                                state,
-                                featuredMedia.id,
-                                featuredMoment.id,
-                                stop.id,
-                                day.id,
-                              ),
+                            openTimelinePhoto(
+                              featuredMedia.id,
+                              featuredMoment.id,
+                              stop.id,
+                              day.id,
                             )
                           }
                         >
@@ -2309,14 +2342,11 @@ function TripStoryExplorer({
                                   type="button"
                                   disabled={!canSelectTimelineStop()}
                                   onClick={() =>
-                                    onStateChange(
-                                      selectStoryMedia(
-                                        state,
-                                        item.id,
-                                        moment.id,
-                                        stop.id,
-                                        day.id,
-                                      ),
+                                    openTimelinePhoto(
+                                      item.id,
+                                      moment.id,
+                                      stop.id,
+                                      day.id,
                                     )
                                   }
                                 >
@@ -2343,6 +2373,179 @@ function TripStoryExplorer({
           ))}
         </section>
       </aside>
+      <PhotoBrowser
+        photos={galleryPhotos}
+        selectedPhotoId={galleryMediaId}
+        timezoneId={timezoneId}
+        onClose={() => setGalleryMediaId(null)}
+        onSelect={(photoId) => {
+          const next = filteredModel.media.find((item) => item.id === photoId);
+          if (next) {
+            onStateChange(
+              selectStoryMedia(
+                state,
+                next.id,
+                next.momentId,
+                next.stopId,
+                next.dayId,
+              ),
+            );
+          }
+          setGalleryMediaId(photoId);
+        }}
+      />
+    </div>
+  );
+}
+
+function galleryPhotoFromStoryMedia(item: StoryMediaPoint): GalleryPhoto {
+  return {
+    id: item.id,
+    imageUrl: item.thumbnailUrl,
+    filename: item.filename,
+    contributor: item.contributor,
+    capturedAt: item.capturedAt,
+  };
+}
+
+function galleryPhotoFromMediaItem(item: MediaItemResponse): GalleryPhoto {
+  return {
+    id: item.id,
+    imageUrl: item.thumbnail?.downloadUrl ?? null,
+    filename: item.filename,
+    contributor: item.contributor,
+    capturedAt: item.capturedAt ?? null,
+  };
+}
+
+function PhotoBrowser({
+  photos,
+  selectedPhotoId,
+  timezoneId,
+  onClose,
+  onSelect,
+}: {
+  photos: GalleryPhoto[];
+  selectedPhotoId: string | null;
+  timezoneId?: string;
+  onClose: () => void;
+  onSelect: (photoId: string) => void;
+}) {
+  const selectedIndex = photos.findIndex((photo) => photo.id === selectedPhotoId);
+  const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
+  const hasMultiple = photos.length > 1;
+
+  const moveBy = useCallback(
+    (delta: number) => {
+      if (!selectedPhoto || photos.length === 0) {
+        return;
+      }
+      const nextIndex = (selectedIndex + delta + photos.length) % photos.length;
+      onSelect(photos[nextIndex].id);
+    },
+    [onSelect, photos, selectedIndex, selectedPhoto],
+  );
+
+  useEffect(() => {
+    if (!selectedPhoto) {
+      return;
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      } else if (event.key === "ArrowLeft") {
+        moveBy(-1);
+      } else if (event.key === "ArrowRight") {
+        moveBy(1);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [moveBy, onClose, selectedPhoto]);
+
+  if (!selectedPhoto) {
+    return null;
+  }
+
+  return (
+    <div
+      className="photo-browser"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Photo browser"
+    >
+      <button
+        className="photo-browser-backdrop"
+        type="button"
+        aria-label="Close photo browser"
+        onClick={onClose}
+      />
+      <div className="photo-browser-panel">
+        <div className="photo-browser-toolbar">
+          <div>
+            <strong>{selectedPhoto.filename ?? "Untitled photo"}</strong>
+            <small>
+              {selectedPhoto.contributor} ·{" "}
+              {formatDate(selectedPhoto.capturedAt, timezoneId)}
+            </small>
+          </div>
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="photo-browser-stage">
+          {hasMultiple ? (
+            <button
+              className="photo-browser-nav previous"
+              type="button"
+              aria-label="Previous photo"
+              onClick={() => moveBy(-1)}
+            >
+              ‹
+            </button>
+          ) : null}
+          {selectedPhoto.imageUrl ? (
+            <img
+              src={selectedPhoto.imageUrl}
+              alt={selectedPhoto.filename ?? "Trip photo"}
+            />
+          ) : (
+            <div className="photo-browser-missing">Preview unavailable</div>
+          )}
+          {hasMultiple ? (
+            <button
+              className="photo-browser-nav next"
+              type="button"
+              aria-label="Next photo"
+              onClick={() => moveBy(1)}
+            >
+              ›
+            </button>
+          ) : null}
+        </div>
+        <div className="photo-browser-footer">
+          <span>
+            {selectedIndex + 1} / {photos.length}
+          </span>
+          <div className="photo-browser-strip" aria-label="Photos">
+            {photos.map((photo) => (
+              <button
+                className={photo.id === selectedPhoto.id ? "active" : ""}
+                key={photo.id}
+                type="button"
+                aria-label={photo.filename ?? "Trip photo"}
+                onClick={() => onSelect(photo.id)}
+              >
+                {photo.imageUrl ? (
+                  <img src={photo.imageUrl} alt="" loading="lazy" />
+                ) : (
+                  <span>{photo.contributor.slice(0, 1)}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3528,6 +3731,11 @@ function MediaList({
   onDelete?: (item: MediaItemResponse) => void;
   timezoneId?: string;
 }) {
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const galleryPhotos = useMemo(
+    () => media.map(galleryPhotoFromMediaItem),
+    [media],
+  );
   if (media.length === 0) {
     return <p>No processed media yet.</p>;
   }
@@ -3538,107 +3746,123 @@ function MediaList({
     excluded: "Excluded",
   };
   return (
-    <div className="media-list" role="list">
-      {media.map((item) => (
-        <article className="media-row" key={item.id} role="listitem">
-          <div className="thumb-frame">
-            {item.thumbnail?.downloadUrl ? (
-              <img src={item.thumbnail.downloadUrl} alt="" />
-            ) : (
-              <span>{item.processingState}</span>
-            )}
-          </div>
-          <div className="media-details">
-            <strong>{item.filename ?? "Untitled image"}</strong>
-            <small>
-              {item.processingState} · {item.contributor}
-              {(item.similarityGroupCount ?? 1) > 1
-                ? ` · stack of ${item.similarityGroupCount ?? 1}${
-                    item.isSimilarityRepresentative ? " · representative" : ""
-                  }`
-                : ""}
-            </small>
-            <small className="media-state">
-              {visibilityLabels[item.visibility] ?? item.visibility}
-              {item.includeInStory ? " · included in story" : ""}
-            </small>
-            <dl>
-              <div>
-                <dt>Captured</dt>
-                <dd>{formatDate(item.capturedAt ?? null, timezoneId)}</dd>
-              </div>
-              <div>
-                <dt>GPS</dt>
-                <dd>{item.gpsPresent ? "Present" : "Not found"}</dd>
-              </div>
-              <div>
-                <dt>Dimensions</dt>
-                <dd>
-                  {item.width && item.height
-                    ? `${item.width} × ${item.height}`
-                    : "Unknown"}
-                </dd>
-              </div>
-            </dl>
-            {item.errorMessage ? (
-              <p className="error">{item.errorMessage}</p>
-            ) : null}
-            {item.processingState === "failed" ? (
-              <button type="button" onClick={() => onRetry(item)}>
-                Retry processing
-              </button>
-            ) : null}
-            {onVisibilityChange ? (
-              <div className="button-row">
-                <button
-                  type="button"
-                  className={item.visibility === "trip" ? "active" : ""}
-                  aria-pressed={item.visibility === "trip"}
-                  onClick={() => onVisibilityChange(item, "trip")}
-                >
-                  Trip members
+    <>
+      <div className="media-list" role="list">
+        {media.map((item) => (
+          <article className="media-row" key={item.id} role="listitem">
+            <button
+              className="thumb-frame"
+              type="button"
+              onClick={() => setSelectedPhotoId(item.id)}
+              aria-label={`Open ${item.filename ?? "photo"}`}
+            >
+              {item.thumbnail?.downloadUrl ? (
+                <img src={item.thumbnail.downloadUrl} alt="" />
+              ) : (
+                <span>{item.processingState}</span>
+              )}
+            </button>
+            <div className="media-details">
+              <strong>{item.filename ?? "Untitled image"}</strong>
+              <small>
+                {item.processingState} · {item.contributor}
+                {(item.similarityGroupCount ?? 1) > 1
+                  ? ` · stack of ${item.similarityGroupCount ?? 1}${
+                      item.isSimilarityRepresentative
+                        ? " · representative"
+                        : ""
+                    }`
+                  : ""}
+              </small>
+              <small className="media-state">
+                {visibilityLabels[item.visibility] ?? item.visibility}
+                {item.includeInStory ? " · included in story" : ""}
+              </small>
+              <dl>
+                <div>
+                  <dt>Captured</dt>
+                  <dd>{formatDate(item.capturedAt ?? null, timezoneId)}</dd>
+                </div>
+                <div>
+                  <dt>GPS</dt>
+                  <dd>{item.gpsPresent ? "Present" : "Not found"}</dd>
+                </div>
+                <div>
+                  <dt>Dimensions</dt>
+                  <dd>
+                    {item.width && item.height
+                      ? `${item.width} × ${item.height}`
+                      : "Unknown"}
+                  </dd>
+                </div>
+              </dl>
+              {item.errorMessage ? (
+                <p className="error">{item.errorMessage}</p>
+              ) : null}
+              {item.processingState === "failed" ? (
+                <button type="button" onClick={() => onRetry(item)}>
+                  Retry processing
                 </button>
-                <button
-                  type="button"
-                  className={
-                    item.visibility === "story" && item.includeInStory
-                      ? "active"
-                      : ""
-                  }
-                  aria-pressed={
-                    item.visibility === "story" && item.includeInStory
-                  }
-                  onClick={() => onVisibilityChange(item, "story")}
-                >
-                  Publishable
-                </button>
-                <button
-                  type="button"
-                  className={item.visibility === "private" ? "active" : ""}
-                  aria-pressed={item.visibility === "private"}
-                  onClick={() => onVisibilityChange(item, "private")}
-                >
-                  Private
-                </button>
-                <button
-                  type="button"
-                  className={item.visibility === "excluded" ? "active" : ""}
-                  aria-pressed={item.visibility === "excluded"}
-                  onClick={() => onVisibilityChange(item, "excluded")}
-                >
-                  Exclude
-                </button>
-                {onDelete ? (
-                  <button type="button" onClick={() => onDelete(item)}>
-                    Delete
+              ) : null}
+              {onVisibilityChange ? (
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className={item.visibility === "trip" ? "active" : ""}
+                    aria-pressed={item.visibility === "trip"}
+                    onClick={() => onVisibilityChange(item, "trip")}
+                  >
+                    Trip members
                   </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </article>
-      ))}
-    </div>
+                  <button
+                    type="button"
+                    className={
+                      item.visibility === "story" && item.includeInStory
+                        ? "active"
+                        : ""
+                    }
+                    aria-pressed={
+                      item.visibility === "story" && item.includeInStory
+                    }
+                    onClick={() => onVisibilityChange(item, "story")}
+                  >
+                    Publishable
+                  </button>
+                  <button
+                    type="button"
+                    className={item.visibility === "private" ? "active" : ""}
+                    aria-pressed={item.visibility === "private"}
+                    onClick={() => onVisibilityChange(item, "private")}
+                  >
+                    Private
+                  </button>
+                  <button
+                    type="button"
+                    className={item.visibility === "excluded" ? "active" : ""}
+                    aria-pressed={item.visibility === "excluded"}
+                    onClick={() => onVisibilityChange(item, "excluded")}
+                  >
+                    Exclude
+                  </button>
+                  {onDelete ? (
+                    <button type="button" onClick={() => onDelete(item)}>
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+      <PhotoBrowser
+        photos={galleryPhotos}
+        selectedPhotoId={selectedPhotoId}
+        timezoneId={timezoneId}
+        onClose={() => setSelectedPhotoId(null)}
+        onSelect={setSelectedPhotoId}
+      />
+    </>
   );
 }
 
