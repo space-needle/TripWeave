@@ -65,6 +65,7 @@ type GalleryPhoto = {
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
+type MobileWorkspaceTab = "story" | "photos" | "share" | "more";
 
 type TripForm = {
   title: string;
@@ -259,6 +260,8 @@ function OwnerWorkspace() {
   const [latestShareUrl, setLatestShareUrl] = useState("");
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
+  const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
+  const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
   >({});
@@ -1144,12 +1147,59 @@ function OwnerWorkspace() {
 
       {tripError ? <p className="error">{tripError}</p> : null}
 
+      <nav className="mobile-workspace-tabs" aria-label="Trip sections">
+        {(
+          [
+            ["story", "Story"],
+            ["photos", "Photos"],
+            ["share", "Share"],
+            ["more", "More"],
+          ] as Array<[MobileWorkspaceTab, string]>
+        ).map(([tab, label]) => (
+          <button
+            type="button"
+            aria-pressed={mobileTab === tab}
+            className={mobileTab === tab ? "active" : ""}
+            key={tab}
+            onClick={() => setMobileTab(tab)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       <section className="workspace trip-workspace">
-        <aside className="trip-nav panel" aria-label="Trip navigation">
+        <aside
+          className={`trip-nav panel ${
+            mobileTab === "more" ? "mobile-tab-active" : ""
+          }`}
+          aria-label="Trip navigation"
+          data-mobile-tab-panel="more"
+        >
           <div className="trip-brand">
             <strong>My Trip</strong>
             <span>{user.display_name}</span>
           </div>
+          <div className="mobile-account-card">
+            <div>
+              <span>Signed in</span>
+              <strong>{user.display_name}</strong>
+            </div>
+            <button type="button" onClick={logout} disabled={isBusy}>
+              Logout
+            </button>
+          </div>
+          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+            <div className="mobile-story-actions">
+              <button
+                type="button"
+                onClick={runReconstruction}
+                disabled={isBusy}
+              >
+                Refresh story
+              </button>
+            </div>
+          ) : null}
           <nav className="trip-primary-nav" aria-label="Workspace sections">
             <a href="#trip-stage-title" className="active">
               Story
@@ -1206,7 +1256,13 @@ function OwnerWorkspace() {
           </details>
         </aside>
 
-        <section className="trip-stage" aria-labelledby="trip-stage-title">
+        <section
+          className={`trip-stage ${
+            mobileTab === "story" ? "mobile-tab-active" : ""
+          }`}
+          aria-labelledby="trip-stage-title"
+          data-mobile-tab-panel="story"
+        >
           {selectedTrip ? (
             <>
               <div className="trip-stage-header">
@@ -1264,7 +1320,14 @@ function OwnerWorkspace() {
         </section>
 
         <aside className="trip-management" aria-label="Trip management">
-          <details className="management-panel" id="photos-panel" open>
+          <details
+            className={`management-panel ${
+              mobileTab === "photos" ? "mobile-tab-active" : ""
+            }`}
+            id="photos-panel"
+            open={isMobileWorkspace ? mobileTab === "photos" : true}
+            data-mobile-tab-panel="photos"
+          >
             <summary>
               <span>Photos</span>
               {selectedTrip ? (
@@ -1336,7 +1399,14 @@ function OwnerWorkspace() {
           </details>
 
           {selectedTrip?.role === "owner" ? (
-            <details className="management-panel" id="travelers-panel">
+            <details
+              className={`management-panel ${
+                mobileTab === "more" ? "mobile-tab-active" : ""
+              }`}
+              id="travelers-panel"
+              open={isMobileWorkspace ? mobileTab === "more" : undefined}
+              data-mobile-tab-panel="more"
+            >
               <summary>
                 <span>Travelers</span>
                 <small>
@@ -1384,7 +1454,14 @@ function OwnerWorkspace() {
           ) : null}
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <details className="management-panel" id="review-panel">
+            <details
+              className={`management-panel ${
+                mobileTab === "more" ? "mobile-tab-active" : ""
+              }`}
+              id="review-panel"
+              open={isMobileWorkspace ? mobileTab === "more" : undefined}
+              data-mobile-tab-panel="more"
+            >
               <summary>
                 <span>Review</span>
                 <small>
@@ -1411,7 +1488,14 @@ function OwnerWorkspace() {
           ) : null}
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <details className="management-panel" id="publish-panel">
+            <details
+              className={`management-panel ${
+                mobileTab === "share" ? "mobile-tab-active" : ""
+              }`}
+              id="publish-panel"
+              open={isMobileWorkspace ? mobileTab === "share" : undefined}
+              data-mobile-tab-panel="share"
+            >
               <summary>
                 <span>Publish</span>
                 <small>
@@ -1452,7 +1536,14 @@ function OwnerWorkspace() {
             </details>
           ) : null}
 
-          <details className="management-panel" id="settings-panel">
+          <details
+            className={`management-panel ${
+              mobileTab === "more" ? "mobile-tab-active" : ""
+            }`}
+            id="settings-panel"
+            open={isMobileWorkspace ? mobileTab === "more" : undefined}
+            data-mobile-tab-panel="more"
+          >
             <summary>
               <span>Settings</span>
               {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
@@ -3334,6 +3425,25 @@ function useReducedMotion(): boolean {
     return () => query.removeEventListener("change", listener);
   }, []);
   return reducedMotion;
+}
+
+function useMediaQuery(queryText: string): boolean {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return false;
+    }
+    return window.matchMedia(queryText).matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+    const query = window.matchMedia(queryText);
+    const listener = (event: MediaQueryListEvent) => setMatches(event.matches);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
+  }, [queryText]);
+  return matches;
 }
 
 function TripFields({
