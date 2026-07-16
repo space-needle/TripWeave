@@ -3232,17 +3232,20 @@ function StoryMapCanvas({
       element.style.setProperty("--stop-color", color);
       const bubble = document.createElement("span");
       bubble.className = "photo-stop-marker-image";
+      const mediaFrame = document.createElement("span");
+      mediaFrame.className = "photo-stop-marker-frame";
       if (featuredMedia?.thumbnailUrl) {
         const image = document.createElement("img");
         image.src = featuredMedia.thumbnailUrl;
         image.alt = "";
         image.loading = "lazy";
-        bubble.appendChild(image);
+        mediaFrame.appendChild(image);
       } else {
         const fallback = document.createElement("span");
         fallback.textContent = String(stop.position);
-        bubble.appendChild(fallback);
+        mediaFrame.appendChild(fallback);
       }
+      bubble.appendChild(mediaFrame);
       if (count > 1) {
         const badge = document.createElement("small");
         badge.textContent = String(count);

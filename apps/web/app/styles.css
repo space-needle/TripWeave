@@ -995,18 +995,27 @@ p {
   outline-offset: 7px;
 }
 
-.photo-stop-marker img,
-.photo-stop-marker-image > span {
+.photo-stop-marker-frame {
   width: 100%;
   height: 100%;
+  display: block;
+  overflow: hidden;
   border-radius: 999px;
 }
 
+.photo-stop-marker img,
+.photo-stop-marker-frame > span {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
 .photo-stop-marker img {
+  display: block;
   object-fit: cover;
 }
 
-.photo-stop-marker-image > span {
+.photo-stop-marker-frame > span {
   display: grid;
   place-items: center;
   font-size: 1rem;
