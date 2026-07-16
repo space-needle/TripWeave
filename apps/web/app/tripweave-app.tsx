@@ -1007,6 +1007,23 @@ function OwnerWorkspace() {
     }
   }
 
+  async function renameStop(stopId: string, title: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "rename_stop",
+        payload: { stopId, title },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function publishTrip() {
     if (!selectedTrip) {
       return;
@@ -1299,6 +1316,7 @@ function OwnerWorkspace() {
                   reconstruction={reconstruction}
                   state={storyState}
                   onStateChange={setStoryState}
+                  onRenameStop={renameStop}
                   timezoneId={selectedTrip.timezoneId}
                 />
               ) : (
@@ -1999,11 +2017,13 @@ function TripStoryExplorer({
   reconstruction,
   state,
   onStateChange,
+  onRenameStop,
   timezoneId,
 }: {
   reconstruction: ReconstructionResponse | null;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
+  onRenameStop?: (stopId: string, title: string) => Promise<void>;
   timezoneId: string;
 }) {
   const model = useMemo(
@@ -2027,6 +2047,10 @@ function TripStoryExplorer({
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
+  const [editingStopId, setEditingStopId] = useState<string | null>(null);
+  const [stopTitleDraft, setStopTitleDraft] = useState("");
+  const [renameStopError, setRenameStopError] = useState("");
+  const [savingStopId, setSavingStopId] = useState<string | null>(null);
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
     [filteredModel.stops],
@@ -2189,6 +2213,36 @@ function TripStoryExplorer({
       selectedMediaId: null,
       mapControlMode: "STORY_CONTROLLED",
     });
+  }
+
+  function displayStopTitle(stop: ReconstructionResponse["days"][number]["stops"][number]): string {
+    return stop.title ?? stop.placeName ?? `Stop ${stop.position}`;
+  }
+
+  function startRenamingStop(
+    stop: ReconstructionResponse["days"][number]["stops"][number],
+  ) {
+    setEditingStopId(stop.id);
+    setStopTitleDraft(displayStopTitle(stop));
+    setRenameStopError("");
+  }
+
+  async function saveStopTitle(stopId: string) {
+    const nextTitle = stopTitleDraft.trim();
+    if (!onRenameStop || !nextTitle) {
+      return;
+    }
+    setSavingStopId(stopId);
+    setRenameStopError("");
+    try {
+      await onRenameStop(stopId, nextTitle);
+      setEditingStopId(null);
+      setStopTitleDraft("");
+    } catch (error) {
+      setRenameStopError(messageFrom(error));
+    } finally {
+      setSavingStopId(null);
+    }
   }
 
   const selectedLabel =
@@ -2376,24 +2430,80 @@ function TripStoryExplorer({
                       )}
                     </span>
                     <div className="timeline-stop-card">
-                      <button
-                        type="button"
-                        className="timeline-stop-button"
-                        disabled={!canSelectTimelineStop()}
-                        onClick={() =>
-                          onStateChange(selectStoryStop(state, stop.id, day.id))
-                        }
-                      >
-                        <span>
-                          {stop.title ??
-                            stop.placeName ??
-                            `Stop ${stop.position}`}
-                        </span>
-                        <small>
-                          {stop.mediaCount} photos · {stop.contributorCount}{" "}
-                          travelers
-                        </small>
-                      </button>
+                      {editingStopId === stop.id ? (
+                        <form
+                          className="timeline-stop-rename"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void saveStopTitle(stop.id);
+                          }}
+                        >
+                          <label>
+                            Stop name
+                            <input
+                              autoFocus
+                              value={stopTitleDraft}
+                              onChange={(event) =>
+                                setStopTitleDraft(event.target.value)
+                              }
+                              maxLength={255}
+                              required
+                            />
+                          </label>
+                          <div className="button-row">
+                            <button
+                              type="submit"
+                              disabled={
+                                savingStopId === stop.id || !stopTitleDraft.trim()
+                              }
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => {
+                                setEditingStopId(null);
+                                setStopTitleDraft("");
+                                setRenameStopError("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {renameStopError ? (
+                            <p className="error">{renameStopError}</p>
+                          ) : null}
+                        </form>
+                      ) : (
+                        <div className="timeline-stop-heading">
+                          <button
+                            type="button"
+                            className="timeline-stop-button"
+                            disabled={!canSelectTimelineStop()}
+                            onClick={() =>
+                              onStateChange(
+                                selectStoryStop(state, stop.id, day.id),
+                              )
+                            }
+                          >
+                            <span>{displayStopTitle(stop)}</span>
+                            <small>
+                              {stop.mediaCount} photos ·{" "}
+                              {stop.contributorCount} travelers
+                            </small>
+                          </button>
+                          {onRenameStop ? (
+                            <button
+                              type="button"
+                              className="timeline-stop-edit"
+                              onClick={() => startRenamingStop(stop)}
+                            >
+                              Rename
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
                       {featuredMedia && featuredMoment ? (
                         <button
                           className="timeline-featured-photo"

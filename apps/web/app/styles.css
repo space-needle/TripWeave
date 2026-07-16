@@ -457,6 +457,12 @@ p {
   color: var(--danger);
 }
 
+.secondary-button {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
 .link-button {
   min-height: 0;
   justify-self: start;
@@ -1205,6 +1211,8 @@ p {
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--text);
+  text-align: left;
   padding: 0;
 }
 
@@ -1227,6 +1235,31 @@ p {
   background: #fff;
   padding: 12px;
   box-shadow: 0 10px 28px rgb(23 32 42 / 6%);
+}
+
+.timeline-stop-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.timeline-stop-edit {
+  min-height: 30px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  padding: 5px 8px;
+}
+
+.timeline-stop-rename {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-stop-rename .button-row button {
+  flex: 1 1 90px;
 }
 
 .timeline-stop.active .timeline-stop-card {
