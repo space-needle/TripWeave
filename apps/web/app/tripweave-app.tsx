@@ -1037,7 +1037,7 @@ function OwnerWorkspace() {
   if (loadState === "loading") {
     return (
       <main className="app-shell">
-        <p className="eyebrow">TripWeave local MVP</p>
+        <p className="eyebrow">TripWeave</p>
         <h1>Loading workspace</h1>
       </main>
     );
@@ -1047,7 +1047,7 @@ function OwnerWorkspace() {
     return (
       <main className="auth-shell">
         <section className="auth-panel" aria-labelledby="auth-title">
-          <p className="eyebrow">TripWeave local MVP</p>
+          <p className="eyebrow">TripWeave</p>
           <h1 id="auth-title">
             {mode === "register" ? "Create owner account" : "Sign in"}
           </h1>
@@ -1117,9 +1117,9 @@ function OwnerWorkspace() {
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">TripWeave local MVP</p>
-          <h1>Trips</h1>
-          <p>Signed in as {user.display_name}</p>
+          <p className="eyebrow">TripWeave</p>
+          <h1>My trips</h1>
+          <p>{user.display_name}</p>
         </div>
         <button type="button" onClick={logout} disabled={isBusy}>
           Logout
@@ -1242,7 +1242,7 @@ function OwnerWorkspace() {
               <h2 id="trip-stage-title">Choose or create a trip</h2>
               <p>
                 TripWeave turns shared photos into a map and timeline once a
-                trip has media.
+                trip has photos.
               </p>
             </div>
           )}
@@ -1289,8 +1289,8 @@ function OwnerWorkspace() {
                   onRetry={retryUpload}
                 />
                 <div>
-                  <h2 id="media-title">Media</h2>
-                  {hasProcessingMedia ? <p>Processing uploads...</p> : null}
+                  <h2 id="media-title">Photo library</h2>
+                  {hasProcessingMedia ? <p>Preparing new photos...</p> : null}
                 </div>
                 {mediaError ? <p className="error">{mediaError}</p> : null}
                 <MediaList
@@ -1315,7 +1315,7 @@ function OwnerWorkspace() {
             <details className="management-panel" id="travelers-panel">
               <summary>Travelers</summary>
               <div className="stack">
-                <p>Invite guest contributors and manage trip access.</p>
+                <p>Invite travelers to add their photos to this trip.</p>
                 {collaborationError ? (
                   <p className="error">{collaborationError}</p>
                 ) : null}
@@ -1325,7 +1325,7 @@ function OwnerWorkspace() {
                     onClick={createInvite}
                     disabled={isBusy}
                   >
-                    Create contributor link
+                    Create invite link
                   </button>
                   {latestInviteUrl ? (
                     <button type="button" onClick={copyInviteUrl}>
@@ -1380,10 +1380,10 @@ function OwnerWorkspace() {
             <details className="management-panel" id="publish-panel">
               <summary>Publish</summary>
               <div className="stack">
-                <p>Publish an immutable story version with sanitized assets.</p>
+                <p>Create a shareable story link with private originals hidden.</p>
                 <div className="button-row">
                   <button type="button" onClick={publishTrip} disabled={isBusy}>
-                    Publish story
+                    Publish
                   </button>
                   <button
                     className="danger"
@@ -1970,7 +1970,7 @@ function TripStoryExplorer({
   if (!reconstruction?.latestRun) {
     return (
       <div className="story-empty">
-        <p>Run reconstruction to create the synchronized map and timeline.</p>
+        <p>Refresh the story after adding photos to build the map and timeline.</p>
       </div>
     );
   }
@@ -2131,7 +2131,7 @@ function TripStoryExplorer({
         >
           <p className="screen-reader-map-summary">
             Map alternative: {filteredModel.stops.length} stops,{" "}
-            {filteredModel.media.length} media items, selected {selectedLabel}.
+            {filteredModel.media.length} photos, selected {selectedLabel}.
           </p>
           {reconstruction.days.map((day) => (
             <article
@@ -2704,7 +2704,7 @@ function StoryMapCanvas({
         <div className="map-empty-state">
           <strong>No mapped stops yet</strong>
           <span>
-            Upload GPS photos and run reconstruction to draw stops and routes.
+            Add GPS photos and refresh the story to draw stops and routes.
           </span>
         </div>
       ) : null}
