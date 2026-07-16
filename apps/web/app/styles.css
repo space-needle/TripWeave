@@ -1262,6 +1262,23 @@ p {
   flex: 1 1 90px;
 }
 
+.timeline-stop-merge {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-stop-merge button {
+  min-height: 30px;
+  flex: 1 1 120px;
+  font-size: 0.76rem;
+  padding: 5px 8px;
+}
+
+.timeline-stop-merge .error {
+  flex: 1 0 100%;
+}
+
 .timeline-stop.active .timeline-stop-card {
   border-color: #e87856;
   box-shadow: 0 12px 30px rgb(232 120 86 / 14%);

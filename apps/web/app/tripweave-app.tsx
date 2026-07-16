@@ -1024,6 +1024,23 @@ function OwnerWorkspace() {
     }
   }
 
+  async function mergeStops(sourceStopId: string, targetStopId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "merge_stops",
+        payload: { sourceStopId, targetStopId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function publishTrip() {
     if (!selectedTrip) {
       return;
@@ -1316,6 +1333,7 @@ function OwnerWorkspace() {
                   reconstruction={reconstruction}
                   state={storyState}
                   onStateChange={setStoryState}
+                  onMergeStops={mergeStops}
                   onRenameStop={renameStop}
                   timezoneId={selectedTrip.timezoneId}
                 />
@@ -2017,12 +2035,14 @@ function TripStoryExplorer({
   reconstruction,
   state,
   onStateChange,
+  onMergeStops,
   onRenameStop,
   timezoneId,
 }: {
   reconstruction: ReconstructionResponse | null;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
+  onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
   timezoneId: string;
 }) {
@@ -2051,6 +2071,8 @@ function TripStoryExplorer({
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [renameStopError, setRenameStopError] = useState("");
   const [savingStopId, setSavingStopId] = useState<string | null>(null);
+  const [mergeStopError, setMergeStopError] = useState("");
+  const [mergingStopKey, setMergingStopKey] = useState<string | null>(null);
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
     [filteredModel.stops],
@@ -2245,6 +2267,30 @@ function TripStoryExplorer({
     }
   }
 
+  async function mergeAdjacentStop(
+    sourceStopId: string,
+    targetStopId: string,
+    dayId: string,
+    direction: "previous" | "next",
+  ) {
+    if (!onMergeStops) {
+      return;
+    }
+    const key = `${sourceStopId}:${targetStopId}`;
+    setMergingStopKey(key);
+    setMergeStopError("");
+    try {
+      await onMergeStops(sourceStopId, targetStopId);
+      onStateChange(selectStoryStop(state, targetStopId, dayId));
+    } catch (error) {
+      setMergeStopError(
+        `Could not merge ${direction} stop. ${messageFrom(error)}`,
+      );
+    } finally {
+      setMergingStopKey(null);
+    }
+  }
+
   const selectedLabel =
     selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
   const activeDay = reconstruction.days.find(
@@ -2390,7 +2436,9 @@ function TripStoryExplorer({
                 <span>{day.title ?? `Day ${day.position}`}</span>
                 <small>{day.date}</small>
               </button>
-              {day.stops.map((stop) => {
+              {day.stops.map((stop, stopIndex) => {
+                const previousStop = day.stops[stopIndex - 1] ?? null;
+                const nextStop = day.stops[stopIndex + 1] ?? null;
                 const stopMedia = stop.moments.flatMap(
                   (moment) => moment.media,
                 );
@@ -2504,6 +2552,51 @@ function TripStoryExplorer({
                           ) : null}
                         </div>
                       )}
+                      {onMergeStops && (previousStop || nextStop) ? (
+                        <div className="timeline-stop-merge">
+                          {previousStop ? (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={
+                                mergingStopKey === `${previousStop.id}:${stop.id}`
+                              }
+                              onClick={() =>
+                                void mergeAdjacentStop(
+                                  previousStop.id,
+                                  stop.id,
+                                  day.id,
+                                  "previous",
+                                )
+                              }
+                            >
+                              Merge previous
+                            </button>
+                          ) : null}
+                          {nextStop ? (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={
+                                mergingStopKey === `${nextStop.id}:${stop.id}`
+                              }
+                              onClick={() =>
+                                void mergeAdjacentStop(
+                                  nextStop.id,
+                                  stop.id,
+                                  day.id,
+                                  "next",
+                                )
+                              }
+                            >
+                              Merge next
+                            </button>
+                          ) : null}
+                          {mergeStopError ? (
+                            <p className="error">{mergeStopError}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {featuredMedia && featuredMoment ? (
                         <button
                           className="timeline-featured-photo"
