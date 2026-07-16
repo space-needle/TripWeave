@@ -852,9 +852,22 @@ p {
   z-index: 1;
   content: "";
   background:
-    radial-gradient(circle at 18% 24%, rgb(255 255 255 / 38%) 0 9%, transparent 10%),
-    radial-gradient(circle at 76% 68%, rgb(128 166 151 / 24%) 0 12%, transparent 13%),
-    linear-gradient(132deg, transparent 0 43%, rgb(98 135 151 / 28%) 44% 47%, transparent 48%),
+    radial-gradient(
+      circle at 18% 24%,
+      rgb(255 255 255 / 38%) 0 9%,
+      transparent 10%
+    ),
+    radial-gradient(
+      circle at 76% 68%,
+      rgb(128 166 151 / 24%) 0 12%,
+      transparent 13%
+    ),
+    linear-gradient(
+      132deg,
+      transparent 0 43%,
+      rgb(98 135 151 / 28%) 44% 47%,
+      transparent 48%
+    ),
     linear-gradient(0deg, rgb(112 137 128 / 22%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(112 137 128 / 22%) 1px, transparent 1px),
     linear-gradient(0deg, rgb(194 216 207 / 42%), rgb(230 239 233 / 58%));
@@ -936,11 +949,26 @@ p {
   font-weight: 800;
 }
 
+.photo-map-marker-anchor {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.photo-map-marker-anchor > .photo-day-marker,
+.photo-map-marker-anchor > .photo-stop-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
 .photo-stop-marker {
   position: relative;
+  width: 58px;
+  height: 58px;
   display: grid;
   justify-items: center;
-  gap: 18px;
   overflow: visible;
   border: 0;
   background: transparent;
@@ -966,22 +994,8 @@ p {
     0 10px 24px rgb(23 32 42 / 24%);
 }
 
-.photo-stop-marker-image::after {
-  position: absolute;
-  bottom: -14px;
-  left: 50%;
-  width: 12px;
-  aspect-ratio: 1;
-  border: 3px solid #fff;
-  border-radius: 999px;
-  content: "";
-  background: var(--stop-color, var(--accent));
-  transform: translateX(-50%);
-  box-shadow: 0 4px 8px rgb(23 32 42 / 18%);
-}
-
 .photo-stop-marker.active {
-  transform: translateY(-3px);
+  transform: translate(-50%, -50%);
 }
 
 .photo-stop-marker.active .photo-stop-marker-image {
@@ -1042,6 +1056,9 @@ p {
 }
 
 .photo-stop-marker-label {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
   max-width: 116px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1054,6 +1071,7 @@ p {
   padding: 4px 8px;
   text-align: center;
   text-overflow: ellipsis;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 

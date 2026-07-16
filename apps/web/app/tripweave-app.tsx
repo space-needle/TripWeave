@@ -37,7 +37,9 @@ import type {
 import {
   EVERYONE,
   StoryMapState,
+  type StoryLegLine,
   type StoryMediaPoint,
+  type StoryStopPoint,
   ViewMode,
   advancePlayback,
   buildStoryModel,
@@ -294,10 +296,12 @@ function OwnerWorkspace() {
   const openReviewCount =
     reconstruction?.reviewItems.filter((item) => item.status === "open")
       .length ?? 0;
-  const activeMemberCount = members.filter((member) => !member.removedAt).length;
+  const activeMemberCount = members.filter(
+    (member) => !member.removedAt,
+  ).length;
   const activeShareCount =
-    publications?.shareLinks.filter((link) => link.status === "active").length ??
-    0;
+    publications?.shareLinks.filter((link) => link.status === "active")
+      .length ?? 0;
 
   const loadTrips = useCallback(
     async (preferredTripId: string | null = null) => {
@@ -1327,7 +1331,8 @@ function OwnerWorkspace() {
               {reconstructionError ? (
                 <p className="error">{reconstructionError}</p>
               ) : null}
-              {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+              {selectedTrip &&
+              ["owner", "editor"].includes(selectedTrip.role) ? (
                 <TripStoryExplorer
                   reconstruction={reconstruction}
                   state={storyState}
@@ -1410,9 +1415,7 @@ function OwnerWorkspace() {
                 />
                 <div className="panel-heading">
                   <h2 id="media-title">Photo library</h2>
-                  <span>
-                    {hasProcessingMedia ? "Preparing" : "Ready"}
-                  </span>
+                  <span>{hasProcessingMedia ? "Preparing" : "Ready"}</span>
                 </div>
                 {mediaError ? <p className="error">{mediaError}</p> : null}
                 <MediaList
@@ -2147,7 +2150,9 @@ function TripStoryExplorer({
   if (!reconstruction?.latestRun) {
     return (
       <div className="story-empty">
-        <p>Refresh the story after adding photos to build the map and timeline.</p>
+        <p>
+          Refresh the story after adding photos to build the map and timeline.
+        </p>
       </div>
     );
   }
@@ -2193,8 +2198,11 @@ function TripStoryExplorer({
   }
 
   function openStopPhotos(stopId: string, dayId: string) {
-    const stopMedia = filteredModel.media.filter((item) => item.stopId === stopId);
-    const featuredMedia = stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
+    const stopMedia = filteredModel.media.filter(
+      (item) => item.stopId === stopId,
+    );
+    const featuredMedia =
+      stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
     if (!featuredMedia) {
       onStateChange(selectStoryStop(state, stopId, dayId));
       return;
@@ -2225,7 +2233,9 @@ function TripStoryExplorer({
     });
   }
 
-  function displayStopTitle(stop: ReconstructionResponse["days"][number]["stops"][number]): string {
+  function displayStopTitle(
+    stop: ReconstructionResponse["days"][number]["stops"][number],
+  ): string {
     return stop.title ?? stop.placeName ?? `Stop ${stop.position}`;
   }
 
@@ -2317,7 +2327,9 @@ function TripStoryExplorer({
             </button>
             <button
               type="button"
-              onClick={() => onStateChange(advancePlayback(state, filteredModel))}
+              onClick={() =>
+                onStateChange(advancePlayback(state, filteredModel))
+              }
             >
               Play
             </button>
@@ -2368,20 +2380,24 @@ function TripStoryExplorer({
               </button>
             ))}
           </div>
-          <div className="segmented-control" role="group" aria-label="View mode">
-            {(
-              ["DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]
-            ).map((viewMode) => (
-              <button
-                aria-pressed={state.viewMode === viewMode}
-                className={state.viewMode === viewMode ? "active" : ""}
-                key={viewMode}
-                type="button"
-                onClick={() => setViewMode(viewMode)}
-              >
-                {storyViewLabel(viewMode)}
-              </button>
-            ))}
+          <div
+            className="segmented-control"
+            role="group"
+            aria-label="View mode"
+          >
+            {(["DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]).map(
+              (viewMode) => (
+                <button
+                  aria-pressed={state.viewMode === viewMode}
+                  className={state.viewMode === viewMode ? "active" : ""}
+                  key={viewMode}
+                  type="button"
+                  onClick={() => setViewMode(viewMode)}
+                >
+                  {storyViewLabel(viewMode)}
+                </button>
+              ),
+            )}
           </div>
           <label className="compact-field">
             Traveler
@@ -2480,7 +2496,8 @@ function TripStoryExplorer({
                             <button
                               type="submit"
                               disabled={
-                                savingStopId === stop.id || !stopTitleDraft.trim()
+                                savingStopId === stop.id ||
+                                !stopTitleDraft.trim()
                               }
                             >
                               Save
@@ -2515,8 +2532,8 @@ function TripStoryExplorer({
                           >
                             <span>{displayStopTitle(stop)}</span>
                             <small>
-                              {stop.mediaCount} photos ·{" "}
-                              {stop.contributorCount} travelers
+                              {stop.mediaCount} photos · {stop.contributorCount}{" "}
+                              travelers
                             </small>
                           </button>
                           {onRenameStop ? (
@@ -2537,7 +2554,8 @@ function TripStoryExplorer({
                               type="button"
                               className="secondary-button"
                               disabled={
-                                mergingStopKey === `${previousStop.id}:${stop.id}`
+                                mergingStopKey ===
+                                `${previousStop.id}:${stop.id}`
                               }
                               onClick={() =>
                                 void mergeAdjacentStop(
@@ -2648,7 +2666,9 @@ function PhotoBrowser({
   onClose: () => void;
   onSelect: (photoId: string) => void;
 }) {
-  const selectedIndex = photos.findIndex((photo) => photo.id === selectedPhotoId);
+  const selectedIndex = photos.findIndex(
+    (photo) => photo.id === selectedPhotoId,
+  );
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
   const hasMultiple = photos.length > 1;
 
@@ -2853,28 +2873,37 @@ function StoryMapCanvas({
     }),
     [dayColorMap, model.legs],
   );
+  const stopDisplayCoordinates = useMemo(
+    () => stopDisplayCoordinateMap(model),
+    [model],
+  );
   const stopCollection = useMemo(
     () => ({
       type: "FeatureCollection" as const,
       features: model.stops
-        .filter((stop) => stop.coordinates)
-        .map((stop) => ({
-          type: "Feature" as const,
-          id: stop.id,
-          properties: {
-            id: stop.id,
-            dayId: stop.dayId,
-            dayColor: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
-            label: stop.label,
-            selected: stop.id === state.selectedStopId,
-          },
-          geometry: {
-            type: "Point" as const,
-            coordinates: stop.coordinates as [number, number],
-          },
-        })),
+        .map((stop) => {
+          const coordinates = stopDisplayCoordinates.get(stop.id) ?? null;
+          return coordinates
+            ? {
+                type: "Feature" as const,
+                id: stop.id,
+                properties: {
+                  id: stop.id,
+                  dayId: stop.dayId,
+                  dayColor: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
+                  label: stop.label,
+                  selected: stop.id === state.selectedStopId,
+                },
+                geometry: {
+                  type: "Point" as const,
+                  coordinates,
+                },
+              }
+            : null;
+        })
+        .filter((feature) => feature !== null),
     }),
-    [dayColorMap, model.stops, state.selectedStopId],
+    [dayColorMap, model.stops, state.selectedStopId, stopDisplayCoordinates],
   );
   const mediaCollection = useMemo(
     () => ({
@@ -2916,8 +2945,8 @@ function StoryMapCanvas({
           const dayMedia = model.media.filter((item) => item.dayId === dayId);
           const coordinates = centerOfCoordinates([
             ...dayStops
-              .filter((stop) => stop.coordinates)
-              .map((stop) => stop.coordinates as [number, number]),
+              .map((stop) => stopDisplayCoordinates.get(stop.id) ?? null)
+              .filter((coordinate) => coordinate !== null),
             ...dayMedia
               .filter((item) => item.coordinates)
               .map((item) => item.coordinates as [number, number]),
@@ -2935,7 +2964,7 @@ function StoryMapCanvas({
           };
         })
         .filter((item) => item.coordinates),
-    [dayColorMap, model.media, model.stops],
+    [dayColorMap, model.media, model.stops, stopDisplayCoordinates],
   );
   const stopMarkerData = useMemo(
     () =>
@@ -2946,19 +2975,29 @@ function StoryMapCanvas({
             !state.selectedDayId ||
             stop.dayId === state.selectedDayId,
         )
-        .filter((stop) => stop.coordinates)
         .map((stop) => {
-          const stopMedia = model.media.filter((item) => item.stopId === stop.id);
+          const coordinates = stopDisplayCoordinates.get(stop.id) ?? null;
+          const stopMedia = model.media.filter(
+            (item) => item.stopId === stop.id,
+          );
           const featuredMedia =
             stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
           return {
             stop,
+            coordinates,
             featuredMedia,
             count: stopMedia.length,
             color: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
           };
         }),
-    [dayColorMap, model.media, model.stops, state.selectedDayId, state.viewMode],
+    [
+      dayColorMap,
+      model.media,
+      model.stops,
+      state.selectedDayId,
+      state.viewMode,
+      stopDisplayCoordinates,
+    ],
   );
   const showDayMarkers =
     state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
@@ -3176,10 +3215,12 @@ function StoryMapCanvas({
         if (!coordinates) {
           continue;
         }
-        const element = document.createElement("button");
-        element.type = "button";
-        element.className =
-          dayId === state.selectedDayId
+      const markerAnchor = document.createElement("div");
+      markerAnchor.className = "photo-map-marker-anchor";
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className =
+        dayId === state.selectedDayId
             ? "photo-day-marker active"
             : "photo-day-marker";
         element.setAttribute("aria-label", `Explore stops for ${label}`);
@@ -3207,8 +3248,9 @@ function StoryMapCanvas({
           event.stopPropagation();
           onDayMarkerClick(dayId);
         });
+        markerAnchor.appendChild(element);
         stopPhotoMarkers.current.push(
-          new maplibregl.Marker({ anchor: "center", element })
+          new maplibregl.Marker({ anchor: "center", element: markerAnchor })
             .setLngLat(coordinates)
             .addTo(map),
         );
@@ -3218,10 +3260,18 @@ function StoryMapCanvas({
         stopPhotoMarkers.current = [];
       };
     }
-    for (const { stop, featuredMedia, count, color } of stopMarkerData) {
-      if (!stop.coordinates) {
+    for (const {
+      stop,
+      coordinates,
+      featuredMedia,
+      count,
+      color,
+    } of stopMarkerData) {
+      if (!coordinates) {
         continue;
       }
+      const markerAnchor = document.createElement("div");
+      markerAnchor.className = "photo-map-marker-anchor";
       const element = document.createElement("button");
       element.type = "button";
       element.className =
@@ -3260,9 +3310,10 @@ function StoryMapCanvas({
         event.stopPropagation();
         onStopMarkerClick(stop.id, stop.dayId);
       });
+      markerAnchor.appendChild(element);
       stopPhotoMarkers.current.push(
-        new maplibregl.Marker({ anchor: "bottom", element })
-          .setLngLat(stop.coordinates)
+        new maplibregl.Marker({ anchor: "center", element: markerAnchor })
+          .setLngLat(coordinates)
           .addTo(map),
       );
     }
@@ -3327,7 +3378,7 @@ function StoryMapCanvas({
     }
     const previousStopId = lastFocusedStopIdRef.current;
     lastFocusedStopIdRef.current = state.selectedStopId;
-    const coordinates = focusCoordinates(model, state);
+    const coordinates = focusCoordinates(model, state, stopDisplayCoordinates);
     if (coordinates.length === 0) {
       return;
     }
@@ -3338,11 +3389,18 @@ function StoryMapCanvas({
       previousStopId !== state.selectedStopId &&
       !reducedMotion
     ) {
-      const dayCoordinates = dayFocusCoordinates(model, state.selectedDayId);
+      const dayCoordinates = dayFocusCoordinates(
+        model,
+        state.selectedDayId,
+        stopDisplayCoordinates,
+      );
       const selectedStopCoordinates = model.stops.find(
         (stop) => stop.id === state.selectedStopId,
-      )?.coordinates;
-      if (dayCoordinates.length > 1 && selectedStopCoordinates) {
+      );
+      const selectedStopCoordinate = selectedStopCoordinates
+        ? stopDisplayCoordinates.get(selectedStopCoordinates.id) ?? null
+        : null;
+      if (dayCoordinates.length > 1 && selectedStopCoordinate) {
         map.fitBounds(boundsForCoordinates(dayCoordinates), {
           padding: 72,
           maxZoom: 12,
@@ -3350,7 +3408,7 @@ function StoryMapCanvas({
         });
         const timeoutId = window.setTimeout(() => {
           map.easeTo({
-            center: selectedStopCoordinates,
+            center: selectedStopCoordinate,
             zoom: 14,
             duration: 620,
           });
@@ -3371,7 +3429,7 @@ function StoryMapCanvas({
         duration: reducedMotion ? 0 : 700,
       });
     }
-  }, [model, reducedMotion, state]);
+  }, [model, reducedMotion, state, stopDisplayCoordinates]);
 
   return (
     <div
@@ -3417,15 +3475,68 @@ function centerOfCoordinates(
   ];
 }
 
+function displayStopCoordinate(
+  stop: StoryStopPoint,
+  legs: StoryLegLine[],
+): [number, number] | null {
+  for (const leg of legs) {
+    const coordinates = leg.geometry?.coordinates ?? [];
+    if (coordinates.length === 0) {
+      continue;
+    }
+    if (leg.toStopId === stop.id) {
+      return lngLatCoordinate(coordinates[coordinates.length - 1]);
+    }
+    if (leg.fromStopId === stop.id) {
+      return lngLatCoordinate(coordinates[0]);
+    }
+  }
+  return stop.coordinates;
+}
+
+function stopDisplayCoordinateMap(
+  model: ReturnType<typeof buildStoryModel>,
+): Map<string, [number, number]> {
+  const coordinates = new Map<string, [number, number]>();
+  for (const stop of model.stops) {
+    const stopMedia = model.media.filter(
+      (item) => item.stopId === stop.id && item.coordinates,
+    );
+    const featuredMedia =
+      stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
+    const coordinate =
+      featuredMedia?.coordinates ?? displayStopCoordinate(stop, model.legs);
+    if (coordinate) {
+      coordinates.set(stop.id, coordinate);
+    }
+  }
+  return coordinates;
+}
+
+function lngLatCoordinate(
+  coordinate: number[] | undefined,
+): [number, number] | null {
+  if (
+    !coordinate ||
+    coordinate.length < 2 ||
+    typeof coordinate[0] !== "number" ||
+    typeof coordinate[1] !== "number"
+  ) {
+    return null;
+  }
+  return [coordinate[0], coordinate[1]];
+}
+
 function focusCoordinates(
   model: ReturnType<typeof buildStoryModel>,
   state: StoryMapState,
+  stopCoordinates: Map<string, [number, number]>,
 ): [number, number][] {
   if (state.viewMode === "TRIP_OVERVIEW" || state.viewMode === "DAY") {
     return [
       ...model.stops
-        .filter((item) => item.coordinates)
-        .map((item) => item.coordinates as [number, number]),
+        .map((item) => stopCoordinates.get(item.id) ?? null)
+        .filter((coordinate) => coordinate !== null),
       ...model.media
         .filter((item) => item.coordinates)
         .map((item) => item.coordinates as [number, number]),
@@ -3450,17 +3561,17 @@ function focusCoordinates(
       )
       .map((item) => item.coordinates as [number, number]);
     const stop = model.stops.find((item) => item.id === state.selectedStopId);
-    return stop?.coordinates
-      ? [stop.coordinates, ...mediaCoordinates]
+    const stopCoordinate = stop ? stopCoordinates.get(stop.id) ?? null : null;
+    return stopCoordinate
+      ? [stopCoordinate, ...mediaCoordinates]
       : mediaCoordinates;
   }
   if (state.selectedDayId) {
     return [
       ...model.stops
-        .filter(
-          (item) => item.dayId === state.selectedDayId && item.coordinates,
-        )
-        .map((item) => item.coordinates as [number, number]),
+        .filter((item) => item.dayId === state.selectedDayId)
+        .map((item) => stopCoordinates.get(item.id) ?? null)
+        .filter((coordinate) => coordinate !== null),
       ...model.media
         .filter(
           (item) => item.dayId === state.selectedDayId && item.coordinates,
@@ -3470,8 +3581,8 @@ function focusCoordinates(
   }
   return [
     ...model.stops
-      .filter((item) => item.coordinates)
-      .map((item) => item.coordinates as [number, number]),
+      .map((item) => stopCoordinates.get(item.id) ?? null)
+      .filter((coordinate) => coordinate !== null),
     ...model.media
       .filter((item) => item.coordinates)
       .map((item) => item.coordinates as [number, number]),
@@ -3481,14 +3592,16 @@ function focusCoordinates(
 function dayFocusCoordinates(
   model: ReturnType<typeof buildStoryModel>,
   dayId: string | null,
+  stopCoordinates: Map<string, [number, number]>,
 ): [number, number][] {
   if (!dayId) {
     return [];
   }
   return [
     ...model.stops
-      .filter((item) => item.dayId === dayId && item.coordinates)
-      .map((item) => item.coordinates as [number, number]),
+      .filter((item) => item.dayId === dayId)
+      .map((item) => stopCoordinates.get(item.id) ?? null)
+      .filter((coordinate) => coordinate !== null),
     ...model.media
       .filter((item) => item.dayId === dayId && item.coordinates)
       .map((item) => item.coordinates as [number, number]),
@@ -4219,9 +4332,7 @@ function MediaList({
                 {item.processingState} · {item.contributor}
                 {(item.similarityGroupCount ?? 1) > 1
                   ? ` · stack of ${item.similarityGroupCount ?? 1}${
-                      item.isSimilarityRepresentative
-                        ? " · representative"
-                        : ""
+                      item.isSimilarityRepresentative ? " · representative" : ""
                     }`
                   : ""}
               </small>
