@@ -2127,91 +2127,109 @@ function TripStoryExplorer({
                 <span>{day.title ?? `Day ${day.position}`}</span>
                 <small>{day.date}</small>
               </button>
-              {day.stops.map((stop) => (
-                <section
-                  className={`timeline-stop ${
-                    state.selectedStopId === stop.id ? "active" : ""
-                  }`}
-                  data-day-id={day.id}
-                  data-stop-id={stop.id}
-                  key={stop.id}
-                  ref={(element) => {
-                    activeStopRefs.current[stop.id] = element;
-                  }}
-                  tabIndex={canSelectTimelineStop() ? 0 : -1}
-                  onFocus={() => {
-                    if (canSelectTimelineStop()) {
-                      onStateChange(selectStoryStop(state, stop.id, day.id));
-                    }
-                  }}
-                  onKeyDown={(event) =>
-                    handleTimelineKey(event, stop.id, day.id)
-                  }
-                >
-                  <span className="timeline-stop-time">
-                    {formatReconstructionTime(
-                      stop.startsAt,
-                      stop.startsAtLocal ?? null,
-                      timezoneId,
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className="timeline-stop-button"
-                    disabled={!canSelectTimelineStop()}
-                    onClick={() =>
-                      onStateChange(selectStoryStop(state, stop.id, day.id))
+              {day.stops.map((stop) => {
+                const stopMedia = stop.moments.flatMap(
+                  (moment) => moment.media,
+                );
+                const featuredMedia =
+                  stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
+                const featuredMoment = featuredMedia
+                  ? stop.moments.find((moment) =>
+                      moment.media.some((item) => item.id === featuredMedia.id),
+                    )
+                  : undefined;
+                return (
+                  <section
+                    className={`timeline-stop ${
+                      state.selectedStopId === stop.id ? "active" : ""
+                    }`}
+                    data-day-id={day.id}
+                    data-stop-id={stop.id}
+                    key={stop.id}
+                    ref={(element) => {
+                      activeStopRefs.current[stop.id] = element;
+                    }}
+                    tabIndex={canSelectTimelineStop() ? 0 : -1}
+                    onFocus={() => {
+                      if (canSelectTimelineStop()) {
+                        onStateChange(selectStoryStop(state, stop.id, day.id));
+                      }
+                    }}
+                    onKeyDown={(event) =>
+                      handleTimelineKey(event, stop.id, day.id)
                     }
                   >
-                    <span>
-                      {stop.title ?? stop.placeName ?? `Stop ${stop.position}`}
+                    <span className="timeline-stop-time">
+                      {formatReconstructionTime(
+                        stop.startsAt,
+                        stop.startsAtLocal ?? null,
+                        timezoneId,
+                      )}
                     </span>
-                    <small>
-                      {stop.mediaCount} media · {stop.contributorCount}{" "}
-                      travelers
-                    </small>
-                  </button>
-                  <div className="timeline-moments">
-                    {stop.moments.map((moment) => (
-                      <article
-                        className={`timeline-moment ${
-                          state.selectedMomentId === moment.id ? "active" : ""
-                        }`}
-                        key={moment.id}
+                    <div className="timeline-stop-card">
+                      <button
+                        type="button"
+                        className="timeline-stop-button"
+                        disabled={!canSelectTimelineStop()}
+                        onClick={() =>
+                          onStateChange(selectStoryStop(state, stop.id, day.id))
+                        }
                       >
+                        <span>
+                          {stop.title ??
+                            stop.placeName ??
+                            `Stop ${stop.position}`}
+                        </span>
+                        <small>
+                          {stop.mediaCount} photos · {stop.contributorCount}{" "}
+                          travelers
+                        </small>
+                      </button>
+                      {featuredMedia && featuredMoment ? (
                         <button
+                          className="timeline-featured-photo"
                           type="button"
                           disabled={!canSelectTimelineStop()}
                           onClick={() =>
                             onStateChange(
-                              selectStoryMoment(
+                              selectStoryMedia(
                                 state,
-                                moment.id,
+                                featuredMedia.id,
+                                featuredMoment.id,
                                 stop.id,
                                 day.id,
                               ),
                             )
                           }
                         >
-                          {moment.title ?? `Moment ${moment.position}`} ·{" "}
-                          {moment.contributorCount} perspectives
+                          {featuredMedia.thumbnailUrl ? (
+                            <img
+                              src={featuredMedia.thumbnailUrl}
+                              alt={featuredMedia.filename ?? "Trip photo"}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span>{featuredMedia.contributor.slice(0, 1)}</span>
+                          )}
                         </button>
-                        <div className="perspective-strip">
-                          {moment.media.map((item) => (
+                      ) : null}
+                      <div className="timeline-moments">
+                        {stop.moments.map((moment) => (
+                          <article
+                            className={`timeline-moment ${
+                              state.selectedMomentId === moment.id
+                                ? "active"
+                                : ""
+                            }`}
+                            key={moment.id}
+                          >
                             <button
-                              className={`perspective-thumb ${
-                                state.selectedMediaId === item.id
-                                  ? "active"
-                                  : ""
-                              }`}
-                              key={item.id}
                               type="button"
                               disabled={!canSelectTimelineStop()}
                               onClick={() =>
                                 onStateChange(
-                                  selectStoryMedia(
+                                  selectStoryMoment(
                                     state,
-                                    item.id,
                                     moment.id,
                                     stop.id,
                                     day.id,
@@ -2219,23 +2237,55 @@ function TripStoryExplorer({
                                 )
                               }
                             >
-                              {item.thumbnailUrl ? (
-                                <img
-                                  src={item.thumbnailUrl}
-                                  alt={item.filename ?? "Trip photo"}
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <span>{item.contributor.slice(0, 1)}</span>
-                              )}
+                              <span>
+                                {moment.title ?? `Moment ${moment.position}`}
+                              </span>
+                              <small>
+                                {moment.contributorCount} perspectives
+                              </small>
                             </button>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
+                            <div className="perspective-strip">
+                              {moment.media.slice(0, 8).map((item) => (
+                                <button
+                                  className={`perspective-thumb ${
+                                    state.selectedMediaId === item.id
+                                      ? "active"
+                                      : ""
+                                  }`}
+                                  key={item.id}
+                                  type="button"
+                                  disabled={!canSelectTimelineStop()}
+                                  onClick={() =>
+                                    onStateChange(
+                                      selectStoryMedia(
+                                        state,
+                                        item.id,
+                                        moment.id,
+                                        stop.id,
+                                        day.id,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {item.thumbnailUrl ? (
+                                    <img
+                                      src={item.thumbnailUrl}
+                                      alt={item.filename ?? "Trip photo"}
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <span>{item.contributor.slice(0, 1)}</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
             </article>
           ))}
         </section>
