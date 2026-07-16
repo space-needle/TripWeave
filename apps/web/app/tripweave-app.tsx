@@ -3212,21 +3212,21 @@ function PublicStoryViewer({ token }: { token: string }) {
     <main className="app-shell public-story-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">
-            Published story · v{story.version.versionNumber}
-          </p>
+          <p className="eyebrow">TripWeave story</p>
           <h1>{title}</h1>
-          {description ? <p>{description}</p> : null}
+          <p>
+            {description
+              ? description
+              : `Published version ${story.version.versionNumber}`}
+          </p>
         </div>
       </header>
-      <section className="panel stack media-panel">
-        <TripStoryExplorer
-          reconstruction={story.story}
-          state={storyState}
-          onStateChange={setStoryState}
-          timezoneId={timezoneId}
-        />
-      </section>
+      <TripStoryExplorer
+        reconstruction={story.story}
+        state={storyState}
+        onStateChange={setStoryState}
+        timezoneId={timezoneId}
+      />
     </main>
   );
 }

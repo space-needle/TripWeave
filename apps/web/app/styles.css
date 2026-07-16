@@ -575,7 +575,11 @@ p {
 }
 
 .public-story-shell {
-  width: min(1280px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 32px));
+}
+
+.public-story-shell .app-header {
+  margin-bottom: 18px;
 }
 
 .outline {
