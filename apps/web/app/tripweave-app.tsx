@@ -36,8 +36,8 @@ import type {
 } from "./api-types";
 import {
   EVERYONE,
+  StoryMediaPoint,
   StoryMapState,
-  type StoryMediaPoint,
   ViewMode,
   advancePlayback,
   buildStoryModel,
@@ -60,7 +60,6 @@ type GalleryPhoto = {
   filename: string | null;
   contributor: string;
   capturedAt: string | null;
-  contextLabel?: string | null;
 };
 
 type AuthMode = "login" | "register";
@@ -1941,25 +1940,10 @@ function TripStoryExplorer({
   const skipNextTimelineScrollRef = useRef(false);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
-  const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
-  const stopLabelById = useMemo(
-    () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
-    [filteredModel.stops],
-  );
   const galleryPhotos = useMemo(
-    () =>
-      filteredModel.media.map((item) =>
-        galleryPhotoFromStoryMedia(item, stopLabelById.get(item.stopId)),
-      ),
-    [filteredModel.media, stopLabelById],
+    () => filteredModel.media.map(galleryPhotoFromStoryMedia),
+    [filteredModel.media],
   );
-  const browserPhotos = useMemo(() => {
-    if (!galleryPhotoIds) {
-      return galleryPhotos;
-    }
-    const scopedIds = new Set(galleryPhotoIds);
-    return galleryPhotos.filter((photo) => scopedIds.has(photo.id));
-  }, [galleryPhotoIds, galleryPhotos]);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -2084,28 +2068,7 @@ function TripStoryExplorer({
     dayId: string,
   ) {
     onStateChange(selectStoryMedia(state, mediaId, momentId, stopId, dayId));
-    setGalleryPhotoIds(stopPhotoIds(stopId, filteredModel.media));
     setGalleryMediaId(mediaId);
-  }
-
-  function openStopPhotos(stopId: string, dayId: string) {
-    const stopMedia = filteredModel.media.filter((item) => item.stopId === stopId);
-    const featuredMedia = stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
-    if (!featuredMedia) {
-      onStateChange(selectStoryStop(state, stopId, dayId));
-      return;
-    }
-    onStateChange(
-      selectStoryMedia(
-        state,
-        featuredMedia.id,
-        featuredMedia.momentId,
-        stopId,
-        dayId,
-      ),
-    );
-    setGalleryPhotoIds(stopMedia.map((item) => item.id));
-    setGalleryMediaId(featuredMedia.id);
   }
 
   const selectedLabel =
@@ -2121,7 +2084,6 @@ function TripStoryExplorer({
           model={filteredModel}
           state={state}
           onStateChange={onStateChange}
-          onStopMarkerClick={openStopPhotos}
           reducedMotion={reducedMotion}
         />
         <div className="story-map-header">
@@ -2186,12 +2148,11 @@ function TripStoryExplorer({
             {galleryPhotos.length > 0 ? (
               <button
                 type="button"
-                onClick={() => {
-                  setGalleryPhotoIds(null);
+                onClick={() =>
                   setGalleryMediaId(
                     state.selectedMediaId ?? galleryPhotos[0]?.id ?? null,
-                  );
-                }}
+                  )
+                }
               >
                 Browse photos
               </button>
@@ -2413,13 +2374,10 @@ function TripStoryExplorer({
         </section>
       </aside>
       <PhotoBrowser
-        photos={browserPhotos}
+        photos={galleryPhotos}
         selectedPhotoId={galleryMediaId}
         timezoneId={timezoneId}
-        onClose={() => {
-          setGalleryMediaId(null);
-          setGalleryPhotoIds(null);
-        }}
+        onClose={() => setGalleryMediaId(null)}
         onSelect={(photoId) => {
           const next = filteredModel.media.find((item) => item.id === photoId);
           if (next) {
@@ -2440,22 +2398,14 @@ function TripStoryExplorer({
   );
 }
 
-function galleryPhotoFromStoryMedia(
-  item: StoryMediaPoint,
-  contextLabel?: string | null,
-): GalleryPhoto {
+function galleryPhotoFromStoryMedia(item: StoryMediaPoint): GalleryPhoto {
   return {
     id: item.id,
     imageUrl: item.thumbnailUrl,
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt,
-    contextLabel,
   };
-}
-
-function stopPhotoIds(stopId: string, media: StoryMediaPoint[]): string[] {
-  return media.filter((item) => item.stopId === stopId).map((item) => item.id);
 }
 
 function galleryPhotoFromMediaItem(item: MediaItemResponse): GalleryPhoto {
@@ -2562,11 +2512,6 @@ function PhotoBrowser({
           ) : (
             <div className="photo-browser-missing">Preview unavailable</div>
           )}
-          {selectedPhoto.contextLabel ? (
-            <div className="photo-browser-caption">
-              <span>{selectedPhoto.contextLabel}</span>
-            </div>
-          ) : null}
           {hasMultiple ? (
             <button
               className="photo-browser-nav next"
@@ -2644,19 +2589,16 @@ function StoryMapCanvas({
   model,
   state,
   onStateChange,
-  onStopMarkerClick,
   reducedMotion,
 }: {
   model: ReturnType<typeof buildStoryModel>;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
-  onStopMarkerClick: (stopId: string, dayId: string) => void;
   reducedMotion: boolean;
 }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const selectedMarkers = useRef<Marker[]>([]);
-  const stopPhotoMarkers = useRef<Marker[]>([]);
   const lastFocusedStopIdRef = useRef<string | null>(null);
   const stateRef = useRef(state);
 
@@ -2736,23 +2678,6 @@ function StoryMapCanvas({
     routeCollection.features.length > 0 ||
     stopCollection.features.length > 0 ||
     mediaCollection.features.length > 0;
-  const stopMarkerData = useMemo(
-    () =>
-      model.stops
-        .filter((stop) => stop.coordinates)
-        .map((stop) => {
-          const stopMedia = model.media.filter((item) => item.stopId === stop.id);
-          const featuredMedia =
-            stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
-          return {
-            stop,
-            featuredMedia,
-            count: stopMedia.length,
-            color: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
-          };
-        }),
-    [dayColorMap, model.media, model.stops],
-  );
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) {
@@ -2863,8 +2788,6 @@ function StoryMapCanvas({
           "circle-radius": ["case", ["==", ["get", "selected"], true], 13, 10],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 3,
-          "circle-opacity": 0,
-          "circle-stroke-opacity": 0,
         },
       });
       map.on("click", "stops", (event) => {
@@ -2904,8 +2827,6 @@ function StoryMapCanvas({
     return () => {
       selectedMarkers.current.forEach((marker) => marker.remove());
       selectedMarkers.current = [];
-      stopPhotoMarkers.current.forEach((marker) => marker.remove());
-      stopPhotoMarkers.current = [];
       map.remove();
       mapRef.current = null;
     };
@@ -2932,59 +2853,11 @@ function StoryMapCanvas({
     if (!map) {
       return;
     }
-    stopPhotoMarkers.current.forEach((marker) => marker.remove());
-    stopPhotoMarkers.current = [];
-    for (const { stop, featuredMedia, count, color } of stopMarkerData) {
-      if (!stop.coordinates) {
-        continue;
-      }
-      const element = document.createElement("button");
-      element.type = "button";
-      element.className =
-        stop.id === state.selectedStopId
-          ? "photo-stop-marker active"
-          : "photo-stop-marker";
-      element.setAttribute("aria-label", `Open photos for ${stop.label}`);
-      element.style.setProperty("--stop-color", color);
-      if (featuredMedia?.thumbnailUrl) {
-        const image = document.createElement("img");
-        image.src = featuredMedia.thumbnailUrl;
-        image.alt = "";
-        image.loading = "lazy";
-        element.appendChild(image);
-      } else {
-        const fallback = document.createElement("span");
-        fallback.textContent = String(stop.position);
-        element.appendChild(fallback);
-      }
-      if (count > 1) {
-        const badge = document.createElement("small");
-        badge.textContent = String(count);
-        element.appendChild(badge);
-      }
-      element.addEventListener("click", (event) => {
-        event.stopPropagation();
-        onStopMarkerClick(stop.id, stop.dayId);
-      });
-      stopPhotoMarkers.current.push(
-        new maplibregl.Marker({ anchor: "bottom", element })
-          .setLngLat(stop.coordinates)
-          .addTo(map),
-      );
-    }
-    return () => {
-      stopPhotoMarkers.current.forEach((marker) => marker.remove());
-      stopPhotoMarkers.current = [];
-    };
-  }, [onStopMarkerClick, state.selectedStopId, stopMarkerData]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
     selectedMarkers.current.forEach((marker) => marker.remove());
     selectedMarkers.current = [];
+    const selectedStop = model.stops.find(
+      (stop) => stop.id === state.selectedStopId,
+    );
     const selectedMedia = model.media
       .filter(
         (item) =>
@@ -2992,6 +2865,13 @@ function StoryMapCanvas({
           item.momentId === state.selectedMomentId,
       )
       .slice(0, 5);
+    if (selectedStop?.coordinates) {
+      selectedMarkers.current.push(
+        new maplibregl.Marker({ color: "#9f2d20" })
+          .setLngLat(selectedStop.coordinates)
+          .addTo(map),
+      );
+    }
     for (const item of selectedMedia) {
       if (!item.coordinates) {
         continue;

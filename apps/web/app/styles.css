@@ -940,87 +940,6 @@ p {
   font-weight: 800;
 }
 
-.photo-stop-marker {
-  position: relative;
-  width: 58px;
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  overflow: visible;
-  border: 3px solid #fff;
-  border-radius: 999px;
-  background: var(--stop-color, var(--accent));
-  color: #fff;
-  cursor: zoom-in;
-  padding: 0;
-  box-shadow:
-    0 0 0 4px var(--stop-color, var(--accent)),
-    0 10px 24px rgb(23 32 42 / 24%);
-}
-
-.photo-stop-marker::after {
-  position: absolute;
-  bottom: -14px;
-  left: 50%;
-  width: 12px;
-  aspect-ratio: 1;
-  border: 3px solid #fff;
-  border-radius: 999px;
-  content: "";
-  background: var(--stop-color, var(--accent));
-  transform: translateX(-50%);
-  box-shadow: 0 4px 8px rgb(23 32 42 / 18%);
-}
-
-.photo-stop-marker.active {
-  transform: translateY(-3px) scale(1.12);
-  box-shadow:
-    0 0 0 5px var(--stop-color, var(--accent)),
-    0 14px 32px rgb(23 32 42 / 28%);
-}
-
-.photo-stop-marker:focus-visible {
-  outline: 4px solid color-mix(in srgb, var(--focus) 45%, transparent);
-  outline-offset: 7px;
-}
-
-.photo-stop-marker img,
-.photo-stop-marker > span {
-  width: 100%;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.photo-stop-marker img {
-  object-fit: cover;
-}
-
-.photo-stop-marker > span {
-  display: grid;
-  place-items: center;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.photo-stop-marker small {
-  position: absolute;
-  right: -7px;
-  bottom: -3px;
-  z-index: 1;
-  min-width: 22px;
-  min-height: 22px;
-  display: grid;
-  place-items: center;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  background: var(--text);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 900;
-  line-height: 1;
-  padding: 2px 5px;
-}
-
 .story-timeline {
   display: grid;
   gap: 16px;
@@ -1552,32 +1471,6 @@ button.thumb-frame:focus-visible {
   min-height: 260px;
   color: rgb(255 255 255 / 70%);
   font-weight: 800;
-}
-
-.photo-browser-caption {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  left: 18px;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.photo-browser-caption span {
-  max-width: min(100%, 520px);
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 24%);
-  border-radius: 999px;
-  background: rgb(10 15 20 / 68%);
-  color: #fff;
-  font-size: 0.92rem;
-  font-weight: 850;
-  padding: 8px 14px;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 24%);
 }
 
 .photo-browser-nav {
