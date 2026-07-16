@@ -1996,63 +1996,113 @@ function TripStoryExplorer({
 
   const selectedLabel =
     selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
+  const activeDay = reconstruction.days.find(
+    (day) => day.id === state.selectedDayId,
+  );
 
   return (
-    <div className="story-explorer">
-      <div className="story-toolbar" aria-label="Story controls">
-        <div className="segmented-control" role="group" aria-label="View mode">
-          {(
-            ["TRIP_OVERVIEW", "DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]
-          ).map((viewMode) => (
-            <button
-              aria-pressed={state.viewMode === viewMode}
-              className={state.viewMode === viewMode ? "active" : ""}
-              key={viewMode}
-              type="button"
-              onClick={() => setViewMode(viewMode)}
-            >
-              {viewMode.replace("_", " ")}
-            </button>
-          ))}
-        </div>
-        <label className="compact-field">
-          Traveler
-          <select
-            value={state.contributorFilter}
-            onChange={(event) =>
-              onStateChange(setContributorFilter(state, event.target.value))
-            }
-          >
-            <option value={EVERYONE}>Everyone</option>
-            {model.contributors.map((contributor) => (
-              <option key={contributor.id} value={contributor.id}>
-                {contributor.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => onStateChange(followStory(state))}
-          disabled={state.mapControlMode === "STORY_CONTROLLED"}
-        >
-          Follow Story
-        </button>
-        <button
-          type="button"
-          onClick={() => onStateChange(advancePlayback(state, filteredModel))}
-        >
-          Play next
-        </button>
-      </div>
-
-      <div className="story-layout">
+    <div className="story-explorer story-shell">
+      <div className="story-map-panel">
         <StoryMapCanvas
           model={filteredModel}
           state={state}
           onStateChange={onStateChange}
           reducedMotion={reducedMotion}
         />
+        <div className="story-map-header">
+          <div>
+            <p className="eyebrow">Map story</p>
+            <h3>{activeDay?.title ?? activeDay?.date ?? "Whole trip"}</h3>
+            <p>
+              {filteredModel.stops.length} stops · {filteredModel.media.length}{" "}
+              photos
+            </p>
+          </div>
+          <div className="story-day-tabs" role="group" aria-label="Story days">
+            <button
+              type="button"
+              className={state.viewMode === "TRIP_OVERVIEW" ? "active" : ""}
+              onClick={() => setViewMode("TRIP_OVERVIEW")}
+            >
+              All
+            </button>
+            {reconstruction.days.map((day) => (
+              <button
+                aria-pressed={state.selectedDayId === day.id}
+                className={
+                  state.viewMode === "DAY" && state.selectedDayId === day.id
+                    ? "active"
+                    : ""
+                }
+                key={day.id}
+                type="button"
+                onClick={() => onStateChange(selectStoryDay(state, day.id))}
+              >
+                Day {day.position}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <aside className="story-side-panel">
+        <div className="story-panel-header">
+          <div>
+            <p className="eyebrow">
+              {activeDay ? `Day ${activeDay.position}` : "Timeline"}
+            </p>
+            <h3>{activeDay?.title ?? activeDay?.date ?? selectedLabel}</h3>
+            <p>Follow the route through days, stops, and photo moments.</p>
+          </div>
+          <div className="story-panel-actions">
+            <button
+              type="button"
+              onClick={() => onStateChange(followStory(state))}
+              disabled={state.mapControlMode === "STORY_CONTROLLED"}
+            >
+              Follow
+            </button>
+            <button
+              type="button"
+              onClick={() => onStateChange(advancePlayback(state, filteredModel))}
+            >
+              Play
+            </button>
+          </div>
+        </div>
+        <div className="story-toolbar" aria-label="Story controls">
+          <div className="segmented-control" role="group" aria-label="View mode">
+            {(
+              ["DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]
+            ).map((viewMode) => (
+              <button
+                aria-pressed={state.viewMode === viewMode}
+                className={state.viewMode === viewMode ? "active" : ""}
+                key={viewMode}
+                type="button"
+                onClick={() => setViewMode(viewMode)}
+              >
+                {storyViewLabel(viewMode)}
+              </button>
+            ))}
+          </div>
+          <label className="compact-field">
+            Traveler
+            <select
+              value={state.contributorFilter}
+              onChange={(event) =>
+                onStateChange(setContributorFilter(state, event.target.value))
+              }
+            >
+              <option value={EVERYONE}>Everyone</option>
+              {model.contributors.map((contributor) => (
+                <option key={contributor.id} value={contributor.id}>
+                  {contributor.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <section
           className="story-timeline"
           aria-label="Chronological timeline"
@@ -2074,7 +2124,8 @@ function TripStoryExplorer({
                 className="timeline-day-button"
                 onClick={() => onStateChange(selectStoryDay(state, day.id))}
               >
-                {day.title ?? day.date}
+                <span>{day.title ?? `Day ${day.position}`}</span>
+                <small>{day.date}</small>
               </button>
               {day.stops.map((stop) => (
                 <section
@@ -2097,6 +2148,13 @@ function TripStoryExplorer({
                     handleTimelineKey(event, stop.id, day.id)
                   }
                 >
+                  <span className="timeline-stop-time">
+                    {formatReconstructionTime(
+                      stop.startsAt,
+                      stop.startsAtLocal ?? null,
+                      timezoneId,
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="timeline-stop-button"
@@ -2109,12 +2167,7 @@ function TripStoryExplorer({
                       {stop.title ?? stop.placeName ?? `Stop ${stop.position}`}
                     </span>
                     <small>
-                      {formatReconstructionTime(
-                        stop.startsAt,
-                        stop.startsAtLocal ?? null,
-                        timezoneId,
-                      )}{" "}
-                      · {stop.mediaCount} media · {stop.contributorCount}{" "}
+                      {stop.mediaCount} media · {stop.contributorCount}{" "}
                       travelers
                     </small>
                   </button>
@@ -2186,9 +2239,24 @@ function TripStoryExplorer({
             </article>
           ))}
         </section>
-      </div>
+      </aside>
     </div>
   );
+}
+
+function storyViewLabel(viewMode: ViewMode): string {
+  switch (viewMode) {
+    case "DAY":
+      return "Day";
+    case "STOP":
+      return "Stops";
+    case "MOMENT":
+      return "Photos";
+    case "PLAYBACK":
+      return "Time";
+    case "TRIP_OVERVIEW":
+      return "All";
+  }
 }
 
 function StoryMapCanvas({
