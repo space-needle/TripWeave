@@ -1132,10 +1132,31 @@ function OwnerWorkspace() {
         <aside className="trip-nav panel" aria-label="Trip navigation">
           <div className="trip-brand">
             <strong>My Trip</strong>
-            <span>{trips.length} trip{trips.length === 1 ? "" : "s"}</span>
+            <span>{user.display_name}</span>
           </div>
+          <nav className="trip-primary-nav" aria-label="Workspace sections">
+            <a href="#trip-stage-title" className="active">
+              Story
+            </a>
+            <a href="#photos-panel">Photos</a>
+            {selectedTrip?.role === "owner" ? (
+              <a href="#travelers-panel">Travelers</a>
+            ) : null}
+            {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+              <>
+                <a href="#review-panel">Review</a>
+                <a href="#publish-panel">Publish</a>
+              </>
+            ) : null}
+            <a href="#settings-panel">Settings</a>
+          </nav>
           <section aria-labelledby="trip-list-title">
-            <h2 id="trip-list-title">Trips</h2>
+            <div className="nav-section-heading">
+              <h2 id="trip-list-title">Trips</h2>
+              <span>
+                {trips.length} trip{trips.length === 1 ? "" : "s"}
+              </span>
+            </div>
             {trips.length === 0 ? (
               <p>No trips yet.</p>
             ) : (
@@ -1228,7 +1249,7 @@ function OwnerWorkspace() {
         </section>
 
         <aside className="trip-management" aria-label="Trip management">
-          <details className="management-panel" open>
+          <details className="management-panel" id="photos-panel" open>
             <summary>Photos</summary>
             {selectedTrip ? (
               <div className="stack">
@@ -1291,7 +1312,7 @@ function OwnerWorkspace() {
           </details>
 
           {selectedTrip?.role === "owner" ? (
-            <details className="management-panel">
+            <details className="management-panel" id="travelers-panel">
               <summary>Travelers</summary>
               <div className="stack">
                 <p>Invite guest contributors and manage trip access.</p>
@@ -1334,7 +1355,7 @@ function OwnerWorkspace() {
           ) : null}
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <details className="management-panel">
+            <details className="management-panel" id="review-panel">
               <summary>Review</summary>
               <div className="stack">
                 <ReconstructionOutline
@@ -1356,7 +1377,7 @@ function OwnerWorkspace() {
           ) : null}
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <details className="management-panel">
+            <details className="management-panel" id="publish-panel">
               <summary>Publish</summary>
               <div className="stack">
                 <p>Publish an immutable story version with sanitized assets.</p>
@@ -1392,7 +1413,7 @@ function OwnerWorkspace() {
             </details>
           ) : null}
 
-          <details className="management-panel">
+          <details className="management-panel" id="settings-panel">
             <summary>Settings</summary>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (

@@ -196,7 +196,7 @@ p {
 }
 
 .trip-workspace {
-  grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: 184px minmax(0, 1fr) minmax(300px, 360px);
   gap: 16px;
 }
 
@@ -210,24 +210,71 @@ p {
 
 .trip-nav {
   align-content: start;
-  gap: 18px;
+  gap: 16px;
+  border-radius: 18px;
 }
 
 .trip-brand {
   display: grid;
   gap: 4px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 14px;
+  padding-bottom: 16px;
 }
 
 .trip-brand strong {
-  font-size: 1.32rem;
+  font-size: 1.38rem;
+  font-style: italic;
+  line-height: 1;
 }
 
 .trip-brand span {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 700;
+}
+
+.trip-primary-nav {
+  display: grid;
+  gap: 6px;
+}
+
+.trip-primary-nav a {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 800;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.trip-primary-nav a:hover,
+.trip-primary-nav a:focus-visible {
+  border-color: var(--border);
+  background: #fff;
+}
+
+.trip-primary-nav a.active {
+  border-color: #f2cbbf;
+  background: #fff1ed;
+  color: #b54e33;
+}
+
+.nav-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nav-section-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .trip-stage {
@@ -370,14 +417,22 @@ p {
 
 .trip-row {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 3px;
   border-color: var(--border);
   background: #fff;
   color: var(--text);
   text-align: left;
+  padding: 10px 11px;
+}
+
+#photos-panel,
+#travelers-panel,
+#review-panel,
+#publish-panel,
+#settings-panel,
+#trip-stage-title {
+  scroll-margin-top: 18px;
 }
 
 .trip-row-active {
@@ -387,7 +442,8 @@ p {
 
 .trip-row small {
   color: var(--muted);
-  font-weight: 700;
+  font-size: 0.74rem;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
