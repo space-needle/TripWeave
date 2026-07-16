@@ -1900,12 +1900,6 @@ function configuredMapStyle(): string | maplibregl.StyleSpecification {
   return process.env.NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL || localMapStyle;
 }
 
-function configuredMapStyleLabel(): string {
-  return process.env.NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL
-    ? "Configured map style"
-    : "Local fallback map";
-}
-
 function hasConfiguredMapStyle(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL);
 }
@@ -1936,10 +1930,8 @@ function TripStoryExplorer({
     (item) => item.id === state.selectedMediaId,
   );
   const activeStopRefs = useRef<Record<string, HTMLElement | null>>({});
-  const activeDayRefs = useRef<Record<string, HTMLElement | null>>({});
   const timelineRef = useRef<HTMLElement | null>(null);
   const latestStateRef = useRef(state);
-  const skipNextTimelineScrollRef = useRef(false);
   const skipNextTimelineSelectionRef = useRef(false);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
@@ -1975,43 +1967,6 @@ function TripStoryExplorer({
   }, [model, onStateChange, state]);
 
   useEffect(() => {
-    if (
-      !state.selectedStopId ||
-      reducedMotion ||
-      !["STOP", "MOMENT"].includes(state.viewMode)
-    ) {
-      return;
-    }
-    if (skipNextTimelineScrollRef.current) {
-      skipNextTimelineScrollRef.current = false;
-      return;
-    }
-    activeStopRefs.current[state.selectedStopId]?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-    });
-  }, [reducedMotion, state.selectedStopId, state.viewMode]);
-
-  useEffect(() => {
-    if (
-      !state.selectedDayId ||
-      state.selectedStopId ||
-      !["STOP", "MOMENT"].includes(state.viewMode)
-    ) {
-      return;
-    }
-    activeDayRefs.current[state.selectedDayId]?.scrollIntoView({
-      behavior: reducedMotion ? "auto" : "smooth",
-      block: "start",
-    });
-  }, [
-    reducedMotion,
-    state.selectedDayId,
-    state.selectedStopId,
-    state.viewMode,
-  ]);
-
-  useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode)) {
       return;
     }
@@ -2042,7 +1997,6 @@ function TripStoryExplorer({
           stopId !== currentState.selectedStopId &&
           ["STOP", "MOMENT"].includes(currentState.viewMode)
         ) {
-          skipNextTimelineScrollRef.current = true;
           onStateChange(selectStoryStop(currentState, stopId, dayId));
         }
       },
@@ -2282,9 +2236,6 @@ function TripStoryExplorer({
                 state.selectedDayId === day.id ? "active" : ""
               }`}
               key={day.id}
-              ref={(element) => {
-                activeDayRefs.current[day.id] = element;
-              }}
             >
               <button
                 type="button"
@@ -2777,6 +2728,9 @@ function StoryMapCanvas({
     routeCollection.features.length > 0 ||
     stopCollection.features.length > 0 ||
     mediaCollection.features.length > 0;
+  const canReturnToDayMode =
+    Boolean(state.selectedDayId) &&
+    !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
   const dayMarkerData = useMemo(
     () =>
       Array.from(new Set(model.stops.map((stop) => stop.dayId)))
@@ -3239,12 +3193,17 @@ function StoryMapCanvas({
       }`}
     >
       <div className="story-map" ref={mapNode} aria-hidden="true" />
-      <div className="map-mode-badge">
-        {state.mapControlMode === "USER_CONTROLLED"
-          ? "User controlled"
-          : "Story controlled"}
-      </div>
-      <div className="map-style-badge">{configuredMapStyleLabel()}</div>
+      {canReturnToDayMode && state.selectedDayId ? (
+        <button
+          type="button"
+          className="map-day-return"
+          onClick={() =>
+            onStateChange(selectStoryDay(state, state.selectedDayId as string))
+          }
+        >
+          Day view
+        </button>
+      ) : null}
       {!hasMapData ? (
         <div className="map-empty-state">
           <strong>No mapped stops yet</strong>
