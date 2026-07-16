@@ -1148,7 +1148,7 @@ p {
 .timeline-stop {
   position: relative;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
   gap: 12px;
   border: 0;
   border-radius: 0;
@@ -1190,10 +1190,11 @@ p {
 
 .timeline-stop-time {
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.2;
-  padding-top: 4px;
+  padding-top: 22px;
+  white-space: nowrap;
 }
 
 .timeline-stop-button span,
@@ -1282,107 +1283,6 @@ p {
 .timeline-stop.active .timeline-stop-card {
   border-color: #e87856;
   box-shadow: 0 12px 30px rgb(232 120 86 / 14%);
-}
-
-.timeline-featured-photo {
-  min-height: 118px;
-  aspect-ratio: 16 / 7;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 0;
-  border-radius: 12px;
-  background: #eef2f5;
-  color: var(--muted);
-  padding: 0;
-}
-
-.timeline-featured-photo:disabled {
-  cursor: default;
-  opacity: 1;
-}
-
-.timeline-featured-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.timeline-moments {
-  display: grid;
-  gap: 8px;
-}
-
-.timeline-moment {
-  display: grid;
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.timeline-moment.active button {
-  border-color: var(--accent);
-}
-
-.timeline-moment > button {
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.timeline-moment > button span,
-.timeline-moment > button small {
-  display: block;
-}
-
-.timeline-moment > button span {
-  font-weight: 800;
-}
-
-.timeline-moment > button small {
-  color: var(--muted);
-  margin-top: 3px;
-  font-size: 0.82rem;
-}
-
-.timeline-moment > button:disabled {
-  cursor: default;
-  opacity: 1;
-}
-
-.perspective-strip {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.perspective-thumb {
-  width: 72px;
-  min-height: 54px;
-  flex: 0 0 72px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-color: var(--border-strong);
-  border-radius: 10px;
-  background: #eef2f5;
-  color: var(--muted);
-  padding: 0;
-}
-
-.perspective-thumb.active {
-  border-color: var(--danger);
-}
-
-.perspective-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .summary-grid {
@@ -2033,11 +1933,7 @@ button.thumb-frame:focus-visible {
   }
 
   .timeline-stop {
-    grid-template-columns: 50px minmax(0, 1fr);
-  }
-
-  .timeline-featured-photo {
-    min-height: 96px;
+    grid-template-columns: 70px minmax(0, 1fr);
   }
 }
 

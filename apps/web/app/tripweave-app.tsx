@@ -48,7 +48,6 @@ import {
   normalizeStoryMapState,
   selectStoryDay,
   selectStoryMedia,
-  selectStoryMoment,
   selectStoryStop,
   setContributorFilter,
   startPlayback,
@@ -2193,17 +2192,6 @@ function TripStoryExplorer({
     }
   }
 
-  function openTimelinePhoto(
-    mediaId: string,
-    momentId: string,
-    stopId: string,
-    dayId: string,
-  ) {
-    onStateChange(selectStoryMedia(state, mediaId, momentId, stopId, dayId));
-    setGalleryPhotoIds(stopPhotoIds(stopId, filteredModel.media));
-    setGalleryMediaId(mediaId);
-  }
-
   function openStopPhotos(stopId: string, dayId: string) {
     const stopMedia = filteredModel.media.filter((item) => item.stopId === stopId);
     const featuredMedia = stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
@@ -2439,16 +2427,6 @@ function TripStoryExplorer({
               {day.stops.map((stop, stopIndex) => {
                 const previousStop = day.stops[stopIndex - 1] ?? null;
                 const nextStop = day.stops[stopIndex + 1] ?? null;
-                const stopMedia = stop.moments.flatMap(
-                  (moment) => moment.media,
-                );
-                const featuredMedia =
-                  stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
-                const featuredMoment = featuredMedia
-                  ? stop.moments.find((moment) =>
-                      moment.media.some((item) => item.id === featuredMedia.id),
-                    )
-                  : undefined;
                 return (
                   <section
                     className={`timeline-stop ${
@@ -2471,7 +2449,7 @@ function TripStoryExplorer({
                     }
                   >
                     <span className="timeline-stop-time">
-                      {formatReconstructionTime(
+                      {formatTimelineStopTime(
                         stop.startsAt,
                         stop.startsAtLocal ?? null,
                         timezoneId,
@@ -2597,97 +2575,6 @@ function TripStoryExplorer({
                           ) : null}
                         </div>
                       ) : null}
-                      {featuredMedia && featuredMoment ? (
-                        <button
-                          className="timeline-featured-photo"
-                          type="button"
-                          disabled={!canSelectTimelineStop()}
-                          onClick={() =>
-                            openTimelinePhoto(
-                              featuredMedia.id,
-                              featuredMoment.id,
-                              stop.id,
-                              day.id,
-                            )
-                          }
-                        >
-                          {featuredMedia.thumbnailUrl ? (
-                            <img
-                              src={featuredMedia.thumbnailUrl}
-                              alt={featuredMedia.filename ?? "Trip photo"}
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span>{featuredMedia.contributor.slice(0, 1)}</span>
-                          )}
-                        </button>
-                      ) : null}
-                      <div className="timeline-moments">
-                        {stop.moments.map((moment) => (
-                          <article
-                            className={`timeline-moment ${
-                              state.selectedMomentId === moment.id
-                                ? "active"
-                                : ""
-                            }`}
-                            key={moment.id}
-                          >
-                            <button
-                              type="button"
-                              disabled={!canSelectTimelineStop()}
-                              onClick={() =>
-                                onStateChange(
-                                  selectStoryMoment(
-                                    state,
-                                    moment.id,
-                                    stop.id,
-                                    day.id,
-                                  ),
-                                )
-                              }
-                            >
-                              <span>
-                                {moment.title ?? `Moment ${moment.position}`}
-                              </span>
-                              <small>
-                                {moment.contributorCount} perspectives
-                              </small>
-                            </button>
-                            <div className="perspective-strip">
-                              {moment.media.slice(0, 8).map((item) => (
-                                <button
-                                  className={`perspective-thumb ${
-                                    state.selectedMediaId === item.id
-                                      ? "active"
-                                      : ""
-                                  }`}
-                                  key={item.id}
-                                  type="button"
-                                  disabled={!canSelectTimelineStop()}
-                                  onClick={() =>
-                                    openTimelinePhoto(
-                                      item.id,
-                                      moment.id,
-                                      stop.id,
-                                      day.id,
-                                    )
-                                  }
-                                >
-                                  {item.thumbnailUrl ? (
-                                    <img
-                                      src={item.thumbnailUrl}
-                                      alt={item.filename ?? "Trip photo"}
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <span>{item.contributor.slice(0, 1)}</span>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
                     </div>
                   </section>
                 );
@@ -2736,10 +2623,6 @@ function galleryPhotoFromStoryMedia(
     capturedAt: item.capturedAt,
     contextLabel,
   };
-}
-
-function stopPhotoIds(stopId: string, media: StoryMediaPoint[]): string[] {
-  return media.filter((item) => item.stopId === stopId).map((item) => item.id);
 }
 
 function galleryPhotoFromMediaItem(item: MediaItemResponse): GalleryPhoto {
@@ -4460,6 +4343,32 @@ function formatReconstructionTime(
   return formatDate(utcValue, timezoneId);
 }
 
+function formatTimelineStopTime(
+  utcValue: string | null,
+  localValue: string | null,
+  timezoneId?: string,
+): string {
+  if (localValue) {
+    return formatFloatingTime(localValue);
+  }
+  if (!utcValue) {
+    return "Unknown";
+  }
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezoneId,
+    }).format(new Date(utcValue));
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }).format(new Date(utcValue));
+  }
+}
+
 function formatFloatingDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
   if (!match) {
@@ -4476,5 +4385,24 @@ function formatFloatingDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
+  }).format(date);
+}
+
+function formatFloatingTime(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
   }).format(date);
 }
