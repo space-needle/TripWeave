@@ -1936,9 +1936,11 @@ function TripStoryExplorer({
     (item) => item.id === state.selectedMediaId,
   );
   const activeStopRefs = useRef<Record<string, HTMLElement | null>>({});
+  const activeDayRefs = useRef<Record<string, HTMLElement | null>>({});
   const timelineRef = useRef<HTMLElement | null>(null);
   const latestStateRef = useRef(state);
   const skipNextTimelineScrollRef = useRef(false);
+  const skipNextTimelineSelectionRef = useRef(false);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
@@ -1991,6 +1993,25 @@ function TripStoryExplorer({
   }, [reducedMotion, state.selectedStopId, state.viewMode]);
 
   useEffect(() => {
+    if (
+      !state.selectedDayId ||
+      state.selectedStopId ||
+      !["STOP", "MOMENT"].includes(state.viewMode)
+    ) {
+      return;
+    }
+    activeDayRefs.current[state.selectedDayId]?.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [
+    reducedMotion,
+    state.selectedDayId,
+    state.selectedStopId,
+    state.viewMode,
+  ]);
+
+  useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode)) {
       return;
     }
@@ -2011,6 +2032,10 @@ function TripStoryExplorer({
         const stopId = visible?.target.getAttribute("data-stop-id");
         const dayId = visible?.target.getAttribute("data-day-id");
         const currentState = latestStateRef.current;
+        if (skipNextTimelineSelectionRef.current) {
+          skipNextTimelineSelectionRef.current = false;
+          return;
+        }
         if (
           stopId &&
           dayId &&
@@ -2108,6 +2133,19 @@ function TripStoryExplorer({
     setGalleryMediaId(featuredMedia.id);
   }
 
+  function showDayStops(dayId: string) {
+    skipNextTimelineSelectionRef.current = true;
+    onStateChange({
+      ...state,
+      viewMode: "STOP",
+      selectedDayId: dayId,
+      selectedStopId: null,
+      selectedMomentId: null,
+      selectedMediaId: null,
+      mapControlMode: "STORY_CONTROLLED",
+    });
+  }
+
   const selectedLabel =
     selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
   const activeDay = reconstruction.days.find(
@@ -2121,6 +2159,7 @@ function TripStoryExplorer({
           model={filteredModel}
           state={state}
           onStateChange={onStateChange}
+          onDayMarkerClick={showDayStops}
           onStopMarkerClick={openStopPhotos}
           reducedMotion={reducedMotion}
         />
@@ -2243,6 +2282,9 @@ function TripStoryExplorer({
                 state.selectedDayId === day.id ? "active" : ""
               }`}
               key={day.id}
+              ref={(element) => {
+                activeDayRefs.current[day.id] = element;
+              }}
             >
               <button
                 type="button"
@@ -2641,12 +2683,14 @@ function StoryMapCanvas({
   model,
   state,
   onStateChange,
+  onDayMarkerClick,
   onStopMarkerClick,
   reducedMotion,
 }: {
   model: ReturnType<typeof buildStoryModel>;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
+  onDayMarkerClick: (dayId: string) => void;
   onStopMarkerClick: (stopId: string, dayId: string) => void;
   reducedMotion: boolean;
 }) {
@@ -2733,9 +2777,44 @@ function StoryMapCanvas({
     routeCollection.features.length > 0 ||
     stopCollection.features.length > 0 ||
     mediaCollection.features.length > 0;
+  const dayMarkerData = useMemo(
+    () =>
+      Array.from(new Set(model.stops.map((stop) => stop.dayId)))
+        .map((dayId, index) => {
+          const dayStops = model.stops.filter((stop) => stop.dayId === dayId);
+          const dayMedia = model.media.filter((item) => item.dayId === dayId);
+          const coordinates = centerOfCoordinates([
+            ...dayStops
+              .filter((stop) => stop.coordinates)
+              .map((stop) => stop.coordinates as [number, number]),
+            ...dayMedia
+              .filter((item) => item.coordinates)
+              .map((item) => item.coordinates as [number, number]),
+          ]);
+          const featuredMedia =
+            dayMedia.find((item) => item.thumbnailUrl) ?? dayMedia[0] ?? null;
+          const firstStop = dayStops[0] ?? null;
+          return {
+            dayId,
+            label: firstStop ? `Day ${index + 1}` : "Day",
+            coordinates,
+            featuredMedia,
+            count: dayStops.length,
+            color: dayColorMap.get(dayId) ?? storyDayColors[0],
+          };
+        })
+        .filter((item) => item.coordinates),
+    [dayColorMap, model.media, model.stops],
+  );
   const stopMarkerData = useMemo(
     () =>
       model.stops
+        .filter(
+          (stop) =>
+            state.viewMode !== "STOP" ||
+            !state.selectedDayId ||
+            stop.dayId === state.selectedDayId,
+        )
         .filter((stop) => stop.coordinates)
         .map((stop) => {
           const stopMedia = model.media.filter((item) => item.stopId === stop.id);
@@ -2748,8 +2827,10 @@ function StoryMapCanvas({
             color: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
           };
         }),
-    [dayColorMap, model.media, model.stops],
+    [dayColorMap, model.media, model.stops, state.selectedDayId, state.viewMode],
   );
+  const showDayMarkers =
+    state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) {
@@ -2864,6 +2945,14 @@ function StoryMapCanvas({
           "circle-stroke-opacity": 0,
         },
       });
+      const mediaVisibility =
+        stateRef.current.viewMode === "DAY" ||
+        stateRef.current.viewMode === "TRIP_OVERVIEW"
+          ? "none"
+          : "visible";
+      for (const layerId of ["media-clusters", "media-unclustered"]) {
+        map.setLayoutProperty(layerId, "visibility", mediaVisibility);
+      }
       map.on("click", "stops", (event) => {
         if (stateRef.current.viewMode === "DAY") {
           return;
@@ -2926,11 +3015,78 @@ function StoryMapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map?.isStyleLoaded()) {
+      return;
+    }
+    const mediaVisibility = showDayMarkers ? "none" : "visible";
+    for (const layerId of ["media-clusters", "media-unclustered"]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", mediaVisibility);
+      }
+    }
+  }, [showDayMarkers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) {
       return;
     }
     stopPhotoMarkers.current.forEach((marker) => marker.remove());
     stopPhotoMarkers.current = [];
+    if (showDayMarkers) {
+      for (const {
+        dayId,
+        label,
+        coordinates,
+        featuredMedia,
+        count,
+        color,
+      } of dayMarkerData) {
+        if (!coordinates) {
+          continue;
+        }
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className =
+          dayId === state.selectedDayId
+            ? "photo-day-marker active"
+            : "photo-day-marker";
+        element.setAttribute("aria-label", `Explore stops for ${label}`);
+        element.style.setProperty("--stop-color", color);
+        if (featuredMedia?.thumbnailUrl) {
+          const image = document.createElement("img");
+          image.src = featuredMedia.thumbnailUrl;
+          image.alt = "";
+          image.loading = "lazy";
+          element.appendChild(image);
+        } else {
+          const fallback = document.createElement("span");
+          fallback.textContent = label.replace("Day ", "");
+          element.appendChild(fallback);
+        }
+        const title = document.createElement("strong");
+        title.textContent = label;
+        element.appendChild(title);
+        if (count > 1) {
+          const badge = document.createElement("small");
+          badge.textContent = `${count} stops`;
+          element.appendChild(badge);
+        }
+        element.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onDayMarkerClick(dayId);
+        });
+        stopPhotoMarkers.current.push(
+          new maplibregl.Marker({ anchor: "center", element })
+            .setLngLat(coordinates)
+            .addTo(map),
+        );
+      }
+      return () => {
+        stopPhotoMarkers.current.forEach((marker) => marker.remove());
+        stopPhotoMarkers.current = [];
+      };
+    }
     for (const { stop, featuredMedia, count, color } of stopMarkerData) {
       if (!stop.coordinates) {
         continue;
@@ -2973,7 +3129,16 @@ function StoryMapCanvas({
       stopPhotoMarkers.current.forEach((marker) => marker.remove());
       stopPhotoMarkers.current = [];
     };
-  }, [onStopMarkerClick, state.selectedStopId, stopMarkerData]);
+  }, [
+    dayMarkerData,
+    onDayMarkerClick,
+    onStateChange,
+    onStopMarkerClick,
+    showDayMarkers,
+    state.selectedDayId,
+    state.selectedStopId,
+    stopMarkerData,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2982,6 +3147,9 @@ function StoryMapCanvas({
     }
     selectedMarkers.current.forEach((marker) => marker.remove());
     selectedMarkers.current = [];
+    if (showDayMarkers) {
+      return;
+    }
     const selectedMedia = model.media
       .filter(
         (item) =>
@@ -3005,6 +3173,7 @@ function StoryMapCanvas({
   }, [
     model.media,
     model.stops,
+    showDayMarkers,
     state.selectedMediaId,
     state.selectedMomentId,
     state.selectedStopId,
@@ -3088,31 +3257,31 @@ function StoryMapCanvas({
   );
 }
 
+function centerOfCoordinates(
+  coordinates: [number, number][],
+): [number, number] | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+  const longitudes = coordinates.map((coordinate) => coordinate[0]);
+  const latitudes = coordinates.map((coordinate) => coordinate[1]);
+  return [
+    (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+    (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+  ];
+}
+
 function focusCoordinates(
   model: ReturnType<typeof buildStoryModel>,
   state: StoryMapState,
 ): [number, number][] {
-  if (state.viewMode === "TRIP_OVERVIEW") {
+  if (state.viewMode === "TRIP_OVERVIEW" || state.viewMode === "DAY") {
     return [
       ...model.stops
         .filter((item) => item.coordinates)
         .map((item) => item.coordinates as [number, number]),
       ...model.media
         .filter((item) => item.coordinates)
-        .map((item) => item.coordinates as [number, number]),
-    ];
-  }
-  if (state.viewMode === "DAY" && state.selectedDayId) {
-    return [
-      ...model.stops
-        .filter(
-          (item) => item.dayId === state.selectedDayId && item.coordinates,
-        )
-        .map((item) => item.coordinates as [number, number]),
-      ...model.media
-        .filter(
-          (item) => item.dayId === state.selectedDayId && item.coordinates,
-        )
         .map((item) => item.coordinates as [number, number]),
     ];
   }

@@ -1010,6 +1010,68 @@ p {
   padding: 2px 5px;
 }
 
+.photo-day-marker {
+  min-width: 92px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0 12px 22px rgb(23 32 42 / 22%));
+}
+
+.photo-day-marker img,
+.photo-day-marker > span {
+  width: 66px;
+  height: 66px;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: var(--stop-color, var(--accent));
+  box-shadow: 0 0 0 5px var(--stop-color, var(--accent));
+}
+
+.photo-day-marker img {
+  object-fit: cover;
+}
+
+.photo-day-marker > span {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.photo-day-marker strong,
+.photo-day-marker small {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  padding: 4px 8px;
+}
+
+.photo-day-marker strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.photo-day-marker small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.photo-day-marker.active img,
+.photo-day-marker.active > span {
+  box-shadow:
+    0 0 0 6px var(--stop-color, var(--accent)),
+    0 0 0 10px rgb(255 255 255 / 72%);
+}
+
 .story-timeline {
   display: grid;
   gap: 16px;
