@@ -3230,22 +3230,29 @@ function StoryMapCanvas({
           : "photo-stop-marker";
       element.setAttribute("aria-label", `Open photos for ${stop.label}`);
       element.style.setProperty("--stop-color", color);
+      const bubble = document.createElement("span");
+      bubble.className = "photo-stop-marker-image";
       if (featuredMedia?.thumbnailUrl) {
         const image = document.createElement("img");
         image.src = featuredMedia.thumbnailUrl;
         image.alt = "";
         image.loading = "lazy";
-        element.appendChild(image);
+        bubble.appendChild(image);
       } else {
         const fallback = document.createElement("span");
         fallback.textContent = String(stop.position);
-        element.appendChild(fallback);
+        bubble.appendChild(fallback);
       }
       if (count > 1) {
         const badge = document.createElement("small");
         badge.textContent = String(count);
-        element.appendChild(badge);
+        bubble.appendChild(badge);
       }
+      const label = document.createElement("strong");
+      label.className = "photo-stop-marker-label";
+      label.textContent = stop.label;
+      element.appendChild(bubble);
+      element.appendChild(label);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         onStopMarkerClick(stop.id, stop.dayId);
