@@ -1,6 +1,6 @@
 # Cloud Adapter Guide
 
-TripWeave has not added OCI, AWS, or GCP SDKs yet. This guide defines the proof that a future cloud adapter can be added without changing domain logic, application use cases, database semantics, or public API contracts.
+TripWeave has added OCI Object Storage as the first cloud adapter after the Stage 13 provider-contract proof. The adapter is isolated from domain logic, application use cases, database semantics, and public API contracts. AWS and GCP remain future adapters.
 
 ## Stage 13 Contract
 
@@ -23,7 +23,48 @@ Provider selection happens only in the storage composition root:
 - Provider-specific environment namespaces must be ignored unless their adapter is selected.
 - Domain, application, API schemas, migrations, and publication manifests must not branch on provider names.
 
-The current local MVP intentionally supports only `local`.
+The current local MVP still defaults to `local`. `TRIPWEAVE_STORAGE_ADAPTER=oci` selects the OCI adapter in the storage composition root only.
+
+## OCI Adapter
+
+OCI-specific SDK code lives under `tripweave.adapters.storage.oci`. The SDK dependency is in the backend `oci` dependency group and is not installed by default local checks.
+
+Supported behavior:
+
+- `stat`, `open_reader`, `put`, `delete`, and `exists` map logical aliases to private OCI Object Storage buckets.
+- `api_proxy` upload grants remain available as a provider-neutral fallback.
+- `single_put` upload grants use short-lived, object-specific, write-only pre-authenticated requests when enabled.
+- `download_grant` prefers a short-lived object-specific read grant and falls back to API proxy streaming if grant creation fails.
+- Adapter metadata records SHA-256 as object metadata for service-side writes; completion still verifies uploaded size through `BlobStore.stat`.
+- The database continues to store only `store_alias` and `object_key`.
+
+OCI runtime identity:
+
+- Deployed environments use `TRIPWEAVE_OCI_AUTH_MODE=instance_principal`.
+- Developer integration tests may use `TRIPWEAVE_OCI_AUTH_MODE=config_profile`.
+- OCI API private keys must never be committed.
+
+Required configuration:
+
+```sh
+TRIPWEAVE_STORAGE_ADAPTER=oci
+TRIPWEAVE_OCI_AUTH_MODE=instance_principal
+TRIPWEAVE_OCI_REGION=us-ashburn-1
+TRIPWEAVE_OCI_NAMESPACE=<namespace>
+TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS=media_private=<private-bucket>,story_published=<published-bucket>
+TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS=true
+```
+
+Set `TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS=false` to force the provider-neutral `api_proxy` fallback.
+
+Build OCI-enabled backend images with the opt-in dependency group:
+
+```sh
+docker build \
+  --build-arg BACKEND_DEPENDENCY_GROUPS=oci \
+  -t tripweave-backend:oci \
+  services/backend
+```
 
 ## BlobStore Contract
 
@@ -53,6 +94,40 @@ pytestmark = pytest.mark.skipif(
 ```
 
 Provider tests must never run as part of ordinary `make check` unless they use fake/local adapters.
+
+OCI integration test convention:
+
+```sh
+TRIPWEAVE_OCI_TESTS=1 \
+uv run --project services/backend --group oci \
+  pytest services/backend/tests/integration/test_oci_blob_store_contract.py
+```
+
+The OCI integration test uses disposable objects in configured private buckets and deletes known test objects after the contract run.
+
+## Browser CORS And Smoke Test
+
+For browser `single_put`, configure Object Storage CORS on each private bucket:
+
+- Allowed origins: the deployed TripWeave web origin.
+- Allowed methods: `PUT`, `GET`, `HEAD`, and `OPTIONS`.
+- Allowed headers: at least `content-type` and `content-length`.
+- Exposed headers: `etag` and `opc-request-id`.
+
+Manual smoke path:
+
+1. Apply the storage-only infrastructure after explicit operator approval.
+2. Start the API with `TRIPWEAVE_STORAGE_ADAPTER=oci`.
+3. Register or log in locally against that API.
+4. Create a trip and upload one small JPEG.
+5. Confirm the browser receives an `UploadGrant.method` of `single_put`.
+6. Confirm the browser PUT succeeds without CORS errors.
+7. Confirm upload completion creates a media item and the worker can read it through `open_reader`.
+8. Repeat with `TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS=false`; the browser should upload through the existing `api_proxy` transport.
+
+Current CORS result: not executed in this local environment because no OCI buckets or web origin were provisioned.
+
+Current fallback status: implemented. `api_proxy` remains available for OCI and local behavior is unchanged.
 
 ## Capabilities
 
@@ -133,4 +208,4 @@ The script uses Docker Buildx with `--platform linux/amd64,linux/arm64` and `--o
 
 ## Current Result
 
-The repository currently proves the storage contract with fake and local adapters only. No OCI, AWS, or GCP SDK dependency is present.
+The repository proves the storage contract with fake and local adapters during ordinary local checks. OCI integration tests are opt-in and require the backend `oci` dependency group plus explicit credentials. No AWS or GCP SDK dependency is present.

@@ -2,7 +2,7 @@
 
 TripWeave reconstructs one shared trip from multiple travelers' camera rolls. Contributors upload photos after a trip. The system aligns time and location, groups media into days, stops, and moments, provides a review-by-exception workflow, and publishes an interactive map-and-timeline story.
 
-This repository now contains the minimal local development foundation, the provider-neutral database foundation, the first local owner workflow, local browser uploads, and asynchronous local media processing. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, PostgreSQL repository adapters, email/password authentication, server-side sessions, local trip management, provider-neutral upload grants, and local thumbnail/preview generation. Cloud adapters are intentionally not implemented yet.
+This repository now contains the minimal local development foundation, the provider-neutral database foundation, the first local owner workflow, local browser uploads, and asynchronous local media processing. It includes the web app, backend API, worker entry point, PostgreSQL/PostGIS container, local blob volume, checks, CI wiring, Alembic migrations, SQLAlchemy models, repository ports, PostgreSQL repository adapters, email/password authentication, server-side sessions, local trip management, provider-neutral upload grants, and local thumbnail/preview generation. OCI Object Storage is available as an isolated, opt-in storage adapter after the provider-contract proof. Local filesystem storage remains the default local behavior.
 
 ## Architecture Direction
 
@@ -34,7 +34,7 @@ The planned stack is:
 - `docs/mvp-scope.md` defines the local MVP stages.
 - `docs/security-and-privacy.md` defines ownership, deletion, publication, and secret-handling rules.
 - `docs/cloud-portability-contract.md` defines provider-neutral storage contracts.
-- `docs/CLOUD_ADAPTER_GUIDE.md` defines Stage 13 cloud-adapter proof rules.
+- `docs/CLOUD_ADAPTER_GUIDE.md` defines the provider contract and OCI adapter conventions.
 - `docs/worker-state-machine.md` defines durable processing-job claiming, retry, and media-ingest behavior.
 - `docs/reconstruction-algorithm.md` defines the deterministic local trip reconstruction algorithm.
 - `docs/manual-review-walkthrough.md` defines the local review-by-exception correction walkthrough.

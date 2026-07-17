@@ -61,7 +61,13 @@ from tripweave.domain.enums import (
     TripVisibility,
     UploadState,
 )
-from tripweave.domain.storage import BlobRef, DownloadGrantRequest, UploadGrant, UploadGrantRequest
+from tripweave.domain.storage import (
+    BlobRef,
+    DownloadGrantRequest,
+    UploadGrant,
+    UploadGrantRequest,
+    UploadTransport,
+)
 from tripweave.entrypoints.api.schemas import (
     AuthResponse,
     BlobRefResponse,
@@ -2565,6 +2571,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 store_alias=upload_file.store_alias,
                 object_key=upload_file.object_key,
             )
+            transport = (
+                UploadTransport.SINGLE_PUT
+                if app.state.blob_store.capabilities.supports_single_put_upload
+                else UploadTransport.API_PROXY
+            )
             grant = upload_grant_response(
                 app.state.blob_store.create_upload_grant(
                     UploadGrantRequest(
@@ -2572,6 +2583,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         max_size_bytes=upload_file.declared_byte_size
                         or resolved_settings.upload_max_file_bytes,
                         content_type=upload_file.declared_mime_type,
+                        transport=transport,
                     )
                 )
             )

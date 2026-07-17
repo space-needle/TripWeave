@@ -1,5 +1,6 @@
 import ast
 import re
+import tomllib
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -33,10 +34,10 @@ FORBIDDEN_CLOUD_IMPORT_PREFIXES = (
     "aws",
 )
 FORBIDDEN_LOCK_PATTERNS = (
-    re.compile(r"(?m)^name = \"(?:boto3|botocore|oci|azure-storage[^\" ]*)\"$"),
+    re.compile(r"(?m)^name = \"(?:boto3|botocore|azure-storage[^\" ]*)\"$"),
     re.compile(r"(?m)^name = \"google-cloud[^\" ]*\"$"),
-    re.compile(r"/(?:@aws-sdk|aws-sdk|google-cloud|oci|azure-storage)[/@:]"),
-    re.compile(r"^\s{2,}(?:@aws-sdk/|aws-sdk:|google-cloud|oci:|azure-storage)", re.MULTILINE),
+    re.compile(r"/(?:@aws-sdk|aws-sdk|google-cloud|azure-storage)[/@:]"),
+    re.compile(r"^\s{2,}(?:@aws-sdk/|aws-sdk:|google-cloud|azure-storage)", re.MULTILINE),
 )
 PROVIDER_CONTRACT_TERMS = (
     "bucket",
@@ -76,7 +77,7 @@ def test_domain_and_application_do_not_import_adapters_or_cloud_sdks() -> None:
     assert violations == []
 
 
-def test_no_cloud_sdk_dependency_appears_in_project_files() -> None:
+def test_no_unapproved_cloud_sdk_dependency_appears_in_project_files() -> None:
     checked_files = [
         BACKEND_ROOT / "pyproject.toml",
         BACKEND_ROOT / "uv.lock",
@@ -94,6 +95,15 @@ def test_no_cloud_sdk_dependency_appears_in_project_files() -> None:
             )
 
     assert violations == []
+
+
+def test_oci_sdk_is_confined_to_backend_adapter_dependency_group() -> None:
+    pyproject = tomllib.loads((BACKEND_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dependency_groups = pyproject.get("dependency-groups", {})
+    default_dependencies = pyproject.get("project", {}).get("dependencies", [])
+
+    assert not any(str(item).startswith("oci==") for item in default_dependencies)
+    assert any(str(item).startswith("oci==") for item in dependency_groups.get("oci", []))
 
 
 def test_cloud_sdk_imports_are_confined_to_adapter_or_composition_roots() -> None:

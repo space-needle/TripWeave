@@ -29,6 +29,9 @@ dev = [
   "pytest-cov==7.0.0",
   "ruff==0.14.9",
 ]
+oci = [
+  "oci==2.182.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.4,<0.10.0"]

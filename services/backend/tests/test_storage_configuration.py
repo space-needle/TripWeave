@@ -20,7 +20,6 @@ def test_unselected_provider_namespace_is_ignored(
     )
 
     assert settings.storage_adapter == "local"
-    assert not hasattr(settings, "oci_namespace")
     assert isinstance(create_blob_store(settings), LocalBlobStore)
 
 
@@ -33,3 +32,29 @@ def test_unknown_storage_adapter_fails_in_composition_root(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="Unsupported storage adapter"):
         create_blob_store(settings)
+
+
+def test_oci_storage_requires_alias_bucket_mapping(tmp_path: Path) -> None:
+    settings = Settings(
+        TRIPWEAVE_BLOB_DIR=tmp_path,
+        TRIPWEAVE_STORAGE_ADAPTER="oci",
+        TRIPWEAVE_STORAGE_SIGNING_SECRET="unit-test-signing-secret",
+        TRIPWEAVE_OCI_NAMESPACE="unit-test-namespace",
+        TRIPWEAVE_OCI_REGION="us-ashburn-1",
+    )
+
+    with pytest.raises(ValueError, match="Missing OCI bucket mapping"):
+        create_blob_store(settings)
+
+
+def test_oci_alias_bucket_mapping_parses() -> None:
+    settings = Settings(
+        TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS=(
+            "media_private=tripweave-media,story_published=tripweave-story"
+        )
+    )
+
+    assert settings.oci_alias_to_bucket == {
+        "media_private": "tripweave-media",
+        "story_published": "tripweave-story",
+    }

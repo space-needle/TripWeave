@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     storage_store_aliases: str = Field(
         default="media_private,story_published", alias="TRIPWEAVE_STORAGE_STORE_ALIASES"
     )
+    oci_auth_mode: str = Field(default="instance_principal", alias="TRIPWEAVE_OCI_AUTH_MODE")
+    oci_region: str = Field(default="", alias="TRIPWEAVE_OCI_REGION")
+    oci_namespace: str = Field(default="", alias="TRIPWEAVE_OCI_NAMESPACE")
+    oci_config_file: str = Field(default="~/.oci/config", alias="TRIPWEAVE_OCI_CONFIG_FILE")
+    oci_config_profile: str = Field(default="DEFAULT", alias="TRIPWEAVE_OCI_CONFIG_PROFILE")
+    oci_store_alias_buckets: str = Field(default="", alias="TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS")
+    oci_use_single_put_grants: bool = Field(
+        default=True, alias="TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS"
+    )
     upload_grant_lifetime_seconds: int = Field(
         default=900, ge=1, alias="TRIPWEAVE_UPLOAD_GRANT_SECONDS"
     )
@@ -108,6 +117,18 @@ class Settings(BaseSettings):
     @property
     def store_aliases(self) -> set[str]:
         return {alias.strip() for alias in self.storage_store_aliases.split(",") if alias.strip()}
+
+    @property
+    def oci_alias_to_bucket(self) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for entry in self.oci_store_alias_buckets.split(","):
+            if not entry.strip():
+                continue
+            alias, separator, bucket_name = entry.partition("=")
+            if not separator or not alias.strip() or not bucket_name.strip():
+                raise ValueError("TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS must use alias=bucket entries")
+            mapping[alias.strip()] = bucket_name.strip()
+        return mapping
 
     @property
     def allowed_upload_extensions(self) -> set[str]:

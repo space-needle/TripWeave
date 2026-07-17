@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from tripweave.adapters import orm
 from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.database import check_database, create_database_engine
-from tripweave.adapters.local_blob_store import BlobNotFoundError, LocalBlobStore
+from tripweave.adapters.local_blob_store import BlobNotFoundError
 from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.publication import PublicationError, publish_story_version
 from tripweave.adapters.reconstruction import reconstruct_trip
@@ -41,6 +41,7 @@ from tripweave.domain.enums import (
 )
 from tripweave.domain.storage import BlobRef
 from tripweave.logging import configure_logging
+from tripweave.ports.blob_store import BlobStore
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def run_worker(settings: Settings) -> None:
 def worker_loop(
     settings: Settings,
     session_factory: sessionmaker[Session],
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     worker_id: str,
     stop_event: threading.Event,
 ) -> None:
@@ -189,7 +190,7 @@ def claim_job(db: Session, settings: Settings, worker_id: str) -> ClaimedJob | N
 def handle_job(
     settings: Settings,
     session_factory: sessionmaker[Session],
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     worker_id: str,
     job: ClaimedJob,
 ) -> None:
@@ -257,7 +258,7 @@ def handle_job(
 def ingest_media(
     db: Session,
     settings: Settings,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     media_item_id: UUID,
 ) -> None:
     media_item = db.get(orm.MediaItem, media_item_id)
@@ -304,7 +305,7 @@ def reconstruct_queued_trip(db: Session, trip_id: UUID) -> None:
 
 def apply_processed_media(
     db: Session,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     media_item: orm.MediaItem,
     processed: ProcessedMedia,
 ) -> None:

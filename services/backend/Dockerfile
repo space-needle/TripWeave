@@ -1,6 +1,7 @@
 FROM ghcr.io/astral-sh/uv:0.9.4-python3.14-bookworm-slim
 
 WORKDIR /app
+ARG BACKEND_DEPENDENCY_GROUPS=""
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,7 +12,11 @@ COPY pyproject.toml uv.lock ./
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY src ./src
-RUN uv sync --frozen --no-dev
+RUN if [ -n "$BACKEND_DEPENDENCY_GROUPS" ]; then \
+      uv sync --frozen --no-dev --group "$BACKEND_DEPENDENCY_GROUPS"; \
+    else \
+      uv sync --frozen --no-dev; \
+    fi
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
