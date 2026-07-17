@@ -1601,6 +1601,12 @@ button.thumb-frame:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.photo-browser-toolbar strong {
+  color: rgb(255 255 255 / 76%);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 .photo-browser-toolbar small {
   color: rgb(255 255 255 / 68%);
   font-size: 0.84rem;

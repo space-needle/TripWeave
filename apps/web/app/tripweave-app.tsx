@@ -2720,11 +2720,10 @@ function PhotoBrowser({
       <div className="photo-browser-panel">
         <div className="photo-browser-toolbar">
           <div>
-            <strong>{selectedPhoto.filename ?? "Untitled photo"}</strong>
-            <small>
+            <strong>
               {selectedPhoto.contributor} ·{" "}
               {formatDate(selectedPhoto.capturedAt, timezoneId)}
-            </small>
+            </strong>
           </div>
           <button type="button" onClick={onClose}>
             Close
