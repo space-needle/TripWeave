@@ -1355,7 +1355,9 @@ function OwnerWorkspace() {
                   <div className="button-row">
                     <div className="story-action-stack">
                       <button
-                        className={storyUpdateNeeded ? "needs-update" : undefined}
+                        className={
+                          storyUpdateNeeded ? "needs-update" : undefined
+                        }
                         type="button"
                         onClick={runReconstruction}
                         disabled={isBusy}
@@ -4125,7 +4127,8 @@ function stopDisplayCoordinateMap(
 ): Map<string, [number, number]> {
   const coordinates = new Map<string, [number, number]>();
   for (const stop of model.stops) {
-    const coordinate = stop.coordinates ?? displayStopCoordinate(stop, model.legs);
+    const coordinate =
+      stop.coordinates ?? displayStopCoordinate(stop, model.legs);
     if (coordinate) {
       coordinates.set(stop.id, coordinate);
     }

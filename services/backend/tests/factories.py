@@ -11,11 +11,15 @@ def user_row(user_id: UUID | None = None, email: str = "traveler@example.com") -
     }
 
 
-def trip_row(trip_id: UUID | None = None, created_by: UUID | None = None) -> dict[str, object]:
+def trip_row(
+    trip_id: UUID | None = None,
+    created_by: UUID | None = None,
+    timezone_id: str = "America/Los_Angeles",
+) -> dict[str, object]:
     return {
         "id": trip_id or uuid4(),
         "title": "Summer Trip",
-        "timezone_id": "America/Los_Angeles",
+        "timezone_id": timezone_id,
         "created_by": created_by or uuid4(),
     }
 

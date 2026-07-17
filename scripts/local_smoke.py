@@ -12,16 +12,27 @@ from typing import Any
 
 API_BASE = os.environ.get("TRIPWEAVE_LOCAL_API", "http://localhost:8000").rstrip("/")
 WEB_BASE = os.environ.get("TRIPWEAVE_LOCAL_WEB", "http://localhost:3000").rstrip("/")
-CLOUD_SDK_MARKERS = ("boto3", "botocore", "google-cloud", "oci==", "@aws-sdk", "aws-sdk")
+CLOUD_SDK_MARKERS = (
+    "boto3",
+    "botocore",
+    "google-cloud",
+    "oci==",
+    "@aws-sdk",
+    "aws-sdk",
+)
 
 
 class Client:
     def __init__(self) -> None:
         self.cookies = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self.cookies)
+        )
         self.csrf = ""
 
-    def request(self, method: str, url: str, body: Any | None = None) -> tuple[int, Any]:
+    def request(
+        self, method: str, url: str, body: Any | None = None
+    ) -> tuple[int, Any]:
         headers = {"x-request-id": "local-smoke"}
         data = None
         if self.csrf:
@@ -57,7 +68,10 @@ def check_no_cloud_sdks() -> None:
         if path.exists()
     ).lower()
     for marker in CLOUD_SDK_MARKERS:
-        require(marker.lower() not in lock_text, f"Cloud SDK marker found in lock files: {marker}")
+        require(
+            marker.lower() not in lock_text,
+            f"Cloud SDK marker found in lock files: {marker}",
+        )
 
 
 def main() -> None:
@@ -87,8 +101,50 @@ def main() -> None:
 
     ops_status, ops_body = client.request("GET", f"{API_BASE}/ops/local-mvp")
     require(ops_status == 200 and "jobStates" in ops_body, "Ops summary failed")
+    for key in [
+        "counts",
+        "environment",
+        "limits",
+        "mediaStates",
+        "recentFailures",
+        "storage",
+        "uploadStates",
+        "warnings",
+        "worker",
+    ]:
+        require(key in ops_body, f"Ops summary missing {key}")
+    require(
+        "media_private" in ops_body["environment"]["storageAliases"],
+        "Ops summary missing media_private store alias",
+    )
+    require(
+        "story_published" in ops_body["environment"]["storageAliases"],
+        "Ops summary missing story_published store alias",
+    )
     check_no_cloud_sdks()
-    print(json.dumps({"ready": True, "api": API_BASE, "web": WEB_BASE}, indent=2))
+    print(
+        json.dumps(
+            {
+                "ready": True,
+                "api": API_BASE,
+                "web": WEB_BASE,
+                "counts": ops_body["counts"],
+                "jobStates": ops_body["jobStates"],
+                "mediaStates": ops_body["mediaStates"],
+                "uploadStates": ops_body["uploadStates"],
+                "shareLinkStates": ops_body["shareLinkStates"],
+                "worker": ops_body["worker"],
+                "storage": {
+                    "totalBytes": ops_body["storage"]["totalBytes"],
+                    "totalFiles": ops_body["storage"]["totalFiles"],
+                    "aliases": ops_body["storage"]["aliases"],
+                },
+                "warnings": ops_body["warnings"],
+                "recentFailureCount": len(ops_body["recentFailures"]),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -348,8 +348,21 @@ def test_local_ops_endpoint_is_authenticated(client: TestClient) -> None:
     body = response.json()
     assert "jobStates" in body
     assert "mediaStates" in body
+    assert "uploadStates" in body
+    assert "reviewStates" in body
+    assert "shareLinkStates" in body
+    assert "recentFailures" in body
+    assert "counts" in body
+    assert body["counts"]["users"] >= 1
+    assert "limits" in body
+    assert body["limits"]["maxFilesPerTrip"] >= 1
+    assert "environment" in body
+    assert "media_private" in body["environment"]["storageAliases"]
+    assert "story_published" in body["environment"]["storageAliases"]
     assert "storage" in body
     assert "worker" in body
+    assert "warnings" in body
+    assert body["warnings"]["workerStale"] is True
 
 
 def test_trip_timezone_must_be_iana_identifier(client: TestClient) -> None:
@@ -1222,7 +1235,7 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     assert merged_stops[0]["title"] == "Named target stop"
 
     with engine.connect() as connection:
-        legs = connection.execute(
+        leg_rows = connection.execute(
             text(
                 """
                 SELECT from_stop_id::text, to_stop_id::text, ST_AsText(geometry::geometry)
@@ -1233,6 +1246,10 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
             ),
             {"trip_id": trip_id},
         ).all()
+    legs = [
+        (str(from_stop_id), str(to_stop_id), str(geometry))
+        for from_stop_id, to_stop_id, geometry in leg_rows
+    ]
 
     assert legs == [(stop_one["id"], stop_three["id"], "LINESTRING(127.005 35.005,127.03 35.03)")]
     assert all(

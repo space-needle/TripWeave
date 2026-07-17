@@ -9,7 +9,6 @@ import urllib.request
 from dataclasses import dataclass
 from http.cookiejar import CookieJar
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 
 from PIL import ExifTags, Image
@@ -30,7 +29,9 @@ class ApiResponse:
 class ApiClient:
     def __init__(self) -> None:
         self.cookies = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self.cookies)
+        )
         self.csrf_token = ""
 
     def request(
@@ -52,7 +53,9 @@ class ApiClient:
         if raw is not None:
             data = raw
         url = f"{API_BASE}{path}"
-        request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
+        request = urllib.request.Request(
+            url, data=data, headers=request_headers, method=method
+        )
         try:
             response = self.opener.open(request, timeout=30)
             payload = response.read()
@@ -75,7 +78,9 @@ class ApiClient:
         headers = {"x-csrf-token": self.csrf_token} if self.csrf_token else {}
         response = self.request(method, path, body=body, headers=headers)
         if response.status >= 400:
-            raise RuntimeError(f"{method} {path} failed: {response.status} {response.body}")
+            raise RuntimeError(
+                f"{method} {path} failed: {response.status} {response.body}"
+            )
         return response.body
 
 
@@ -167,9 +172,13 @@ def accept_guest(owner: ApiClient, trip_id: str, display_name: str) -> ApiClient
     invitation = owner.json("POST", f"/trips/{trip_id}/invitations", {})
     token = str(invitation["inviteUrl"]).rsplit("/", 1)[-1]
     guest = ApiClient()
-    accepted = guest.request("POST", f"/invitations/{token}/accept", body={"displayName": display_name})
+    accepted = guest.request(
+        "POST", f"/invitations/{token}/accept", body={"displayName": display_name}
+    )
     if accepted.status != 200:
-        raise RuntimeError(f"Guest invitation failed: {accepted.status} {accepted.body}")
+        raise RuntimeError(
+            f"Guest invitation failed: {accepted.status} {accepted.body}"
+        )
     guest.csrf_token = str(accepted.body["csrfToken"])
     return guest
 
@@ -178,7 +187,15 @@ def upload(client: ApiClient, trip_id: str, filename: str, payload: bytes) -> No
     session = client.json(
         "POST",
         f"/trips/{trip_id}/upload-sessions",
-        {"files": [{"filename": filename, "byteSize": len(payload), "mimeType": "image/jpeg"}]},
+        {
+            "files": [
+                {
+                    "filename": filename,
+                    "byteSize": len(payload),
+                    "mimeType": "image/jpeg",
+                }
+            ]
+        },
     )
     upload_file = session["files"][0]
     grant = upload_file["grant"]
@@ -190,7 +207,9 @@ def upload(client: ApiClient, trip_id: str, filename: str, payload: bytes) -> No
     client.json("POST", f"/upload-files/{upload_file['id']}/complete")
 
 
-def wait_for_worker(client: ApiClient, expected_ready: int, timeout_seconds: int = 120) -> None:
+def wait_for_worker(
+    client: ApiClient, expected_ready: int, timeout_seconds: int = 120
+) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         media = client.json("GET", "/trips")
@@ -213,12 +232,78 @@ def main() -> None:
     guest_two = accept_guest(owner, trip_id, "Demo Guest Two")
 
     fixtures = [
-        (owner, "owner-day1-a.jpg", jpeg_fixture(color="red", captured_at="2026:06:06 10:00:00", latitude=35.6812, longitude=139.7671, make="TripWeaveCam", model="Owner")),
-        (owner, "owner-after-midnight.jpg", jpeg_fixture(color="orange", captured_at="2026:06:07 01:10:00", latitude=35.6813, longitude=139.7672, make="TripWeaveCam", model="Owner")),
-        (guest_one, "guest1-day2-nogps.jpg", jpeg_fixture(color="blue", captured_at="2026:06:07 11:00:00", latitude=None, longitude=None, make="OffsetCam", model="Behind15m")),
-        (guest_one, "guest1-offset-match.jpg", jpeg_fixture(color="green", captured_at="2026:06:07 11:15:00", latitude=35.6895, longitude=139.6917, make="OffsetCam", model="Behind15m")),
-        (guest_two, "guest2-day2-match.jpg", jpeg_fixture(color="green", captured_at="2026:06:07 11:30:00", latitude=35.6895, longitude=139.6917, make="TripWeaveCam", model="GuestTwo")),
-        (guest_two, "guest2-day3.jpg", jpeg_fixture(color="purple", captured_at="2026:06:08 13:00:00", latitude=35.7101, longitude=139.8107, make="TripWeaveCam", model="GuestTwo")),
+        (
+            owner,
+            "owner-day1-a.jpg",
+            jpeg_fixture(
+                color="red",
+                captured_at="2026:06:06 10:00:00",
+                latitude=35.6812,
+                longitude=139.7671,
+                make="TripWeaveCam",
+                model="Owner",
+            ),
+        ),
+        (
+            owner,
+            "owner-after-midnight.jpg",
+            jpeg_fixture(
+                color="orange",
+                captured_at="2026:06:07 01:10:00",
+                latitude=35.6813,
+                longitude=139.7672,
+                make="TripWeaveCam",
+                model="Owner",
+            ),
+        ),
+        (
+            guest_one,
+            "guest1-day2-nogps.jpg",
+            jpeg_fixture(
+                color="blue",
+                captured_at="2026:06:07 11:00:00",
+                latitude=None,
+                longitude=None,
+                make="OffsetCam",
+                model="Behind15m",
+            ),
+        ),
+        (
+            guest_one,
+            "guest1-offset-match.jpg",
+            jpeg_fixture(
+                color="green",
+                captured_at="2026:06:07 11:15:00",
+                latitude=35.6895,
+                longitude=139.6917,
+                make="OffsetCam",
+                model="Behind15m",
+            ),
+        ),
+        (
+            guest_two,
+            "guest2-day2-match.jpg",
+            jpeg_fixture(
+                color="green",
+                captured_at="2026:06:07 11:30:00",
+                latitude=35.6895,
+                longitude=139.6917,
+                make="TripWeaveCam",
+                model="GuestTwo",
+            ),
+        ),
+        (
+            guest_two,
+            "guest2-day3.jpg",
+            jpeg_fixture(
+                color="purple",
+                captured_at="2026:06:08 13:00:00",
+                latitude=35.7101,
+                longitude=139.8107,
+                make="TripWeaveCam",
+                model="GuestTwo",
+            ),
+        ),
     ]
     duplicate = fixtures[0][2]
     fixtures.append((guest_two, "exact-duplicate.jpg", duplicate))
@@ -230,7 +315,11 @@ def main() -> None:
     wait_for_worker(owner, expected_ready=7)
     reconstruction = owner.json("POST", f"/trips/{trip_id}/reconstruction-runs")
     owner.json("POST", f"/trips/{trip_id}/publications")
-    print(json.dumps({"tripId": trip_id, "days": len(reconstruction.get("days", []))}, indent=2))
+    print(
+        json.dumps(
+            {"tripId": trip_id, "days": len(reconstruction.get("days", []))}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":

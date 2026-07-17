@@ -479,6 +479,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         _auth: AuthenticatedUser = Depends(current_user),
         db: DbSession = Depends(db_session),
     ) -> dict[str, object]:
+        now = datetime.now(UTC)
         job_rows = db.execute(
             select(orm.ProcessingJob.state, func.count())
             .group_by(orm.ProcessingJob.state)
@@ -490,12 +491,120 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .group_by(orm.MediaItem.processing_state)
             .order_by(orm.MediaItem.processing_state)
         ).all()
+        upload_rows = db.execute(
+            select(orm.UploadFile.state, func.count())
+            .group_by(orm.UploadFile.state)
+            .order_by(orm.UploadFile.state)
+        ).all()
+        share_rows = db.execute(
+            select(orm.ShareLink.status, func.count())
+            .group_by(orm.ShareLink.status)
+            .order_by(orm.ShareLink.status)
+        ).all()
+        review_rows = db.execute(
+            select(orm.ReviewItem.status, func.count())
+            .group_by(orm.ReviewItem.status)
+            .order_by(orm.ReviewItem.status)
+        ).all()
+        recent_failures = db.execute(
+            select(
+                orm.ProcessingJob.id,
+                orm.ProcessingJob.job_type,
+                orm.ProcessingJob.target_type,
+                orm.ProcessingJob.state,
+                orm.ProcessingJob.error_code,
+                orm.ProcessingJob.error_message,
+                orm.ProcessingJob.attempts,
+                orm.ProcessingJob.max_attempts,
+                orm.ProcessingJob.finished_at,
+                orm.ProcessingJob.created_at,
+            )
+            .where(orm.ProcessingJob.state == ProcessingJobState.FAILED.value)
+            .order_by(
+                orm.ProcessingJob.finished_at.desc().nullslast(),
+                orm.ProcessingJob.created_at.desc(),
+            )
+            .limit(10)
+        ).all()
         storage = local_storage_usage(resolved_settings)
+        trip_count = db.scalar(select(func.count()).select_from(orm.Trip)) or 0
+        user_count = db.scalar(select(func.count()).select_from(orm.User)) or 0
+        member_count = db.scalar(select(func.count()).select_from(orm.TripMember)) or 0
+        active_share_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(orm.ShareLink)
+                .where(orm.ShareLink.status == ShareLinkStatus.ACTIVE.value)
+            )
+            or 0
+        )
+        worker = worker_status(resolved_settings)
+        storage_secret_is_placeholder = (
+            resolved_settings.storage_signing_secret == "local-development-upload-signing-secret"
+            or resolved_settings.storage_signing_secret.startswith("replace-with-")
+        )
         return {
+            "generatedAt": now.isoformat(),
+            "environment": {
+                "name": resolved_settings.environment,
+                "secureCookies": resolved_settings.secure_cookies,
+                "allowedWebOrigins": resolved_settings.cors_origins,
+                "publicApiBaseUrl": resolved_settings.public_api_base_url,
+                "storageAliases": sorted(resolved_settings.store_aliases),
+            },
+            "counts": {
+                "users": int(user_count),
+                "trips": int(trip_count),
+                "members": int(member_count),
+                "activeShareLinks": int(active_share_count),
+            },
             "jobStates": {str(state): int(count) for state, count in job_rows},
             "mediaStates": {str(state): int(count) for state, count in media_rows},
-            "worker": worker_status(resolved_settings),
+            "uploadStates": {str(state): int(count) for state, count in upload_rows},
+            "reviewStates": {str(state): int(count) for state, count in review_rows},
+            "shareLinkStates": {str(state): int(count) for state, count in share_rows},
+            "recentFailures": [
+                {
+                    "id": str(job_id),
+                    "jobType": job_type,
+                    "targetType": target_type,
+                    "state": state,
+                    "errorCode": error_code,
+                    "safeMessage": error_message,
+                    "attempts": attempts,
+                    "maxAttempts": max_attempts,
+                    "finishedAt": finished_at.isoformat() if finished_at else None,
+                    "createdAt": created_at.isoformat(),
+                }
+                for (
+                    job_id,
+                    job_type,
+                    target_type,
+                    state,
+                    error_code,
+                    error_message,
+                    attempts,
+                    max_attempts,
+                    finished_at,
+                    created_at,
+                ) in recent_failures
+            ],
+            "worker": worker,
             "storage": storage,
+            "limits": {
+                "maxFilesPerTrip": resolved_settings.upload_max_files_per_trip,
+                "maxFileBytes": resolved_settings.upload_max_file_bytes,
+                "maxTripBytes": resolved_settings.upload_max_trip_bytes,
+                "allowedExtensions": sorted(resolved_settings.allowed_upload_extensions),
+                "allowedMimeTypes": sorted(resolved_settings.allowed_upload_mime_types),
+                "workerConcurrency": resolved_settings.worker_concurrency,
+            },
+            "warnings": {
+                "storageSoftLimit": storage["totalBytes"]
+                >= resolved_settings.upload_max_trip_bytes,
+                "workerStale": not worker["ok"],
+                "usingDefaultStorageSigningSecret": storage_secret_is_placeholder,
+            },
             "softLimitWarning": storage["totalBytes"] >= resolved_settings.upload_max_trip_bytes,
         }
 

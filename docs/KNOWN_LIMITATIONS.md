@@ -13,6 +13,6 @@ No critical or high-severity local MVP blockers are currently known after the re
 ## Low
 
 - Published sanitized derivatives are not garbage-collected immediately after revocation.
-- The local ops endpoint reports aggregate counts only and does not expose historical trends.
+- The local ops endpoint reports current aggregates and recent failures, but it does not retain historical trends.
 - The 300-image performance drill is manual so ordinary `make check` remains fast.
 - Map tiles depend on the configured style URL unless the bundled minimal fallback is used.

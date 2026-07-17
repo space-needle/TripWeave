@@ -32,8 +32,10 @@ Status legend: `PASS` verified locally, `PARTIAL` implemented with documented ga
 - `PASS` `make demo` starts the stack and seeds deterministic local data.
 - `PASS` `make smoke` checks local health and dependency boundaries.
 - `PASS` `make backup-restore-drill` restores a local dump into a temporary database.
-- `PASS` `/ops/local-mvp` exposes authenticated job, media, worker, and storage summaries.
+- `PASS` `/ops/local-mvp` exposes authenticated counts, state summaries, recent safe failures, worker health, storage usage, limits, and warning flags.
 - `PASS` API responses propagate `x-request-id`.
+- `PASS` `.env.example` names every required local runtime setting without containing a real secret.
+- `PASS` `TRIPWEAVE_STORAGE_SIGNING_SECRET` is explicitly configurable for API and worker containers.
 
 ## Performance
 
@@ -54,4 +56,4 @@ make e2e
 make backup-restore-drill
 ```
 
-The local MVP is a release candidate only when every command above passes and `docs/KNOWN_LIMITATIONS.md` contains no critical or high-severity unresolved finding.
+The local MVP is a release candidate only when every command above passes, `make smoke` reports no external-tester blocking warnings, and `docs/KNOWN_LIMITATIONS.md` contains no critical or high-severity unresolved finding.

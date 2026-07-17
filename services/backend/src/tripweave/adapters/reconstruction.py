@@ -318,7 +318,9 @@ def increment_story(
 def count_visible(db: Session, model: Any, trip_id: UUID, run_id: UUID) -> int:
     return (
         db.scalar(
-            select(func.count()).select_from(model).where(
+            select(func.count())
+            .select_from(model)
+            .where(
                 model.trip_id == trip_id,
                 or_(model.reconstruction_run_id == run_id, model.user_locked.is_(True)),
             )
@@ -343,9 +345,7 @@ def unassigned_media_points(
         )
     )
     return [
-        point
-        for point in usable
-        if point.id not in assigned_ids and point.id not in reviewed_ids
+        point for point in usable if point.id not in assigned_ids and point.id not in reviewed_ids
     ]
 
 
@@ -504,9 +504,7 @@ def find_incremental_place(
 
 def next_stop_position(db: Session, trip_day_id: UUID) -> int:
     return (
-        db.scalar(
-            select(func.max(orm.Stop.position)).where(orm.Stop.trip_day_id == trip_day_id)
-        )
+        db.scalar(select(func.max(orm.Stop.position)).where(orm.Stop.trip_day_id == trip_day_id))
         or 0
     ) + 1
 
