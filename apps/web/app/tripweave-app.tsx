@@ -2208,6 +2208,7 @@ function TripStoryExplorer({
       </div>
     );
   }
+  const story = reconstruction;
 
   function setViewMode(viewMode: ViewMode) {
     if (viewMode === "PLAYBACK") {
@@ -2359,15 +2360,79 @@ function TripStoryExplorer({
     }
   }
 
+  function navigateStorySummary(direction: "previous" | "next") {
+    if (!summaryNavigator) {
+      return;
+    }
+    if (summaryNavigator.type === "day") {
+      const nextDay =
+        story.days[
+          direction === "previous"
+            ? summaryNavigator.previousIndex
+            : summaryNavigator.nextIndex
+        ];
+      if (nextDay) {
+        onStateChange(selectStoryDay(state, nextDay.id));
+      }
+      return;
+    }
+    const nextStop =
+      activeDay?.stops[
+        direction === "previous"
+          ? summaryNavigator.previousIndex
+          : summaryNavigator.nextIndex
+      ];
+    if (nextStop && activeDay) {
+      onStateChange(selectStoryStop(state, nextStop.id, activeDay.id));
+    }
+  }
+
   const selectedLabel =
     selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
-  const activeDay = reconstruction.days.find(
-    (day) => day.id === state.selectedDayId,
-  );
+  const activeDay = story.days.find((day) => day.id === state.selectedDayId);
+  const activeDayIndex = activeDay
+    ? story.days.findIndex((day) => day.id === activeDay.id)
+    : -1;
   const selectedStopDetail =
-    reconstruction.days
+    story.days
       .flatMap((day) => day.stops)
       .find((stop) => stop.id === state.selectedStopId) ?? null;
+  const selectedStopIndex =
+    activeDay && selectedStopDetail
+      ? activeDay.stops.findIndex((stop) => stop.id === selectedStopDetail.id)
+      : -1;
+  const summaryNavigator = (() => {
+    if (!activeDay) {
+      return null;
+    }
+    if (["STOP", "MOMENT"].includes(state.viewMode)) {
+      const total = activeDay.stops.length;
+      if (total === 0) {
+        return null;
+      }
+      const currentIndex = selectedStopIndex >= 0 ? selectedStopIndex : -1;
+      return {
+        type: "stop" as const,
+        label: currentIndex >= 0 ? `${currentIndex + 1}/${total}` : "All",
+        previousDisabled: currentIndex <= 0,
+        nextDisabled: currentIndex >= total - 1,
+        previousIndex: currentIndex - 1,
+        nextIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
+      };
+    }
+    const total = story.days.length;
+    if (total === 0 || activeDayIndex < 0) {
+      return null;
+    }
+    return {
+      type: "day" as const,
+      label: `${activeDayIndex + 1}/${total}`,
+      previousDisabled: activeDayIndex <= 0,
+      nextDisabled: activeDayIndex >= total - 1,
+      previousIndex: activeDayIndex - 1,
+      nextIndex: activeDayIndex + 1,
+    };
+  })();
   const selectedStopTitle = selectedStopDetail
     ? displayStopTitle(selectedStopDetail)
     : (selectedStop?.label ?? null);
@@ -2454,7 +2519,7 @@ function TripStoryExplorer({
             >
               All
             </button>
-            {reconstruction.days.map((day) => (
+            {story.days.map((day) => (
               <button
                 aria-pressed={state.selectedDayId === day.id}
                 className={
@@ -2522,21 +2587,57 @@ function TripStoryExplorer({
           </div>
         ) : null}
         <div className="story-selected-stop-summary" aria-live="polite">
-          <span>
-            {selectedStop
-              ? "Selected stop"
-              : activeDay
-                ? "Selected day"
-                : "Map note"}
-          </span>
-          <strong>
-            {selectedStopTitle
-              ? selectedStopTitle
-              : activeDay
-                ? (activeDay.title ?? `Day ${activeDay.position}`)
-                : "No stop selected"}
-          </strong>
-          <p>{selectedStopSummary}</p>
+          <div>
+            <span>
+              {selectedStop
+                ? "Selected stop"
+                : activeDay
+                  ? "Selected day"
+                  : "Map note"}
+            </span>
+            <strong>
+              {selectedStopTitle
+                ? selectedStopTitle
+                : activeDay
+                  ? (activeDay.title ?? `Day ${activeDay.position}`)
+                  : "No stop selected"}
+            </strong>
+            <p>{selectedStopSummary}</p>
+          </div>
+          {summaryNavigator ? (
+            <div
+              className="story-summary-pager"
+              aria-label={
+                summaryNavigator.type === "stop"
+                  ? "Navigate stops"
+                  : "Navigate days"
+              }
+            >
+              <button
+                type="button"
+                aria-label={
+                  summaryNavigator.type === "stop"
+                    ? "Previous stop"
+                    : "Previous day"
+                }
+                disabled={summaryNavigator.previousDisabled}
+                onClick={() => navigateStorySummary("previous")}
+              >
+                ‹
+              </button>
+              <span>{summaryNavigator.label}</span>
+              <button
+                type="button"
+                aria-label={
+                  summaryNavigator.type === "stop" ? "Next stop" : "Next day"
+                }
+                disabled={summaryNavigator.nextDisabled}
+                onClick={() => navigateStorySummary("next")}
+              >
+                ›
+              </button>
+            </div>
+          ) : null}
         </div>
         <section
           className="story-timeline"
@@ -2547,7 +2648,7 @@ function TripStoryExplorer({
             Map alternative: {filteredModel.stops.length} stops,{" "}
             {filteredModel.media.length} photos, selected {selectedLabel}.
           </p>
-          {reconstruction.days.map((day) => (
+          {story.days.map((day) => (
             <article
               className={`timeline-day ${
                 state.selectedDayId === day.id ? "active" : ""
@@ -3025,6 +3126,24 @@ function storyDayColorMap(
   );
 }
 
+function syncStoryMapMarkerSelection(
+  markers: Marker[],
+  selectedDayId: string | null,
+  selectedStopId: string | null,
+) {
+  for (const marker of markers) {
+    const markerAnchor = marker.getElement();
+    const dayMarker = markerAnchor.querySelector(".photo-day-marker");
+    const stopMarker = markerAnchor.querySelector(".photo-stop-marker");
+    const isSelected =
+      (dayMarker !== null && markerAnchor.dataset.dayId === selectedDayId) ||
+      (stopMarker !== null && markerAnchor.dataset.stopId === selectedStopId);
+    markerAnchor.classList.toggle("selected", isSelected);
+    dayMarker?.classList.toggle("active", isSelected);
+    stopMarker?.classList.toggle("active", isSelected);
+  }
+}
+
 function StoryMapCanvas({
   model,
   state,
@@ -3044,7 +3163,10 @@ function StoryMapCanvas({
   const mapRef = useRef<MapLibreMap | null>(null);
   const selectedMarkers = useRef<Marker[]>([]);
   const stopPhotoMarkers = useRef<Marker[]>([]);
-  const lastFocusedStopIdRef = useRef<string | null>(null);
+  const previousFocusRef = useRef<{
+    selectedStopId: string | null;
+    viewMode: ViewMode;
+  }>({ selectedStopId: null, viewMode: "TRIP_OVERVIEW" });
   const stateRef = useRef(state);
 
   useEffect(() => {
@@ -3090,7 +3212,6 @@ function StoryMapCanvas({
                   dayId: stop.dayId,
                   dayColor: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
                   label: stop.label,
-                  selected: stop.id === state.selectedStopId,
                 },
                 geometry: {
                   type: "Point" as const,
@@ -3101,7 +3222,7 @@ function StoryMapCanvas({
         })
         .filter((feature) => feature !== null),
     }),
-    [dayColorMap, model.stops, state.selectedStopId, stopDisplayCoordinates],
+    [dayColorMap, model.stops, stopDisplayCoordinates],
   );
   const mediaCollection = useMemo(
     () => ({
@@ -3132,6 +3253,19 @@ function StoryMapCanvas({
     routeCollection.features.length > 0 ||
     stopCollection.features.length > 0 ||
     mediaCollection.features.length > 0;
+  const mapDataRef = useRef({
+    mediaCollection,
+    routeCollection,
+    stopCollection,
+  });
+
+  useEffect(() => {
+    mapDataRef.current = {
+      mediaCollection,
+      routeCollection,
+      stopCollection,
+    };
+  }, [mediaCollection, routeCollection, stopCollection]);
   const canReturnToDayMode =
     Boolean(state.selectedDayId) &&
     !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
@@ -3263,13 +3397,13 @@ function StoryMapCanvas({
         clusterRadius: 36,
       });
       (map.getSource("trip-routes") as GeoJSONSource | undefined)?.setData(
-        routeCollection,
+        mapDataRef.current.routeCollection,
       );
       (map.getSource("trip-stops") as GeoJSONSource | undefined)?.setData(
-        stopCollection,
+        mapDataRef.current.stopCollection,
       );
       (map.getSource("trip-media") as GeoJSONSource | undefined)?.setData(
-        mediaCollection,
+        mapDataRef.current.mediaCollection,
       );
       map.addLayer({
         id: "routes-confirmed",
@@ -3380,6 +3514,21 @@ function StoryMapCanvas({
           );
         }
       });
+      map.on("click", (event) => {
+        const clickedFeatures = map.queryRenderedFeatures(event.point, {
+          layers: ["stops", "media-unclustered"],
+        });
+        if (clickedFeatures.length > 0) {
+          return;
+        }
+        window.requestAnimationFrame(() =>
+          syncStoryMapMarkerSelection(
+            stopPhotoMarkers.current,
+            stateRef.current.selectedDayId,
+            stateRef.current.selectedStopId,
+          ),
+        );
+      });
     });
 
     return () => {
@@ -3390,7 +3539,7 @@ function StoryMapCanvas({
       map.remove();
       mapRef.current = null;
     };
-  }, [mediaCollection, onStateChange, routeCollection, stopCollection]);
+  }, [onStateChange]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3442,12 +3591,10 @@ function StoryMapCanvas({
         }
         const markerAnchor = document.createElement("div");
         markerAnchor.className = "photo-map-marker-anchor";
+        markerAnchor.dataset.dayId = dayId;
         const element = document.createElement("button");
         element.type = "button";
-        element.className =
-          dayId === state.selectedDayId
-            ? "photo-day-marker active"
-            : "photo-day-marker";
+        element.className = "photo-day-marker";
         element.setAttribute("aria-label", `Explore stops for ${label}`);
         element.style.setProperty("--stop-color", color);
         if (featuredMedia?.thumbnailUrl) {
@@ -3498,12 +3645,11 @@ function StoryMapCanvas({
       }
       const markerAnchor = document.createElement("div");
       markerAnchor.className = "photo-map-marker-anchor";
+      markerAnchor.dataset.dayId = stop.dayId;
+      markerAnchor.dataset.stopId = stop.id;
       const element = document.createElement("button");
       element.type = "button";
-      element.className =
-        stop.id === state.selectedStopId
-          ? "photo-stop-marker active"
-          : "photo-stop-marker";
+      element.className = "photo-stop-marker";
       element.setAttribute(
         "aria-label",
         `Open photos for ${stop.label}, ${flowLabel} stop`,
@@ -3552,13 +3698,18 @@ function StoryMapCanvas({
   }, [
     dayMarkerData,
     onDayMarkerClick,
-    onStateChange,
     onStopMarkerClick,
     showDayMarkers,
-    state.selectedDayId,
-    state.selectedStopId,
     stopMarkerData,
   ]);
+
+  useEffect(() => {
+    syncStoryMapMarkerSelection(
+      stopPhotoMarkers.current,
+      state.selectedDayId,
+      state.selectedStopId,
+    );
+  }, [state.selectedDayId, state.selectedStopId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3604,46 +3755,45 @@ function StoryMapCanvas({
     if (!map || state.mapControlMode !== "STORY_CONTROLLED") {
       return;
     }
-    const previousStopId = lastFocusedStopIdRef.current;
-    lastFocusedStopIdRef.current = state.selectedStopId;
     const coordinates = focusCoordinates(model, state, stopDisplayCoordinates);
     if (coordinates.length === 0) {
       return;
     }
-    if (
-      state.viewMode === "STOP" &&
-      state.selectedStopId &&
-      previousStopId &&
-      previousStopId !== state.selectedStopId &&
-      !reducedMotion
-    ) {
-      const dayCoordinates = dayFocusCoordinates(
-        model,
-        state.selectedDayId,
-        stopDisplayCoordinates,
-      );
-      const selectedStopCoordinates = model.stops.find(
-        (stop) => stop.id === state.selectedStopId,
-      );
-      const selectedStopCoordinate = selectedStopCoordinates
-        ? (stopDisplayCoordinates.get(selectedStopCoordinates.id) ?? null)
-        : null;
-      if (dayCoordinates.length > 1 && selectedStopCoordinate) {
-        map.fitBounds(boundsForCoordinates(dayCoordinates), {
-          padding: 72,
-          maxZoom: 12,
-          duration: 520,
-        });
-        const timeoutId = window.setTimeout(() => {
+    if (state.viewMode === "STOP" && state.selectedStopId) {
+      const previousFocus = previousFocusRef.current;
+      previousFocusRef.current = {
+        selectedStopId: state.selectedStopId,
+        viewMode: state.viewMode,
+      };
+      if (
+        previousFocus.viewMode === "STOP" &&
+        previousFocus.selectedStopId &&
+        previousFocus.selectedStopId !== state.selectedStopId
+      ) {
+        if (map.getZoom() < 12) {
           map.easeTo({
-            center: selectedStopCoordinate,
-            zoom: 14,
-            duration: 620,
+            center: coordinates[0],
+            zoom: 13,
+            duration: reducedMotion ? 0 : 360,
           });
-        }, 620);
-        return () => window.clearTimeout(timeoutId);
+          return;
+        }
+        map.panTo(coordinates[0], {
+          duration: reducedMotion ? 0 : 360,
+        });
+        return;
       }
+      map.easeTo({
+        center: coordinates[0],
+        zoom: Math.max(map.getZoom(), 13),
+        duration: reducedMotion ? 0 : 360,
+      });
+      return;
     }
+    previousFocusRef.current = {
+      selectedStopId: state.selectedStopId,
+      viewMode: state.viewMode,
+    };
     if (coordinates.length === 1) {
       map.easeTo({
         center: coordinates[0],
@@ -3783,16 +3933,17 @@ function focusCoordinates(
       .map((item) => item.coordinates as [number, number]);
   }
   if (state.selectedStopId) {
-    const mediaCoordinates = model.media
+    const stop = model.stops.find((item) => item.id === state.selectedStopId);
+    const stopCoordinate = stop ? (stopCoordinates.get(stop.id) ?? null) : null;
+    if (stopCoordinate) {
+      return [stopCoordinate];
+    }
+    return model.media
       .filter(
         (item) => item.stopId === state.selectedStopId && item.coordinates,
       )
+      .slice(0, 1)
       .map((item) => item.coordinates as [number, number]);
-    const stop = model.stops.find((item) => item.id === state.selectedStopId);
-    const stopCoordinate = stop ? (stopCoordinates.get(stop.id) ?? null) : null;
-    return stopCoordinate
-      ? [stopCoordinate, ...mediaCoordinates]
-      : mediaCoordinates;
   }
   if (state.selectedDayId) {
     return [
@@ -3813,25 +3964,6 @@ function focusCoordinates(
       .filter((coordinate) => coordinate !== null),
     ...model.media
       .filter((item) => item.coordinates)
-      .map((item) => item.coordinates as [number, number]),
-  ];
-}
-
-function dayFocusCoordinates(
-  model: ReturnType<typeof buildStoryModel>,
-  dayId: string | null,
-  stopCoordinates: Map<string, [number, number]>,
-): [number, number][] {
-  if (!dayId) {
-    return [];
-  }
-  return [
-    ...model.stops
-      .filter((item) => item.dayId === dayId)
-      .map((item) => stopCoordinates.get(item.id) ?? null)
-      .filter((coordinate) => coordinate !== null),
-    ...model.media
-      .filter((item) => item.dayId === dayId && item.coordinates)
       .map((item) => item.coordinates as [number, number]),
   ];
 }
