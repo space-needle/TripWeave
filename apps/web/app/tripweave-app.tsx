@@ -66,7 +66,8 @@ type GalleryPhoto = {
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
-type MobileWorkspaceTab = "story" | "photos" | "share" | "more";
+type MobileWorkspaceTab = "story" | "timeline" | "photos" | "share" | "more";
+type StoryMobilePane = "map" | "timeline";
 
 type TripForm = {
   title: string;
@@ -1188,6 +1189,7 @@ function OwnerWorkspace() {
         {(
           [
             ["story", "Story"],
+            ["timeline", "Timeline"],
             ["photos", "Photos"],
             ["share", "Share"],
             ["more", "More"],
@@ -1295,7 +1297,7 @@ function OwnerWorkspace() {
 
         <section
           className={`trip-stage ${
-            mobileTab === "story" ? "mobile-tab-active" : ""
+            ["story", "timeline"].includes(mobileTab) ? "mobile-tab-active" : ""
           }`}
           aria-labelledby="trip-stage-title"
           data-mobile-tab-panel="story"
@@ -1339,6 +1341,7 @@ function OwnerWorkspace() {
                   onStateChange={setStoryState}
                   onMergeStops={mergeStops}
                   onRenameStop={renameStop}
+                  mobilePane={mobileTab === "timeline" ? "timeline" : "map"}
                   timezoneId={selectedTrip.timezoneId}
                 />
               ) : (
@@ -2039,6 +2042,7 @@ function TripStoryExplorer({
   onStateChange,
   onMergeStops,
   onRenameStop,
+  mobilePane = "map",
   timezoneId,
 }: {
   reconstruction: ReconstructionResponse | null;
@@ -2046,6 +2050,7 @@ function TripStoryExplorer({
   onStateChange: (state: StoryMapState) => void;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
+  mobilePane?: StoryMobilePane;
   timezoneId: string;
 }) {
   const model = useMemo(
@@ -2359,9 +2364,29 @@ function TripStoryExplorer({
   const activeDay = reconstruction.days.find(
     (day) => day.id === state.selectedDayId,
   );
+  const selectedStopDetail =
+    reconstruction.days
+      .flatMap((day) => day.stops)
+      .find((stop) => stop.id === state.selectedStopId) ?? null;
+  const selectedStopTitle = selectedStopDetail
+    ? displayStopTitle(selectedStopDetail)
+    : (selectedStop?.label ?? null);
+  const selectedStopSummary = selectedStopDetail
+    ? selectedStopDetail.placeName &&
+      selectedStopDetail.placeName !== selectedStopTitle
+      ? selectedStopDetail.placeName
+      : `${selectedStopDetail.mediaCount} photos · ${selectedStopDetail.contributorCount} travelers`
+    : activeDay
+      ? `${activeDay.stops.length} stops · ${activeDay.stops.reduce(
+          (total, stop) => total + stop.mediaCount,
+          0,
+        )} photos`
+      : "Select a stop on the map to see its note here.";
 
   return (
-    <div className="story-explorer story-shell">
+    <div
+      className={`story-explorer story-shell story-mobile-pane-${mobilePane}`}
+    >
       <div className="story-map-panel">
         <StoryMapCanvas
           model={filteredModel}
@@ -2496,6 +2521,23 @@ function TripStoryExplorer({
             </button>
           </div>
         ) : null}
+        <div className="story-selected-stop-summary" aria-live="polite">
+          <span>
+            {selectedStop
+              ? "Selected stop"
+              : activeDay
+                ? "Selected day"
+                : "Map note"}
+          </span>
+          <strong>
+            {selectedStopTitle
+              ? selectedStopTitle
+              : activeDay
+                ? (activeDay.title ?? `Day ${activeDay.position}`)
+                : "No stop selected"}
+          </strong>
+          <p>{selectedStopSummary}</p>
+        </div>
         <section
           className="story-timeline"
           aria-label="Chronological timeline"
@@ -4135,6 +4177,7 @@ function PublicStoryViewer({ token }: { token: string }) {
   const [storyState, setStoryState] = useState<StoryMapState>(() =>
     initialStoryMapState(),
   );
+  const [mobilePane, setMobilePane] = useState<StoryMobilePane>("map");
 
   useEffect(() => {
     let cancelled = false;
@@ -4206,10 +4249,29 @@ function PublicStoryViewer({ token }: { token: string }) {
           </p>
         </div>
       </header>
+      <nav className="public-story-mobile-tabs" aria-label="Story view">
+        {(
+          [
+            ["map", "Map"],
+            ["timeline", "Timeline"],
+          ] as Array<[StoryMobilePane, string]>
+        ).map(([pane, label]) => (
+          <button
+            type="button"
+            aria-pressed={mobilePane === pane}
+            className={mobilePane === pane ? "active" : ""}
+            key={pane}
+            onClick={() => setMobilePane(pane)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
       <TripStoryExplorer
         reconstruction={story.story}
         state={storyState}
         onStateChange={setStoryState}
+        mobilePane={mobilePane}
         timezoneId={timezoneId}
       />
     </main>
