@@ -3353,6 +3353,7 @@ function syncStoryMapMarkerSelection(
   selectedDayId: string | null,
   selectedStopId: string | null,
 ) {
+  let selectedMarkerAnchor: HTMLElement | null = null;
   for (const marker of markers) {
     const markerAnchor = marker.getElement();
     const dayMarker = markerAnchor.querySelector(".photo-day-marker");
@@ -3361,8 +3362,15 @@ function syncStoryMapMarkerSelection(
       (dayMarker !== null && markerAnchor.dataset.dayId === selectedDayId) ||
       (stopMarker !== null && markerAnchor.dataset.stopId === selectedStopId);
     markerAnchor.classList.toggle("selected", isSelected);
+    markerAnchor.style.zIndex = isSelected ? "30" : "";
     dayMarker?.classList.toggle("active", isSelected);
     stopMarker?.classList.toggle("active", isSelected);
+    if (isSelected) {
+      selectedMarkerAnchor = markerAnchor;
+    }
+  }
+  if (selectedMarkerAnchor?.parentElement) {
+    selectedMarkerAnchor.parentElement.appendChild(selectedMarkerAnchor);
   }
 }
 
@@ -3579,6 +3587,24 @@ function StoryMapCanvas({
       state.viewMode,
       stopDisplayCoordinates,
     ],
+  );
+  const orderedDayMarkerData = useMemo(
+    () =>
+      [...dayMarkerData].sort((left, right) => {
+        const leftSelected = left.dayId === state.selectedDayId;
+        const rightSelected = right.dayId === state.selectedDayId;
+        return Number(leftSelected) - Number(rightSelected);
+      }),
+    [dayMarkerData, state.selectedDayId],
+  );
+  const orderedStopMarkerData = useMemo(
+    () =>
+      [...stopMarkerData].sort((left, right) => {
+        const leftSelected = left.stop.id === state.selectedStopId;
+        const rightSelected = right.stop.id === state.selectedStopId;
+        return Number(leftSelected) - Number(rightSelected);
+      }),
+    [state.selectedStopId, stopMarkerData],
   );
   const showDayMarkers =
     state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
@@ -3807,7 +3833,7 @@ function StoryMapCanvas({
         featuredMedia,
         count,
         color,
-      } of dayMarkerData) {
+      } of orderedDayMarkerData) {
         if (!coordinates) {
           continue;
         }
@@ -3861,7 +3887,7 @@ function StoryMapCanvas({
       flowLabel,
       flowTone,
       color,
-    } of stopMarkerData) {
+    } of orderedStopMarkerData) {
       if (!coordinates) {
         continue;
       }
@@ -3918,11 +3944,11 @@ function StoryMapCanvas({
       stopPhotoMarkers.current = [];
     };
   }, [
-    dayMarkerData,
     onDayMarkerClick,
     onStopMarkerClick,
+    orderedDayMarkerData,
+    orderedStopMarkerData,
     showDayMarkers,
-    stopMarkerData,
   ]);
 
   useEffect(() => {
