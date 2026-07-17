@@ -34,6 +34,7 @@ The planned stack is:
 - `docs/mvp-scope.md` defines the local MVP stages.
 - `docs/security-and-privacy.md` defines ownership, deletion, publication, and secret-handling rules.
 - `docs/cloud-portability-contract.md` defines provider-neutral storage contracts.
+- `docs/CLOUD_ADAPTER_GUIDE.md` defines Stage 13 cloud-adapter proof rules.
 - `docs/worker-state-machine.md` defines durable processing-job claiming, retry, and media-ingest behavior.
 - `docs/reconstruction-algorithm.md` defines the deterministic local trip reconstruction algorithm.
 - `docs/manual-review-walkthrough.md` defines the local review-by-exception correction walkthrough.

@@ -61,6 +61,10 @@ class LocalBlobStore:
         self._public_base_url = public_base_url.rstrip("/")
         self._grant_lifetime_seconds = grant_lifetime_seconds
         self._capabilities = StorageCapabilities(
+            supports_api_proxy_upload=True,
+            supports_single_put_upload=False,
+            supports_resumable_upload=False,
+            supports_ranged_read=False,
             supports_direct_upload=True,
             supports_direct_download=True,
             supports_server_side_copy=False,

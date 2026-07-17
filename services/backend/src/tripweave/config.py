@@ -67,6 +67,7 @@ class Settings(BaseSettings):
         alias="TRIPWEAVE_STORAGE_SIGNING_SECRET",
         min_length=16,
     )
+    storage_adapter: str = Field(default="local", alias="TRIPWEAVE_STORAGE_ADAPTER")
     storage_store_aliases: str = Field(
         default="media_private,story_published", alias="TRIPWEAVE_STORAGE_STORE_ALIASES"
     )

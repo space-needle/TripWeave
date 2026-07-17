@@ -3,6 +3,8 @@ from tripweave.config import Settings
 
 
 def create_blob_store(settings: Settings) -> LocalBlobStore:
+    if settings.storage_adapter != "local":
+        raise ValueError(f"Unsupported storage adapter: {settings.storage_adapter}")
     return LocalBlobStore(
         root=settings.blob_dir,
         store_aliases=settings.store_aliases,

@@ -12,7 +12,13 @@ from tripweave.adapters.local_blob_store import (
     BlobSizeExceededError,
     InvalidGrantError,
 )
-from tripweave.domain.storage import BlobRef, DownloadGrantRequest, UploadGrant, UploadGrantRequest
+from tripweave.domain.storage import (
+    BlobRef,
+    DownloadGrantRequest,
+    UploadGrant,
+    UploadGrantRequest,
+    UploadTransport,
+)
 from tripweave.ports.blob_store import BlobStore
 
 
@@ -25,6 +31,18 @@ class GrantVerifyingBlobStore(Protocol):
 def run_blob_store_contract(make_store: Callable[[], BlobStore]) -> None:
     store = make_store()
     blob_ref = BlobRef(store_alias="media_private", object_key="trip/a/photo.jpg")
+    capabilities = store.capabilities
+
+    assert capabilities.supports_api_proxy_upload
+    assert capabilities.supports_checksum_verification
+    assert capabilities.supports_temporary_grants
+    assert capabilities.maximum_single_upload_bytes > 0
+    assert capabilities.recommended_part_size_bytes > 0
+    assert isinstance(capabilities.supports_multipart_upload, bool)
+    assert isinstance(capabilities.supports_single_put_upload, bool)
+    assert isinstance(capabilities.supports_resumable_upload, bool)
+    assert isinstance(capabilities.supports_ranged_read, bool)
+    assert isinstance(capabilities.supports_server_side_copy, bool)
 
     grant = store.create_upload_grant(
         UploadGrantRequest(
@@ -34,11 +52,12 @@ def run_blob_store_contract(make_store: Callable[[], BlobStore]) -> None:
         )
     )
 
-    assert grant.method == "api_proxy"
+    assert grant.method == UploadTransport.API_PROXY
     assert grant.blob_ref == blob_ref
     assert grant.max_size_bytes == 32
     assert "bucket" not in grant.url.lower()
     assert "namespace" not in grant.url.lower()
+    assert "presigned" not in grant.url.lower()
 
     metadata = store.put(
         blob_ref,
@@ -58,6 +77,7 @@ def run_blob_store_contract(make_store: Callable[[], BlobStore]) -> None:
     download = store.create_download_grant(DownloadGrantRequest(blob_ref=blob_ref))
     assert download.method == "api_proxy"
     assert "bucket" not in download.url.lower()
+    assert "namespace" not in download.url.lower()
 
     with pytest.raises(BlobSizeExceededError):
         store.put(
@@ -71,6 +91,35 @@ def run_blob_store_contract(make_store: Callable[[], BlobStore]) -> None:
     assert not store.exists(blob_ref)
     with pytest.raises(BlobNotFoundError):
         store.stat(blob_ref)
+
+    private_ref = BlobRef(store_alias="media_private", object_key="same/key.jpg")
+    story_ref = BlobRef(store_alias="story_published", object_key="same/key.jpg")
+    private = store.put(private_ref, BytesIO(b"private"), max_size_bytes=20)
+    story = store.put(story_ref, BytesIO(b"story"), max_size_bytes=20)
+    assert private.checksum != story.checksum
+    assert private.blob_ref.object_key == story.blob_ref.object_key
+    assert private.blob_ref.store_alias == "media_private"
+    assert story.blob_ref.store_alias == "story_published"
+
+    for transport, supported in [
+        (UploadTransport.SINGLE_PUT, capabilities.supports_single_put_upload),
+        (UploadTransport.MULTIPART, capabilities.supports_multipart_upload),
+        (UploadTransport.RESUMABLE, capabilities.supports_resumable_upload),
+    ]:
+        request = UploadGrantRequest(
+            blob_ref=BlobRef(
+                store_alias="media_private",
+                object_key=f"trip/a/{transport.value}.jpg",
+            ),
+            max_size_bytes=32,
+            content_type="image/jpeg",
+            transport=transport,
+        )
+        if supported:
+            assert store.create_upload_grant(request).method == transport
+        else:
+            with pytest.raises(ValueError):
+                store.create_upload_grant(request)
 
 
 def run_grant_contract(make_store: Callable[[], GrantVerifyingBlobStore]) -> None:

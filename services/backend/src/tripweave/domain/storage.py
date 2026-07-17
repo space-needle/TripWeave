@@ -69,6 +69,20 @@ class UploadGrant:
 class DownloadGrantRequest:
     blob_ref: BlobRef
     expires_at: datetime | None = None
+    range_start: int | None = None
+    range_end: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.range_start is not None and self.range_start < 0:
+            raise ValueError("range_start must be non-negative")
+        if self.range_end is not None and self.range_end < 0:
+            raise ValueError("range_end must be non-negative")
+        if (
+            self.range_start is not None
+            and self.range_end is not None
+            and self.range_end < self.range_start
+        ):
+            raise ValueError("range_end must be greater than or equal to range_start")
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +98,10 @@ class DownloadGrant:
 
 @dataclass(frozen=True, slots=True)
 class StorageCapabilities:
+    supports_api_proxy_upload: bool
+    supports_single_put_upload: bool
+    supports_resumable_upload: bool
+    supports_ranged_read: bool
     supports_direct_upload: bool
     supports_direct_download: bool
     supports_server_side_copy: bool

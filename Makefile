@@ -2,7 +2,7 @@ COMPOSE_FILE := deploy/compose.local.yml
 BACKEND_DIR := services/backend
 WEB_DIR := apps/web
 
-.PHONY: dev demo down logs format lint typecheck test build check generate-api-types seed-demo smoke e2e backup-restore-drill
+.PHONY: dev demo down logs format lint typecheck test build build-multiarch check generate-api-types seed-demo smoke e2e backup-restore-drill
 
 dev:
 	docker compose -f $(COMPOSE_FILE) up --build
@@ -51,5 +51,8 @@ test:
 build: generate-api-types
 	corepack pnpm --dir $(WEB_DIR) build
 	docker compose -f $(COMPOSE_FILE) build
+
+build-multiarch:
+	./scripts/build_multiarch.sh
 
 check: format lint typecheck test build

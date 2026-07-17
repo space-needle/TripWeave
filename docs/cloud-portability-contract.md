@@ -55,10 +55,14 @@ The system must not persist `DownloadGrant.url` as a permanent reference.
 
 Fields:
 
+- `supports_api_proxy_upload`
+- `supports_single_put_upload`
+- `supports_multipart_upload`
+- `supports_resumable_upload`
+- `supports_ranged_read`
 - `supports_direct_upload`
 - `supports_direct_download`
 - `supports_server_side_copy`
-- `supports_multipart_upload`
 - `supports_conditional_write`
 - `supports_checksum_verification`
 - `supports_temporary_grants`
@@ -66,6 +70,8 @@ Fields:
 - `recommended_part_size_bytes`
 
 Application services may branch on capabilities, but must not branch on provider names.
+When a capability is absent, the application must use a supported fallback such as
+`api_proxy` upload or stream-copy through `open_reader` and `put`.
 
 ## Logical Store Aliases
 
