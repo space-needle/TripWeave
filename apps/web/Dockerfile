@@ -11,6 +11,10 @@ RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL=
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL=$NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL
 RUN pnpm --dir apps/web build
 
 FROM node:24-bookworm-slim AS runner
