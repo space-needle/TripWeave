@@ -315,14 +315,20 @@ def persist_clusters(
         for stop_position, cluster in enumerate(clusters, start=1):
             place = find_place(known_places, cluster.latitude, cluster.longitude)
             if place is None:
-                name = geocoder.name_for_point(
+                geocode_result = geocoder.reverse_geocode(
                     latitude=cluster.latitude, longitude=cluster.longitude
-                ).name
+                )
+                name = geocode_result.name
                 place = orm.Place(
                     trip_id=trip_id,
                     name=name,
                     centroid=point_wkt(cluster.latitude, cluster.longitude),
-                    **generated(run, 0.9),
+                    **generated(
+                        run,
+                        geocode_result.confidence
+                        if name is not None and geocode_result.confidence is not None
+                        else 0.9,
+                    ),
                 )
                 db.add(place)
                 db.flush()
@@ -331,6 +337,7 @@ def persist_clusters(
                 trip_id=trip_id,
                 trip_day_id=trip_day.id,
                 place_id=place.id,
+                title=place.name,
                 position=stop_position,
                 starts_at_utc=cluster.start,
                 ends_at_utc=cluster.end,

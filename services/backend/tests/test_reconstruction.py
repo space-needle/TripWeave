@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from tripweave.adapters import orm
+from tripweave.adapters.manual_geocoder import ManualGeocoder, ManualPlaceName
 from tripweave.adapters.reconstruction import (
     MediaPoint,
     cluster_stops,
@@ -88,3 +89,34 @@ def test_parallel_contributor_path_is_not_forced_into_same_stop() -> None:
     clusters_by_day = cluster_stops(points)
 
     assert [len(clusters) for clusters in clusters_by_day.values()] == [2]
+
+
+def test_manual_reverse_geocoder_returns_registered_place_name() -> None:
+    geocoder = ManualGeocoder(
+        [
+            ManualPlaceName(
+                name="Jeonju Hanok Village",
+                latitude=35.8151,
+                longitude=127.1530,
+                radius_meters=100,
+                confidence=0.82,
+            )
+        ]
+    )
+
+    result = geocoder.reverse_geocode(latitude=35.8152, longitude=127.1531)
+
+    assert result.name == "Jeonju Hanok Village"
+    assert result.confidence == 0.82
+    assert result.source == "manual"
+
+
+def test_manual_reverse_geocoder_is_noop_without_nearby_place() -> None:
+    geocoder = ManualGeocoder(
+        [ManualPlaceName(name="Jeonju Hanok Village", latitude=35.8151, longitude=127.1530)]
+    )
+
+    result = geocoder.reverse_geocode(latitude=37.5665, longitude=126.9780)
+
+    assert result.name is None
+    assert result.confidence is None

@@ -59,7 +59,9 @@ The algorithm creates legs between consecutive stops in the same day. Initial ge
 
 ## Geocoding
 
-The backend defines a provider-neutral `Geocoder` port. The local adapter is a no-op/manual adapter, so place names may remain blank until manually entered later.
+The backend defines a provider-neutral `Geocoder` port with reverse-geocoding semantics. The local adapter does not call an external service. By default it returns no place name, but tests and local fixtures may register manual coordinate-to-name entries.
+
+When reverse geocoding returns a name, reconstruction uses it as the generated place name and initial stop title. These names are automated output with source, confidence, and algorithm version recorded through the generated reconstruction record. User-edited stop names remain `user_locked` corrections and must not be overwritten by reruns.
 
 ## Reruns And Locked Records
 
