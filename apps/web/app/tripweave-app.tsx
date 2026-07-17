@@ -2075,6 +2075,7 @@ function TripStoryExplorer({
   const [savingStopId, setSavingStopId] = useState<string | null>(null);
   const [mergeStopError, setMergeStopError] = useState("");
   const [mergingStopKey, setMergingStopKey] = useState<string | null>(null);
+  const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
     [filteredModel.stops],
@@ -2093,6 +2094,39 @@ function TripStoryExplorer({
     const scopedIds = new Set(galleryPhotoIds);
     return galleryPhotos.filter((photo) => scopedIds.has(photo.id));
   }, [galleryPhotoIds, galleryPhotos]);
+  const photoRollDays = useMemo(
+    () =>
+      reconstruction?.days
+        .filter((day) => !state.selectedDayId || day.id === state.selectedDayId)
+        .map((day) => ({
+          day,
+          stops: day.stops
+            .map((stop) => ({
+              stop,
+              photos: filteredModel.media
+                .filter((item) => item.stopId === stop.id && item.thumbnailUrl)
+                .map((item) =>
+                  galleryPhotoFromStoryMedia(item, displayStopTitle(stop)),
+                ),
+            }))
+            .filter((section) => section.photos.length > 0),
+        }))
+        .filter((day) => day.stops.length > 0) ?? [],
+    [filteredModel.media, reconstruction?.days, state.selectedDayId],
+  );
+  const photoRollPhotoCount = useMemo(
+    () =>
+      photoRollDays.reduce(
+        (total, day) =>
+          total +
+          day.stops.reduce(
+            (subtotal, stop) => subtotal + stop.photos.length,
+            0,
+          ),
+        0,
+      ),
+    [photoRollDays],
+  );
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -2146,6 +2180,19 @@ function TripStoryExplorer({
     }
     return () => observer.disconnect();
   }, [filteredModel.stops, onStateChange, state.viewMode]);
+
+  useEffect(() => {
+    if (!isPhotoRollOpen) {
+      return;
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsPhotoRollOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isPhotoRollOpen]);
 
   if (!reconstruction?.latestRun) {
     return (
@@ -2218,6 +2265,24 @@ function TripStoryExplorer({
     );
     setGalleryPhotoIds(stopMedia.map((item) => item.id));
     setGalleryMediaId(featuredMedia.id);
+  }
+
+  function openPhotoRollPhoto(photoId: string, photoIds: string[]) {
+    const next = filteredModel.media.find((item) => item.id === photoId);
+    if (next) {
+      onStateChange(
+        selectStoryMedia(
+          state,
+          next.id,
+          next.momentId,
+          next.stopId,
+          next.dayId,
+        ),
+      );
+    }
+    setGalleryPhotoIds(photoIds);
+    setGalleryMediaId(photoId);
+    setIsPhotoRollOpen(false);
   }
 
   function showDayStops(dayId: string) {
@@ -2416,6 +2481,21 @@ function TripStoryExplorer({
             </select>
           </label>
         </div>
+        {photoRollDays.length > 0 ? (
+          <div className="story-photo-roll-launch">
+            <div>
+              <strong>
+                {activeDay
+                  ? `${activeDay.title ?? `Day ${activeDay.position}`} photos`
+                  : "Trip photos"}
+              </strong>
+              <span>{photoRollPhotoCount} photos grouped by stop</span>
+            </div>
+            <button type="button" onClick={() => setIsPhotoRollOpen(true)}>
+              Browse day photos
+            </button>
+          </div>
+        ) : null}
         <section
           className="story-timeline"
           aria-label="Chronological timeline"
@@ -2601,6 +2681,83 @@ function TripStoryExplorer({
           ))}
         </section>
       </aside>
+      {isPhotoRollOpen ? (
+        <div
+          className="photo-roll-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Browse photos by stop"
+        >
+          <button
+            className="photo-roll-backdrop"
+            type="button"
+            aria-label="Close photo browser"
+            onClick={() => setIsPhotoRollOpen(false)}
+          />
+          <div className="photo-roll-panel">
+            <div className="photo-roll-toolbar">
+              <div>
+                <p className="eyebrow">Photos</p>
+                <h3>
+                  {activeDay
+                    ? `${activeDay.title ?? `Day ${activeDay.position}`} photos`
+                    : "Trip photos"}
+                </h3>
+                <span>{photoRollPhotoCount} photos grouped by stop</span>
+              </div>
+              <button type="button" onClick={() => setIsPhotoRollOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="story-photo-roll" aria-label="Photos by stop">
+              {photoRollDays.map(({ day, stops }) => (
+                <div className="story-photo-roll-day" key={day.id}>
+                  {!activeDay ? (
+                    <strong className="story-photo-roll-day-title">
+                      {day.title ?? `Day ${day.position}`}
+                    </strong>
+                  ) : null}
+                  {stops.map(({ stop, photos }) => {
+                    const dayPhotoIds = stops.flatMap((section) =>
+                      section.photos.map((photo) => photo.id),
+                    );
+                    return (
+                      <section className="story-photo-stop-grid" key={stop.id}>
+                        <div className="story-photo-stop-heading">
+                          <strong>{displayStopTitle(stop)}</strong>
+                          <span>{photos.length} photos</span>
+                        </div>
+                        <div className="story-photo-tiles">
+                          {photos.map((photo) => (
+                            <button
+                              type="button"
+                              key={photo.id}
+                              aria-label={`Open photo from ${displayStopTitle(stop)}`}
+                              onClick={() =>
+                                openPhotoRollPhoto(photo.id, dayPhotoIds)
+                              }
+                            >
+                              {photo.imageUrl ? (
+                                <img
+                                  src={photo.imageUrl}
+                                  alt={photo.filename ?? "Trip photo"}
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{photo.contributor.slice(0, 1)}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <PhotoBrowser
         photos={browserPhotos}
         selectedPhotoId={galleryMediaId}

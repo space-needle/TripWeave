@@ -765,7 +765,7 @@ p {
 .story-side-panel {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   border-left: 1px solid var(--border);
   background: rgb(255 255 255 / 96%);
 }
@@ -804,6 +804,178 @@ p {
   gap: 12px;
   border-bottom: 1px solid var(--border);
   padding: 12px 18px;
+}
+
+.story-photo-roll-launch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+  padding: 12px 18px;
+}
+
+.story-photo-roll-launch > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.story-photo-roll-launch strong,
+.story-photo-roll-launch span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-photo-roll-launch span,
+.story-photo-stop-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.story-photo-roll-launch button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 0.82rem;
+}
+
+.photo-roll-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.photo-roll-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(15 22 29 / 58%);
+}
+
+.photo-roll-panel {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  max-height: min(86vh, 820px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgb(0 0 0 / 34%);
+}
+
+.photo-roll-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.photo-roll-toolbar h3 {
+  margin: 2px 0;
+  font-size: 1.08rem;
+}
+
+.photo-roll-toolbar span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.photo-roll-toolbar button {
+  flex: 0 0 auto;
+}
+
+.story-photo-roll {
+  display: grid;
+  gap: 16px;
+  overflow: auto;
+  padding: 18px;
+}
+
+.story-photo-roll-day {
+  display: grid;
+  gap: 14px;
+}
+
+.story-photo-roll-day-title {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.story-photo-stop-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.story-photo-stop-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.story-photo-stop-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-photo-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.story-photo-tiles button {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: #dfe8e4;
+  aspect-ratio: 1;
+  cursor: zoom-in;
+  padding: 0;
+}
+
+.story-photo-tiles button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.story-photo-tiles img,
+.story-photo-tiles span {
+  width: 100%;
+  height: 100%;
+}
+
+.story-photo-tiles img {
+  display: block;
+  object-fit: cover;
+}
+
+.story-photo-tiles span {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 900;
 }
 
 .segmented-control {
@@ -1949,6 +2121,36 @@ button.thumb-frame:focus-visible {
 
   .story-toolbar {
     display: none;
+  }
+
+  .story-photo-roll-launch {
+    padding: 12px 14px;
+  }
+
+  .story-photo-roll-launch button {
+    padding-inline: 9px;
+  }
+
+  .photo-roll-modal {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .photo-roll-panel {
+    max-height: 88vh;
+    border-radius: 14px;
+  }
+
+  .photo-roll-toolbar {
+    padding: 14px;
+  }
+
+  .story-photo-roll {
+    padding: 14px;
+  }
+
+  .story-photo-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
   }
 
   .photo-browser {
