@@ -1195,6 +1195,15 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     stops = reconstructed.json()["days"][0]["stops"]
     assert len(stops) == 3
     stop_one, stop_two, stop_three = stops
+    rename = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "payload": {"stopId": stop_one["id"], "title": "Named target stop"},
+        },
+    )
+    assert rename.status_code == 200, rename.text
 
     merge = client.post(
         f"/trips/{trip_id}/edit-operations",
@@ -1205,6 +1214,12 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
         },
     )
     assert merge.status_code == 200, merge.text
+
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
+    assert refreshed.status_code == 200
+    merged_stops = refreshed.json()["days"][0]["stops"]
+    assert [stop["id"] for stop in merged_stops] == [stop_one["id"], stop_three["id"]]
+    assert merged_stops[0]["title"] == "Named target stop"
 
     with engine.connect() as connection:
         legs = connection.execute(
@@ -1219,7 +1234,7 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
             {"trip_id": trip_id},
         ).all()
 
-    assert (stop_one["id"], stop_three["id"], "LINESTRING(127 35,127.03 35.03)") in legs
+    assert legs == [(stop_one["id"], stop_three["id"], "LINESTRING(127.005 35.005,127.03 35.03)")]
     assert all(
         stop_two["id"] not in (from_stop_id, to_stop_id) for from_stop_id, to_stop_id, _ in legs
     )
@@ -1303,6 +1318,7 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
 
     assert (source_stop["id"], new_stop_id) in legs
     assert (new_stop_id, next_stop["id"]) in legs
+    assert len(legs) == 2
     assert (source_stop["id"], next_stop["id"]) not in legs
 
 

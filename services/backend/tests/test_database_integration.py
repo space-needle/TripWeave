@@ -332,3 +332,168 @@ def test_reconstruction_creates_days_stops_moments_reviews_and_preserves_locked(
             {"id": locked_place_id},
         ).scalar_one()
         assert preserved == 1
+
+
+def test_incremental_reconstruction_adds_new_media_without_replacing_story(
+    migrated_database: Engine,
+) -> None:
+    user = factories.user_row(email="owner-incremental@example.com")
+    trip = factories.trip_row(
+        created_by=cast(UUID, user["id"]),
+        timezone_id="America/Los_Angeles",
+    )
+    owner_member = factories.member_row(
+        trip_id=cast(UUID, trip["id"]), user_id=cast(UUID, user["id"])
+    )
+    owner_member["role"] = "owner"
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO users (id, email, password_hash, display_name)
+                VALUES (:id, :email, :password_hash, :display_name)
+                """
+            ),
+            user,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trips (id, title, timezone_id, created_by)
+                VALUES (:id, :title, :timezone_id, :created_by)
+                """
+            ),
+            trip,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trip_members (id, trip_id, user_id, role, display_name)
+                VALUES (:id, :trip_id, :user_id, :role, :display_name)
+                """
+            ),
+            owner_member,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="first-stop.jpg",
+            captured_at="2026-07-02T16:00:00+00:00",
+            latitude=37.0000,
+            longitude=-122.0000,
+            sha256="4" * 64,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="second-stop.jpg",
+            captured_at="2026-07-02T18:00:00+00:00",
+            latitude=37.0100,
+            longitude=-122.0100,
+            sha256="5" * 64,
+        )
+
+    with Session(migrated_database) as session:
+        db_trip = session.get(orm.Trip, trip["id"])
+        assert db_trip is not None
+        initial = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        assert initial.stops == 2
+
+        first_stop_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM stops
+                WHERE trip_id = :trip_id
+                ORDER BY starts_at_utc
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        session.execute(
+            text(
+                """
+                UPDATE stops
+                SET title = 'User named stop',
+                    user_locked = true,
+                    source = 'user_correction'
+                WHERE id = :stop_id
+                """
+            ),
+            {"stop_id": first_stop_id},
+        )
+        session.commit()
+
+    with migrated_database.begin() as connection:
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="near-existing-stop.jpg",
+            captured_at="2026-07-02T16:12:00+00:00",
+            latitude=37.0001,
+            longitude=-122.0001,
+            sha256="6" * 64,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="new-third-stop.jpg",
+            captured_at="2026-07-02T20:00:00+00:00",
+            latitude=37.0300,
+            longitude=-122.0300,
+            sha256="7" * 64,
+        )
+
+    with Session(migrated_database) as session:
+        db_trip = session.get(orm.Trip, trip["id"])
+        assert db_trip is not None
+        updated = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+
+        assert updated.stops == 3
+        assert (
+            session.execute(
+                text("SELECT title FROM stops WHERE id = :stop_id"),
+                {"stop_id": first_stop_id},
+            ).scalar_one()
+            == "User named stop"
+        )
+        assert (
+            session.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM moment_media mm
+                    JOIN moments mo ON mo.id = mm.moment_id
+                    WHERE mo.stop_id = :stop_id
+                    """
+                ),
+                {"stop_id": first_stop_id},
+            ).scalar_one()
+            == 2
+        )
+        assert (
+            session.execute(
+                text("SELECT COUNT(*) FROM trip_legs WHERE trip_id = :trip_id"),
+                {"trip_id": trip["id"]},
+            ).scalar_one()
+            >= 2
+        )
+        latest_summary = session.execute(
+            text(
+                """
+                SELECT summary
+                FROM reconstruction_runs
+                WHERE trip_id = :trip_id
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        assert latest_summary["mode"] == "incremental"
+        assert latest_summary["assignedMedia"] == 2

@@ -4,10 +4,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import ColumnElement, delete, literal_column, select
+from sqlalchemy import ColumnElement, delete, func, literal_column, or_, select, text
 from sqlalchemy.orm import Session
 
 from tripweave.adapters import orm
@@ -93,6 +94,7 @@ def reconstruct_trip(
     geocoder: Geocoder,
 ) -> ReconstructionSummary:
     now = datetime.now(UTC)
+    previous_run = latest_reconstruction_run(db, trip.id)
     run = orm.ReconstructionRun(
         trip_id=trip.id,
         state=ReconstructionRunState.RUNNING.value,
@@ -105,28 +107,40 @@ def reconstruct_trip(
     )
     db.add(run)
     db.flush()
-    delete_unlocked_outputs(db, trip.id)
 
     media_points = load_media_points(db, trip)
     usable: list[MediaPoint] = []
-    review_count = 0
+    missing_time: list[MediaPoint] = []
     for point in media_points:
         if point.captured_at_utc is None:
-            add_review_item(
-                db,
-                run,
-                trip.id,
-                point.id,
-                ReviewItemType.UNKNOWN_TIME,
-                "Capture time is missing or unusable.",
-                severity=ReviewSeverity.HIGH,
-                payload={"reason": "missing_capture_time"},
-            )
-            review_count += 1
+            missing_time.append(point)
             continue
         point.day = effective_day(trip, point)
         usable.append(point)
 
+    unassigned_usable = unassigned_media_points(db, trip.id, usable)
+    unassigned_missing_time = unassigned_media_points(db, trip.id, missing_time)
+    if (
+        previous_run is not None
+        and has_visible_story(db, trip.id, previous_run)
+        and (unassigned_usable or unassigned_missing_time)
+    ):
+        carry_forward_story(db, trip.id, previous_run, run)
+        review_count = add_unknown_time_reviews(db, run, trip.id, unassigned_missing_time)
+        summary = increment_story(
+            db=db,
+            run=run,
+            trip=trip,
+            usable=usable,
+            geocoder=geocoder,
+            base_review_count=review_count,
+            unassigned=unassigned_usable,
+        )
+        db.commit()
+        return summary
+
+    delete_unlocked_outputs(db, trip.id)
+    review_count = add_unknown_time_reviews(db, run, trip.id, missing_time)
     gps_points = [
         point for point in usable if point.latitude is not None and point.longitude is not None
     ]
@@ -157,6 +171,526 @@ def reconstruct_trip(
         moments=moments,
         review_items=review_count,
     )
+
+
+def latest_reconstruction_run(db: Session, trip_id: UUID) -> orm.ReconstructionRun | None:
+    return db.execute(
+        select(orm.ReconstructionRun)
+        .where(
+            orm.ReconstructionRun.trip_id == trip_id,
+            orm.ReconstructionRun.state == ReconstructionRunState.SUCCEEDED.value,
+        )
+        .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def has_visible_story(db: Session, trip_id: UUID, run: orm.ReconstructionRun) -> bool:
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(orm.Stop)
+            .where(
+                orm.Stop.trip_id == trip_id,
+                or_(
+                    orm.Stop.reconstruction_run_id == run.id,
+                    orm.Stop.user_locked.is_(True),
+                ),
+            )
+        )
+        or 0
+    ) > 0
+
+
+def carry_forward_story(
+    db: Session,
+    trip_id: UUID,
+    previous_run: orm.ReconstructionRun,
+    run: orm.ReconstructionRun,
+) -> None:
+    for model in (
+        orm.TripDay,
+        orm.Place,
+        orm.Stop,
+        orm.Moment,
+        orm.MomentMedia,
+        orm.MomentParticipant,
+        orm.TripLeg,
+        orm.ReviewItem,
+    ):
+        typed_model: Any = model
+        rows = db.scalars(
+            select(model).where(
+                typed_model.trip_id == trip_id,
+                typed_model.reconstruction_run_id == previous_run.id,
+                typed_model.user_locked.is_(False),
+            )
+        )
+        for row in rows:
+            generated_row: Any = row
+            generated_row.reconstruction_run_id = run.id
+            generated_row.algorithm_version = ALGORITHM_VERSION
+
+
+def increment_story(
+    *,
+    db: Session,
+    run: orm.ReconstructionRun,
+    trip: orm.Trip,
+    usable: list[MediaPoint],
+    geocoder: Geocoder,
+    base_review_count: int,
+    unassigned: list[MediaPoint],
+) -> ReconstructionSummary:
+    review_count = base_review_count
+    changed_days: set[UUID] = set()
+    added_stops = 0
+    added_moments = 0
+    assigned_media = 0
+    for point in sorted(
+        unassigned,
+        key=lambda item: (item.captured_at_utc or datetime.min, item.id),
+    ):
+        assert point.captured_at_utc is not None
+        if point.latitude is None or point.longitude is None:
+            add_review_item(
+                db,
+                run,
+                trip.id,
+                point.id,
+                ReviewItemType.UNKNOWN_LOCATION,
+                "GPS is missing and cannot be incrementally placed without guessing.",
+                severity=ReviewSeverity.MEDIUM,
+                payload={"reason": "incremental_missing_location"},
+            )
+            review_count += 1
+            continue
+        stop = find_incremental_stop(db, trip.id, point)
+        if stop is None:
+            stop = create_incremental_stop(db, run, trip.id, point, geocoder)
+            added_stops += 1
+        else:
+            stop.starts_at_utc = min(stop.starts_at_utc, point.captured_at_utc)
+            stop.ends_at_utc = max(stop.ends_at_utc, point.captured_at_utc)
+            stop.reconstruction_run_id = run.id
+        point.stop = stop
+        changed_days.add(stop.trip_day_id)
+        moment, created = find_or_create_incremental_moment(db, run, stop, point)
+        added_moments += int(created)
+        add_media_to_moment(db, run, moment, point)
+        assigned_media += 1
+
+    for day_id in changed_days:
+        renumber_day_stops(db, day_id)
+        rebuild_day_legs(db, run, day_id)
+
+    intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
+    review_count += intelligence.review_items
+    days = count_visible(db, orm.TripDay, trip.id, run.id)
+    stops = count_visible(db, orm.Stop, trip.id, run.id)
+    moments = count_visible(db, orm.Moment, trip.id, run.id)
+    legs = count_visible(db, orm.TripLeg, trip.id, run.id)
+    run.state = ReconstructionRunState.SUCCEEDED.value
+    run.finished_at = datetime.now(UTC)
+    run.summary = {
+        "mode": "incremental",
+        "days": days,
+        "stops": stops,
+        "moments": moments,
+        "legs": legs,
+        "newMedia": len(unassigned),
+        "assignedMedia": assigned_media,
+        "addedStops": added_stops,
+        "addedMoments": added_moments,
+        "similarityGroups": intelligence.similarity_groups,
+        "clockOffsetSuggestions": intelligence.clock_suggestions,
+        "reviewItems": review_count,
+    }
+    return ReconstructionSummary(
+        run_id=run.id,
+        days=days,
+        stops=stops,
+        moments=moments,
+        review_items=review_count,
+    )
+
+
+def count_visible(db: Session, model: Any, trip_id: UUID, run_id: UUID) -> int:
+    return (
+        db.scalar(
+            select(func.count()).select_from(model).where(
+                model.trip_id == trip_id,
+                or_(model.reconstruction_run_id == run_id, model.user_locked.is_(True)),
+            )
+        )
+        or 0
+    )
+
+
+def unassigned_media_points(
+    db: Session, trip_id: UUID, usable: list[MediaPoint]
+) -> list[MediaPoint]:
+    assigned_ids = set(
+        db.scalars(select(orm.MomentMedia.media_item_id).where(orm.MomentMedia.trip_id == trip_id))
+    )
+    reviewed_ids = set(
+        db.scalars(
+            select(orm.ReviewItem.media_item_id).where(
+                orm.ReviewItem.trip_id == trip_id,
+                orm.ReviewItem.media_item_id.is_not(None),
+                orm.ReviewItem.status == ReviewItemStatus.OPEN.value,
+            )
+        )
+    )
+    return [
+        point
+        for point in usable
+        if point.id not in assigned_ids and point.id not in reviewed_ids
+    ]
+
+
+def find_incremental_stop(db: Session, trip_id: UUID, point: MediaPoint) -> orm.Stop | None:
+    assert point.day is not None
+    assert point.captured_at_utc is not None
+    assert point.latitude is not None and point.longitude is not None
+    stop_lat: ColumnElement[float | None] = literal_column("ST_Y(stops.centroid::geometry)").label(
+        "latitude"
+    )
+    stop_lon: ColumnElement[float | None] = literal_column("ST_X(stops.centroid::geometry)").label(
+        "longitude"
+    )
+    rows = db.execute(
+        select(orm.Stop, stop_lat, stop_lon)
+        .join(orm.TripDay, orm.TripDay.id == orm.Stop.trip_day_id)
+        .where(orm.Stop.trip_id == trip_id, orm.TripDay.day_date == point.day)
+        .order_by(orm.Stop.starts_at_utc, orm.Stop.position)
+    ).all()
+    best: tuple[float, orm.Stop] | None = None
+    for stop, latitude, longitude in rows:
+        if latitude is None or longitude is None:
+            continue
+        gap_minutes = 0.0
+        if point.captured_at_utc < stop.starts_at_utc:
+            gap_minutes = (stop.starts_at_utc - point.captured_at_utc).total_seconds() / 60
+        elif point.captured_at_utc > stop.ends_at_utc:
+            gap_minutes = (point.captured_at_utc - stop.ends_at_utc).total_seconds() / 60
+        if gap_minutes > STOP_GAP_MINUTES:
+            continue
+        distance = haversine_meters(
+            float(latitude), float(longitude), point.latitude, point.longitude
+        )
+        if distance > STOP_RADIUS_METERS:
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, stop)
+    return best[1] if best is not None else None
+
+
+def create_incremental_stop(
+    db: Session,
+    run: orm.ReconstructionRun,
+    trip_id: UUID,
+    point: MediaPoint,
+    geocoder: Geocoder,
+) -> orm.Stop:
+    assert point.day is not None
+    assert point.captured_at_utc is not None
+    assert point.latitude is not None and point.longitude is not None
+    trip_day = find_or_create_trip_day(db, run, trip_id, point)
+    place = find_incremental_place(db, trip_id, point.latitude, point.longitude)
+    if place is None:
+        geocode_result = geocoder.reverse_geocode(
+            latitude=point.latitude, longitude=point.longitude
+        )
+        place = orm.Place(
+            trip_id=trip_id,
+            name=geocode_result.name,
+            centroid=point_wkt(point.latitude, point.longitude),
+            **generated(
+                run,
+                geocode_result.confidence
+                if geocode_result.name is not None and geocode_result.confidence is not None
+                else 0.9,
+            ),
+        )
+        db.add(place)
+        db.flush()
+    stop = orm.Stop(
+        trip_id=trip_id,
+        trip_day_id=trip_day.id,
+        place_id=place.id,
+        title=place.name,
+        position=next_stop_position(db, trip_day.id),
+        starts_at_utc=point.captured_at_utc,
+        ends_at_utc=point.captured_at_utc,
+        centroid=point_wkt(point.latitude, point.longitude),
+        **generated(run, 0.8),
+    )
+    db.add(stop)
+    db.flush()
+    return stop
+
+
+def find_or_create_trip_day(
+    db: Session, run: orm.ReconstructionRun, trip_id: UUID, point: MediaPoint
+) -> orm.TripDay:
+    assert point.day is not None
+    existing = db.execute(
+        select(orm.TripDay)
+        .where(orm.TripDay.trip_id == trip_id, orm.TripDay.day_date == point.day)
+        .order_by(orm.TripDay.user_locked.desc(), orm.TripDay.created_at)
+        .limit(1)
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.reconstruction_run_id = run.id
+        if point.captured_at_utc is not None:
+            existing.starts_at_utc = (
+                min(existing.starts_at_utc, point.captured_at_utc)
+                if existing.starts_at_utc is not None
+                else point.captured_at_utc
+            )
+            existing.ends_at_utc = (
+                max(existing.ends_at_utc, point.captured_at_utc)
+                if existing.ends_at_utc is not None
+                else point.captured_at_utc
+            )
+        return existing
+
+    position = (
+        db.scalar(
+            select(func.count()).select_from(orm.TripDay).where(orm.TripDay.trip_id == trip_id)
+        )
+        or 0
+    ) + 1
+    trip_day = orm.TripDay(
+        trip_id=trip_id,
+        day_date=point.day,
+        position=position,
+        starts_at_utc=point.captured_at_utc,
+        ends_at_utc=point.captured_at_utc,
+        **generated(run, 0.85),
+    )
+    db.add(trip_day)
+    db.flush()
+    renumber_trip_days(db, trip_id)
+    return trip_day
+
+
+def find_incremental_place(
+    db: Session, trip_id: UUID, latitude: float, longitude: float
+) -> orm.Place | None:
+    place_lat: ColumnElement[float | None] = literal_column(
+        "ST_Y(places.centroid::geometry)"
+    ).label("latitude")
+    place_lon: ColumnElement[float | None] = literal_column(
+        "ST_X(places.centroid::geometry)"
+    ).label("longitude")
+    rows = db.execute(
+        select(orm.Place, place_lat, place_lon).where(orm.Place.trip_id == trip_id)
+    ).all()
+    best: tuple[float, orm.Place] | None = None
+    for place, place_latitude, place_longitude in rows:
+        if place_latitude is None or place_longitude is None:
+            continue
+        distance = haversine_meters(
+            float(place_latitude), float(place_longitude), latitude, longitude
+        )
+        if distance > STOP_RADIUS_METERS:
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, place)
+    return best[1] if best is not None else None
+
+
+def next_stop_position(db: Session, trip_day_id: UUID) -> int:
+    return (
+        db.scalar(
+            select(func.max(orm.Stop.position)).where(orm.Stop.trip_day_id == trip_day_id)
+        )
+        or 0
+    ) + 1
+
+
+def find_or_create_incremental_moment(
+    db: Session, run: orm.ReconstructionRun, stop: orm.Stop, point: MediaPoint
+) -> tuple[orm.Moment, bool]:
+    assert point.captured_at_utc is not None
+    moments = list(
+        db.scalars(
+            select(orm.Moment)
+            .where(orm.Moment.stop_id == stop.id)
+            .order_by(orm.Moment.starts_at_utc, orm.Moment.position)
+        )
+    )
+    best: tuple[float, orm.Moment] | None = None
+    for moment in moments:
+        gap_minutes = 0.0
+        if point.captured_at_utc < moment.starts_at_utc:
+            gap_minutes = (moment.starts_at_utc - point.captured_at_utc).total_seconds() / 60
+        elif point.captured_at_utc > moment.ends_at_utc:
+            gap_minutes = (point.captured_at_utc - moment.ends_at_utc).total_seconds() / 60
+        if gap_minutes > MOMENT_GAP_MINUTES:
+            continue
+        if best is None or gap_minutes < best[0]:
+            best = (gap_minutes, moment)
+    if best is not None:
+        moment = best[1]
+        moment.starts_at_utc = min(moment.starts_at_utc, point.captured_at_utc)
+        moment.ends_at_utc = max(moment.ends_at_utc, point.captured_at_utc)
+        moment.reconstruction_run_id = run.id
+        return moment, False
+
+    moment = orm.Moment(
+        trip_id=stop.trip_id,
+        stop_id=stop.id,
+        position=(max((item.position for item in moments), default=0) + 1),
+        starts_at_utc=point.captured_at_utc,
+        ends_at_utc=point.captured_at_utc,
+        **generated(run, 0.8),
+    )
+    db.add(moment)
+    db.flush()
+    renumber_stop_moments(db, stop.id)
+    return moment, True
+
+
+def add_media_to_moment(
+    db: Session, run: orm.ReconstructionRun, moment: orm.Moment, point: MediaPoint
+) -> None:
+    existing = db.execute(
+        select(orm.MomentMedia).where(
+            orm.MomentMedia.moment_id == moment.id,
+            orm.MomentMedia.media_item_id == point.id,
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        position = (
+            db.scalar(
+                select(func.max(orm.MomentMedia.position)).where(
+                    orm.MomentMedia.moment_id == moment.id
+                )
+            )
+            or 0
+        ) + 1
+        db.add(
+            orm.MomentMedia(
+                trip_id=moment.trip_id,
+                moment_id=moment.id,
+                media_item_id=point.id,
+                position=position,
+                **generated(run, 0.8),
+            )
+        )
+    participant = db.execute(
+        select(orm.MomentParticipant).where(
+            orm.MomentParticipant.moment_id == moment.id,
+            orm.MomentParticipant.trip_member_id == point.contributor_member_id,
+        )
+    ).scalar_one_or_none()
+    if participant is None:
+        db.add(
+            orm.MomentParticipant(
+                trip_id=moment.trip_id,
+                moment_id=moment.id,
+                trip_member_id=point.contributor_member_id,
+                **generated(run, 0.8),
+            )
+        )
+
+
+def renumber_trip_days(db: Session, trip_id: UUID) -> None:
+    days = list(
+        db.scalars(
+            select(orm.TripDay)
+            .where(orm.TripDay.trip_id == trip_id)
+            .order_by(orm.TripDay.day_date, orm.TripDay.position)
+        )
+    )
+    for position, day in enumerate(days, start=1):
+        day.position = position
+
+
+def renumber_day_stops(db: Session, trip_day_id: UUID) -> None:
+    stops = list(
+        db.scalars(
+            select(orm.Stop)
+            .where(orm.Stop.trip_day_id == trip_day_id)
+            .order_by(orm.Stop.starts_at_utc, orm.Stop.ends_at_utc, orm.Stop.position, orm.Stop.id)
+        )
+    )
+    for position, stop in enumerate(stops, start=1):
+        stop.position = position
+
+
+def renumber_stop_moments(db: Session, stop_id: UUID) -> None:
+    moments = list(
+        db.scalars(
+            select(orm.Moment)
+            .where(orm.Moment.stop_id == stop_id)
+            .order_by(
+                orm.Moment.starts_at_utc,
+                orm.Moment.ends_at_utc,
+                orm.Moment.position,
+                orm.Moment.id,
+            )
+        )
+    )
+    for position, moment in enumerate(moments, start=1):
+        moment.position = position
+
+
+def rebuild_day_legs(db: Session, run: orm.ReconstructionRun, trip_day_id: UUID) -> None:
+    db.execute(
+        delete(orm.TripLeg).where(
+            orm.TripLeg.trip_day_id == trip_day_id,
+            orm.TripLeg.user_locked.is_(False),
+        )
+    )
+    stops = list(
+        db.scalars(
+            select(orm.Stop)
+            .where(orm.Stop.trip_day_id == trip_day_id)
+            .order_by(orm.Stop.position, orm.Stop.starts_at_utc)
+        )
+    )
+    trip_day = db.get(orm.TripDay, trip_day_id)
+    if trip_day is None:
+        return
+    for previous, current in zip(stops, stops[1:], strict=False):
+        exists = db.execute(
+            select(orm.TripLeg).where(
+                orm.TripLeg.from_stop_id == previous.id,
+                orm.TripLeg.to_stop_id == current.id,
+            )
+        ).scalar_one_or_none()
+        if exists is not None:
+            exists.reconstruction_run_id = run.id
+            continue
+        db.add(
+            orm.TripLeg(
+                trip_id=trip_day.trip_id,
+                trip_day_id=trip_day.id,
+                from_stop_id=previous.id,
+                to_stop_id=current.id,
+                route_source=RouteSource.PHOTO_INFERRED.value,
+                geometry=line_between_stops_wkt(db, previous.id, current.id),
+                **generated(run, 0.7),
+            )
+        )
+
+
+def line_between_stops_wkt(db: Session, from_stop_id: UUID, to_stop_id: UUID) -> str | None:
+    return db.execute(
+        text(
+            """
+            SELECT ST_AsEWKT(ST_MakeLine(source.centroid::geometry, target.centroid::geometry))
+            FROM stops source, stops target
+            WHERE source.id = CAST(:from_stop_id AS uuid)
+                AND target.id = CAST(:to_stop_id AS uuid)
+            """
+        ),
+        {"from_stop_id": str(from_stop_id), "to_stop_id": str(to_stop_id)},
+    ).scalar_one_or_none()
 
 
 def delete_unlocked_outputs(db: Session, trip_id: UUID) -> None:
@@ -519,6 +1053,26 @@ def find_place(
         if haversine_meters(place_lat, place_lon, latitude, longitude) <= STOP_RADIUS_METERS:
             return place
     return None
+
+
+def add_unknown_time_reviews(
+    db: Session,
+    run: orm.ReconstructionRun,
+    trip_id: UUID,
+    points: list[MediaPoint],
+) -> int:
+    for point in points:
+        add_review_item(
+            db,
+            run,
+            trip_id,
+            point.id,
+            ReviewItemType.UNKNOWN_TIME,
+            "Capture time is missing or unusable.",
+            severity=ReviewSeverity.HIGH,
+            payload={"reason": "missing_capture_time"},
+        )
+    return len(points)
 
 
 def add_review_item(

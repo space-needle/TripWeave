@@ -537,6 +537,8 @@ function OwnerWorkspace() {
         if (keepPolling) {
           timeout = setTimeout(poll, delay);
           delay = Math.min(delay * 1.6, 10000);
+        } else if (hasProcessingMedia) {
+          await loadReconstruction(tripId);
         }
       } catch (error) {
         if (!cancelled) {
@@ -553,7 +555,7 @@ function OwnerWorkspace() {
         clearTimeout(timeout);
       }
     };
-  }, [hasProcessingMedia, selectedTrip?.id]);
+  }, [hasProcessingMedia, loadReconstruction, selectedTrip?.id]);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -4097,13 +4099,7 @@ function stopDisplayCoordinateMap(
 ): Map<string, [number, number]> {
   const coordinates = new Map<string, [number, number]>();
   for (const stop of model.stops) {
-    const stopMedia = model.media.filter(
-      (item) => item.stopId === stop.id && item.coordinates,
-    );
-    const featuredMedia =
-      stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
-    const coordinate =
-      featuredMedia?.coordinates ?? displayStopCoordinate(stop, model.legs);
+    const coordinate = stop.coordinates ?? displayStopCoordinate(stop, model.legs);
     if (coordinate) {
       coordinates.set(stop.id, coordinate);
     }

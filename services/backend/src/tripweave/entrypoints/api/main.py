@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import and_, func, literal_column, or_, select, text
+from sqlalchemy import and_, delete, func, literal_column, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -1593,6 +1593,43 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
         )
 
+    def rebuild_inferred_day_legs_for_edit(
+        db: DbSession, run: orm.ReconstructionRun, trip_day_id: UUID
+    ) -> None:
+        db.execute(
+            delete(orm.TripLeg).where(
+                orm.TripLeg.trip_day_id == trip_day_id,
+                orm.TripLeg.route_source == RouteSource.PHOTO_INFERRED.value,
+            )
+        )
+        stops = list(
+            db.scalars(
+                select(orm.Stop)
+                .where(orm.Stop.trip_day_id == trip_day_id)
+                .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+            )
+        )
+        for previous, current in zip(stops, stops[1:], strict=False):
+            existing = db.execute(
+                select(orm.TripLeg).where(
+                    orm.TripLeg.from_stop_id == previous.id,
+                    orm.TripLeg.to_stop_id == current.id,
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                continue
+            db.add(
+                orm.TripLeg(
+                    trip_id=previous.trip_id,
+                    trip_day_id=trip_day_id,
+                    from_stop_id=previous.id,
+                    to_stop_id=current.id,
+                    route_source=RouteSource.PHOTO_INFERRED.value,
+                    geometry=route_line_wkt(db, previous.id, current.id),
+                    **correction_generated(run),
+                )
+            )
+
     def stop_centroid_for_moments(db: DbSession, moment_ids: list[UUID]) -> str | None:
         if not moment_ids:
             return None
@@ -1857,6 +1894,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(source, payload.expected_updated_at)
             before = {"sourceStopId": str(source.id), "targetStopId": str(target.id)}
+            preserved_title = target.title
+            if source.user_locked and source.title and (not target.user_locked or not target.title):
+                preserved_title = source.title
             for moment in ordered_stop_moments(db, source.id):
                 moment.stop_id = target.id
                 lock_record(moment)
@@ -1864,12 +1904,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             renumber_stop_moments(db, target.id)
             target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
             target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
-            rewire_merged_stop_legs(db, source, target)
+            target.title = preserved_title
+            target.centroid = (
+                stop_centroid_for_moments(
+                    db, [moment.id for moment in ordered_stop_moments(db, target.id)]
+                )
+                or target.centroid
+            )
             lock_record(target)
             lock_reconstruction_parents(db, target)
             db.delete(source)
             db.flush()
             renumber_day_stops(db, target.trip_day_id)
+            rebuild_inferred_day_legs_for_edit(db, run, target.trip_day_id)
             after = {"mergedIntoStopId": str(target.id)}
             target_type, target_id = "stop", target.id
 
@@ -1947,19 +1994,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             lock_record(stop)
             lock_reconstruction_parents(db, stop)
             db.flush()
-            if next_stop is not None:
-                old_legs = list(
-                    db.scalars(
-                        select(orm.TripLeg).where(
-                            orm.TripLeg.from_stop_id == stop.id,
-                            orm.TripLeg.to_stop_id == next_stop.id,
-                        )
-                    )
-                )
-                for old_leg in old_legs:
-                    replace_stop_leg_endpoint(db, old_leg, new_stop, next_stop)
-            add_stop_leg_if_missing(db, run, stop, new_stop)
             renumber_day_stops(db, stop.trip_day_id)
+            rebuild_inferred_day_legs_for_edit(db, run, stop.trip_day_id)
             after = {
                 "newStopId": str(new_stop.id),
                 "movedMomentIds": [str(moment.id) for moment in moved_moments],
@@ -2987,6 +3023,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 orm.MomentMedia.user_locked.is_(True),
             ),
         )
+        open_review_media_ids = select(orm.ReviewItem.media_item_id).where(
+            orm.ReviewItem.trip_id == trip_id,
+            orm.ReviewItem.media_item_id.is_not(None),
+            orm.ReviewItem.status == ReviewItemStatus.OPEN.value,
+        )
         story_media_count = (
             db.scalar(
                 select(func.count(func.distinct(orm.MomentMedia.media_item_id)))
@@ -3011,6 +3052,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .where(
                     *ready_filters,
                     orm.MediaItem.id.notin_(represented_media_ids),
+                    orm.MediaItem.id.notin_(open_review_media_ids),
                 )
             )
             or 0

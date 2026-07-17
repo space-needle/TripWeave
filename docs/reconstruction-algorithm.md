@@ -63,6 +63,15 @@ The backend defines a provider-neutral `Geocoder` port with reverse-geocoding se
 
 When reverse geocoding returns a name, reconstruction uses it as the generated place name and initial stop title. These names are automated output with source, confidence, and algorithm version recorded through the generated reconstruction record. User-edited stop names remain `user_locked` corrections and must not be overwritten by reruns.
 
-## Reruns And Locked Records
+## Incremental Updates And Locked Records
 
-Reruns create a new `reconstruction_runs` record. Generated records with `user_locked = false` are replaced. Records with `user_locked = true` are preserved so future correction workflows can protect human edits.
+The first reconstruction creates a full generated story. Later story updates are incremental when a visible story already exists:
+
+- Existing days, stops, moments, media assignments, and user-corrected names are carried forward into the new run.
+- READY media already assigned to a moment is not moved automatically.
+- New READY media is assigned to an existing stop when its effective day, location, and capture time fit the stop radius and time-gap rules.
+- New READY media that does not fit an existing stop creates a new stop and moment in chronological order.
+- Missing or unusable metadata creates review items instead of guessing.
+- Inferred legs for affected days are rebuilt between consecutive stops while user-locked corrections are preserved.
+
+User-corrected records remain `user_locked` and must not be overwritten by reruns or incremental updates.
