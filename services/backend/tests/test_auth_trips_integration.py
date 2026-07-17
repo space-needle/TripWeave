@@ -1225,6 +1225,87 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     )
 
 
+def test_split_stop_reorders_stops_and_rewires_trip_legs(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "split-route-owner@example.com")
+    trip = create_trip(client, csrf_token, "Split Route Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    for index, captured_at, latitude, longitude in [
+        (1, datetime(2026, 6, 8, 1, 0, tzinfo=UTC), 35.0, 127.0),
+        (2, datetime(2026, 6, 8, 1, 20, tzinfo=UTC), 35.0, 127.0),
+        (3, datetime(2026, 6, 8, 3, 0, tzinfo=UTC), 35.01, 127.01),
+    ]:
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"split-route-{index}.jpg",
+            captured_at=captured_at,
+            latitude=latitude,
+            longitude=longitude,
+            sha256=f"{index:064d}",
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200
+    stops = reconstructed.json()["days"][0]["stops"]
+    assert len(stops) == 2
+    source_stop, next_stop = stops
+    assert len(source_stop["moments"]) == 2
+    split_after_moment_id = source_stop["moments"][0]["id"]
+
+    split = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "split_stop",
+            "payload": {"stopId": source_stop["id"], "afterMomentId": split_after_moment_id},
+        },
+    )
+    assert split.status_code == 200, split.text
+    new_stop_id = split.json()["afterValues"]["newStopId"]
+
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
+    assert refreshed.status_code == 200
+    split_stops = refreshed.json()["days"][0]["stops"]
+    assert [stop["position"] for stop in split_stops] == [1, 2, 3]
+    assert [stop["id"] for stop in split_stops] == [source_stop["id"], new_stop_id, next_stop["id"]]
+    assert split_stops[0]["mediaCount"] == 1
+    assert split_stops[1]["mediaCount"] == 1
+
+    with engine.connect() as connection:
+        legs = connection.execute(
+            text(
+                """
+                SELECT from_stop_id::text, to_stop_id::text
+                FROM trip_legs
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).all()
+
+    assert (source_stop["id"], new_stop_id) in legs
+    assert (new_stop_id, next_stop["id"]) in legs
+    assert (source_stop["id"], next_stop["id"]) not in legs
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:

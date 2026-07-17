@@ -52,6 +52,7 @@ from tripweave.domain.enums import (
     ProcessingState,
     ProcessingTargetType,
     ReviewItemStatus,
+    RouteSource,
     ShareLinkStatus,
     StoryVersionState,
     SuggestionStatus,
@@ -1558,6 +1559,57 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         leg.geometry = route_line_wkt(db, from_stop.id, to_stop.id)
         lock_record(leg)
 
+    def add_stop_leg_if_missing(
+        db: DbSession, run: orm.ReconstructionRun, from_stop: orm.Stop, to_stop: orm.Stop
+    ) -> None:
+        if from_stop.id == to_stop.id:
+            return
+        existing = db.execute(
+            select(orm.TripLeg).where(
+                orm.TripLeg.from_stop_id == from_stop.id,
+                orm.TripLeg.to_stop_id == to_stop.id,
+                orm.TripLeg.reconstruction_run_id == run.id,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            lock_record(existing)
+            return
+        db.add(
+            orm.TripLeg(
+                trip_id=from_stop.trip_id,
+                trip_day_id=from_stop.trip_day_id,
+                from_stop_id=from_stop.id,
+                to_stop_id=to_stop.id,
+                route_source=RouteSource.PHOTO_INFERRED.value,
+                geometry=route_line_wkt(db, from_stop.id, to_stop.id),
+                **correction_generated(run),
+            )
+        )
+
+    def stop_centroid_for_moments(db: DbSession, moment_ids: list[UUID]) -> str | None:
+        if not moment_ids:
+            return None
+        return db.execute(
+            text(
+                """
+                SELECT ST_AsEWKT(
+                    ST_SetSRID(
+                        ST_MakePoint(
+                            AVG(ST_X(media_items.effective_location::geometry)),
+                            AVG(ST_Y(media_items.effective_location::geometry))
+                        ),
+                        4326
+                    )
+                )
+                FROM moment_media
+                JOIN media_items ON media_items.id = moment_media.media_item_id
+                WHERE moment_media.moment_id = ANY(:moment_ids)
+                    AND media_items.effective_location IS NOT NULL
+                """
+            ),
+            {"moment_ids": moment_ids},
+        ).scalar_one_or_none()
+
     def rewire_merged_stop_legs(db: DbSession, source: orm.Stop, target: orm.Stop) -> None:
         legs = list(
             db.scalars(
@@ -1616,6 +1668,37 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.add(moment)
         db.flush()
         return moment
+
+    def ordered_stop_moments(db: DbSession, stop_id: UUID) -> list[orm.Moment]:
+        return list(
+            db.scalars(
+                select(orm.Moment)
+                .where(orm.Moment.stop_id == stop_id)
+                .order_by(
+                    orm.Moment.starts_at_utc,
+                    orm.Moment.ends_at_utc,
+                    orm.Moment.position,
+                    orm.Moment.id,
+                )
+            )
+        )
+
+    def renumber_stop_moments(db: DbSession, stop_id: UUID) -> None:
+        for position, moment in enumerate(ordered_stop_moments(db, stop_id), start=1):
+            moment.position = position
+            lock_record(moment)
+
+    def renumber_day_stops(db: DbSession, trip_day_id: UUID) -> None:
+        stops = list(
+            db.scalars(
+                select(orm.Stop)
+                .where(orm.Stop.trip_day_id == trip_day_id)
+                .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+            )
+        )
+        for position, stop in enumerate(stops, start=1):
+            stop.position = position
+            lock_record(stop)
 
     def edit_operation_response(operation: orm.EditOperation) -> EditOperationResponse:
         return EditOperationResponse(
@@ -1767,15 +1850,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(source, payload.expected_updated_at)
             before = {"sourceStopId": str(source.id), "targetStopId": str(target.id)}
-            for moment in db.scalars(select(orm.Moment).where(orm.Moment.stop_id == source.id)):
+            for moment in ordered_stop_moments(db, source.id):
                 moment.stop_id = target.id
                 lock_record(moment)
+            db.flush()
+            renumber_stop_moments(db, target.id)
             target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
             target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
             rewire_merged_stop_legs(db, source, target)
             lock_record(target)
             lock_reconstruction_parents(db, target)
             db.delete(source)
+            db.flush()
+            renumber_day_stops(db, target.trip_day_id)
             after = {"mergedIntoStopId": str(target.id)}
             target_type, target_id = "stop", target.id
 
@@ -1785,18 +1872,39 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(stop, payload.expected_updated_at)
             split_after = payload_uuid(data, "afterMomentId")
-            moments = list(
-                db.scalars(
-                    select(orm.Moment)
-                    .where(orm.Moment.stop_id == stop.id)
-                    .order_by(orm.Moment.position)
-                )
-            )
+            moments = ordered_stop_moments(db, stop.id)
             index = next((i for i, moment in enumerate(moments) if moment.id == split_after), -1)
             if index < 0 or index == len(moments) - 1:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT, detail="Cannot split stop there"
                 )
+            moved_moments = moments[index + 1 :]
+            next_stop = db.execute(
+                select(orm.Stop)
+                .where(
+                    orm.Stop.trip_day_id == stop.trip_day_id,
+                    orm.Stop.position > stop.position,
+                )
+                .order_by(orm.Stop.position)
+                .limit(1)
+            ).scalar_one_or_none()
+            original_stop_values = record_values(
+                stop, ["position", "starts_at_utc", "ends_at_utc", "centroid", "user_locked"]
+            )
+            following_stops = list(
+                db.scalars(
+                    select(orm.Stop)
+                    .where(
+                        orm.Stop.trip_day_id == stop.trip_day_id,
+                        orm.Stop.position > stop.position,
+                    )
+                    .order_by(orm.Stop.position.desc())
+                )
+            )
+            for following_stop in following_stops:
+                following_stop.position += 1
+                lock_record(following_stop)
+            moved_centroid = stop_centroid_for_moments(db, [moment.id for moment in moved_moments])
             new_stop = orm.Stop(
                 trip_id=trip_id,
                 trip_day_id=stop.trip_day_id,
@@ -1804,19 +1912,52 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 position=stop.position + 1,
                 starts_at_utc=moments[index + 1].starts_at_utc,
                 ends_at_utc=stop.ends_at_utc,
-                centroid=stop.centroid,
+                centroid=moved_centroid or stop.centroid,
                 **correction_generated(run),
             )
             db.add(new_stop)
             db.flush()
-            before = {"stopId": str(stop.id), "momentIds": [str(moment.id) for moment in moments]}
-            for moment in moments[index + 1 :]:
+            before = {
+                "stopId": str(stop.id),
+                "splitAfterMomentId": str(split_after),
+                "momentIds": [str(moment.id) for moment in moments],
+                "movedMomentIds": [str(moment.id) for moment in moved_moments],
+                "nextStopId": str(next_stop.id) if next_stop is not None else None,
+                "originalStop": original_stop_values,
+            }
+            for new_position, moment in enumerate(moved_moments, start=1):
                 moment.stop_id = new_stop.id
+                moment.position = new_position
                 lock_record(moment)
             stop.ends_at_utc = moments[index].ends_at_utc
+            stop.centroid = (
+                stop_centroid_for_moments(db, [moment.id for moment in moments[: index + 1]])
+                or stop.centroid
+            )
+            for old_position, moment in enumerate(moments[: index + 1], start=1):
+                moment.position = old_position
+                lock_record(moment)
             lock_record(stop)
             lock_reconstruction_parents(db, stop)
-            after = {"newStopId": str(new_stop.id)}
+            db.flush()
+            if next_stop is not None:
+                old_legs = list(
+                    db.scalars(
+                        select(orm.TripLeg).where(
+                            orm.TripLeg.from_stop_id == stop.id,
+                            orm.TripLeg.to_stop_id == next_stop.id,
+                        )
+                    )
+                )
+                for old_leg in old_legs:
+                    replace_stop_leg_endpoint(db, old_leg, new_stop, next_stop)
+            add_stop_leg_if_missing(db, run, stop, new_stop)
+            renumber_day_stops(db, stop.trip_day_id)
+            after = {
+                "newStopId": str(new_stop.id),
+                "movedMomentIds": [str(moment.id) for moment in moved_moments],
+                "newStopPosition": new_stop.position,
+            }
             target_type, target_id = "stop", stop.id
 
         elif operation_type == EditOperationType.MERGE_MOMENTS.value:
@@ -2850,6 +2991,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .order_by(orm.Stop.position)
             ).all()
         )
+        stop_position_by_id = {stop.id: stop.position for stop, _, _, _ in stops}
         moments = list(
             db.execute(
                 select(orm.Moment)
@@ -2860,7 +3002,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         orm.Moment.user_locked.is_(True),
                     ),
                 )
-                .order_by(orm.Moment.position)
+                .order_by(
+                    orm.Moment.stop_id,
+                    orm.Moment.starts_at_utc,
+                    orm.Moment.ends_at_utc,
+                    orm.Moment.position,
+                    orm.Moment.id,
+                )
             ).scalars()
         )
         media_lat: Any = literal_column("ST_Y(media_items.effective_location::geometry)").label(
@@ -2954,6 +3102,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     toStopId=leg.to_stop_id,
                     routeSource=leg.route_source,
                     geometry=geometry,
+                )
+            )
+        for day_legs in legs_by_day.values():
+            day_legs.sort(
+                key=lambda leg: (
+                    stop_position_by_id.get(leg.from_stop_id, 0),
+                    stop_position_by_id.get(leg.to_stop_id, 0),
+                    str(leg.id),
                 )
             )
 

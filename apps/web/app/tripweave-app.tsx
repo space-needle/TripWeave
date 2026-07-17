@@ -1045,6 +1045,23 @@ function OwnerWorkspace() {
     }
   }
 
+  async function splitStop(stopId: string, afterMomentId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "split_stop",
+        payload: { stopId, afterMomentId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function publishTrip() {
     if (!selectedTrip) {
       return;
@@ -1341,6 +1358,7 @@ function OwnerWorkspace() {
                   onStateChange={setStoryState}
                   onMergeStops={mergeStops}
                   onRenameStop={renameStop}
+                  onSplitStop={splitStop}
                   mobilePane={mobileTab === "timeline" ? "timeline" : "map"}
                   timezoneId={selectedTrip.timezoneId}
                 />
@@ -2042,6 +2060,7 @@ function TripStoryExplorer({
   onStateChange,
   onMergeStops,
   onRenameStop,
+  onSplitStop,
   mobilePane = "map",
   timezoneId,
 }: {
@@ -2050,6 +2069,7 @@ function TripStoryExplorer({
   onStateChange: (state: StoryMapState) => void;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
+  onSplitStop?: (stopId: string, afterMomentId: string) => Promise<void>;
   mobilePane?: StoryMobilePane;
   timezoneId: string;
 }) {
@@ -2074,12 +2094,17 @@ function TripStoryExplorer({
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
+  const [editToolsStopId, setEditToolsStopId] = useState<string | null>(null);
   const [editingStopId, setEditingStopId] = useState<string | null>(null);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [renameStopError, setRenameStopError] = useState("");
   const [savingStopId, setSavingStopId] = useState<string | null>(null);
   const [mergeStopError, setMergeStopError] = useState("");
   const [mergingStopKey, setMergingStopKey] = useState<string | null>(null);
+  const [pendingMergeKey, setPendingMergeKey] = useState<string | null>(null);
+  const [splitStopId, setSplitStopId] = useState<string | null>(null);
+  const [splitStopError, setSplitStopError] = useState("");
+  const [splittingStopKey, setSplittingStopKey] = useState<string | null>(null);
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
@@ -2313,6 +2338,7 @@ function TripStoryExplorer({
   function startRenamingStop(
     stop: ReconstructionResponse["days"][number]["stops"][number],
   ) {
+    setEditToolsStopId(stop.id);
     setEditingStopId(stop.id);
     setStopTitleDraft(displayStopTitle(stop));
     setRenameStopError("");
@@ -2346,17 +2372,47 @@ function TripStoryExplorer({
       return;
     }
     const key = `${sourceStopId}:${targetStopId}`;
+    if (pendingMergeKey !== key) {
+      setPendingMergeKey(key);
+      setMergeStopError("");
+      return;
+    }
     setMergingStopKey(key);
     setMergeStopError("");
     try {
       await onMergeStops(sourceStopId, targetStopId);
       onStateChange(selectStoryStop(state, targetStopId, dayId));
+      setPendingMergeKey(null);
+      setEditToolsStopId(null);
     } catch (error) {
       setMergeStopError(
         `Could not merge ${direction} stop. ${messageFrom(error)}`,
       );
     } finally {
       setMergingStopKey(null);
+    }
+  }
+
+  async function splitStopAfterMoment(
+    stopId: string,
+    afterMomentId: string,
+    dayId: string,
+  ) {
+    if (!onSplitStop) {
+      return;
+    }
+    const key = `${stopId}:${afterMomentId}`;
+    setSplittingStopKey(key);
+    setSplitStopError("");
+    try {
+      await onSplitStop(stopId, afterMomentId);
+      onStateChange(selectStoryStop(state, stopId, dayId));
+      setSplitStopId(null);
+      setEditToolsStopId(null);
+    } catch (error) {
+      setSplitStopError(`Could not split stop. ${messageFrom(error)}`);
+    } finally {
+      setSplittingStopKey(null);
     }
   }
 
@@ -2666,6 +2722,7 @@ function TripStoryExplorer({
               {day.stops.map((stop, stopIndex) => {
                 const previousStop = day.stops[stopIndex - 1] ?? null;
                 const nextStop = day.stops[stopIndex + 1] ?? null;
+                const isEditingTools = editToolsStopId === stop.id;
                 return (
                   <section
                     className={`timeline-stop ${
@@ -2695,71 +2752,95 @@ function TripStoryExplorer({
                       )}
                     </span>
                     <div className="timeline-stop-card">
-                      {editingStopId === stop.id ? (
-                        <form
-                          className="timeline-stop-rename"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            void saveStopTitle(stop.id);
-                          }}
+                      <div className="timeline-stop-heading">
+                        <button
+                          type="button"
+                          className="timeline-stop-button"
+                          disabled={!canSelectTimelineStop()}
+                          onClick={() =>
+                            onStateChange(
+                              selectStoryStop(state, stop.id, day.id),
+                            )
+                          }
                         >
-                          <label>
-                            Stop name
-                            <input
-                              autoFocus
-                              value={stopTitleDraft}
-                              onChange={(event) =>
-                                setStopTitleDraft(event.target.value)
-                              }
-                              maxLength={255}
-                              required
-                            />
-                          </label>
-                          <div className="button-row">
-                            <button
-                              type="submit"
-                              disabled={
-                                savingStopId === stop.id ||
-                                !stopTitleDraft.trim()
-                              }
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={() => {
-                                setEditingStopId(null);
-                                setStopTitleDraft("");
-                                setRenameStopError("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                          {renameStopError ? (
-                            <p className="error">{renameStopError}</p>
-                          ) : null}
-                        </form>
-                      ) : (
-                        <div className="timeline-stop-heading">
+                          <span>{displayStopTitle(stop)}</span>
+                          <small>
+                            {stop.mediaCount} photos · {stop.contributorCount}{" "}
+                            travelers
+                          </small>
+                        </button>
+                        {onRenameStop || onMergeStops || onSplitStop ? (
                           <button
                             type="button"
-                            className="timeline-stop-button"
-                            disabled={!canSelectTimelineStop()}
-                            onClick={() =>
-                              onStateChange(
-                                selectStoryStop(state, stop.id, day.id),
-                              )
-                            }
+                            className="timeline-stop-edit"
+                            aria-expanded={isEditingTools}
+                            onClick={() => {
+                              const nextStopId = isEditingTools
+                                ? null
+                                : stop.id;
+                              setEditToolsStopId(nextStopId);
+                              setEditingStopId(null);
+                              setStopTitleDraft("");
+                              setRenameStopError("");
+                              setMergeStopError("");
+                              setPendingMergeKey(null);
+                              setSplitStopId(null);
+                              setSplitStopError("");
+                            }}
                           >
-                            <span>{displayStopTitle(stop)}</span>
-                            <small>
-                              {stop.mediaCount} photos · {stop.contributorCount}{" "}
-                              travelers
-                            </small>
+                            {isEditingTools ? "Done" : "Edit"}
                           </button>
-                          {onRenameStop ? (
+                        ) : null}
+                      </div>
+                      {isEditingTools ? (
+                        <div className="timeline-stop-edit-panel">
+                          {editingStopId === stop.id ? (
+                            <form
+                              className="timeline-stop-rename"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void saveStopTitle(stop.id);
+                              }}
+                            >
+                              <label>
+                                Stop name
+                                <input
+                                  autoFocus
+                                  value={stopTitleDraft}
+                                  onChange={(event) =>
+                                    setStopTitleDraft(event.target.value)
+                                  }
+                                  maxLength={255}
+                                  required
+                                />
+                              </label>
+                              <div className="button-row">
+                                <button
+                                  type="submit"
+                                  disabled={
+                                    savingStopId === stop.id ||
+                                    !stopTitleDraft.trim()
+                                  }
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() => {
+                                    setEditingStopId(null);
+                                    setStopTitleDraft("");
+                                    setRenameStopError("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {renameStopError ? (
+                                <p className="error">{renameStopError}</p>
+                              ) : null}
+                            </form>
+                          ) : onRenameStop ? (
                             <button
                               type="button"
                               className="timeline-stop-edit"
@@ -2768,51 +2849,155 @@ function TripStoryExplorer({
                               Rename
                             </button>
                           ) : null}
-                        </div>
-                      )}
-                      {onMergeStops && (previousStop || nextStop) ? (
-                        <div className="timeline-stop-merge">
-                          {previousStop ? (
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={
-                                mergingStopKey ===
-                                `${previousStop.id}:${stop.id}`
-                              }
-                              onClick={() =>
-                                void mergeAdjacentStop(
-                                  previousStop.id,
-                                  stop.id,
-                                  day.id,
-                                  "previous",
-                                )
-                              }
-                            >
-                              Merge previous
-                            </button>
+                          {onMergeStops && (previousStop || nextStop) ? (
+                            <div className="timeline-stop-merge">
+                              {previousStop ? (
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  disabled={
+                                    mergingStopKey ===
+                                    `${previousStop.id}:${stop.id}`
+                                  }
+                                  onClick={() =>
+                                    void mergeAdjacentStop(
+                                      previousStop.id,
+                                      stop.id,
+                                      day.id,
+                                      "previous",
+                                    )
+                                  }
+                                >
+                                  {pendingMergeKey ===
+                                  `${previousStop.id}:${stop.id}`
+                                    ? "Confirm merge previous"
+                                    : "Merge previous"}
+                                </button>
+                              ) : null}
+                              {nextStop ? (
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  disabled={
+                                    mergingStopKey ===
+                                    `${nextStop.id}:${stop.id}`
+                                  }
+                                  onClick={() =>
+                                    void mergeAdjacentStop(
+                                      nextStop.id,
+                                      stop.id,
+                                      day.id,
+                                      "next",
+                                    )
+                                  }
+                                >
+                                  {pendingMergeKey ===
+                                  `${nextStop.id}:${stop.id}`
+                                    ? "Confirm merge next"
+                                    : "Merge next"}
+                                </button>
+                              ) : null}
+                              {pendingMergeKey ? (
+                                <p className="timeline-stop-edit-hint">
+                                  Merge combines two stops. Click confirm to
+                                  continue.
+                                </p>
+                              ) : null}
+                              {mergeStopError ? (
+                                <p className="error">{mergeStopError}</p>
+                              ) : null}
+                            </div>
                           ) : null}
-                          {nextStop ? (
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={
-                                mergingStopKey === `${nextStop.id}:${stop.id}`
-                              }
-                              onClick={() =>
-                                void mergeAdjacentStop(
-                                  nextStop.id,
-                                  stop.id,
-                                  day.id,
-                                  "next",
-                                )
-                              }
-                            >
-                              Merge next
-                            </button>
-                          ) : null}
-                          {mergeStopError ? (
-                            <p className="error">{mergeStopError}</p>
+                          {onSplitStop && stop.moments.length > 1 ? (
+                            <div className="timeline-stop-split">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => {
+                                  setSplitStopId(
+                                    splitStopId === stop.id ? null : stop.id,
+                                  );
+                                  setSplitStopError("");
+                                }}
+                              >
+                                {splitStopId === stop.id
+                                  ? "Cancel split"
+                                  : "Split stop"}
+                              </button>
+                              {splitStopId === stop.id ? (
+                                <div className="timeline-stop-split-panel">
+                                  <p>
+                                    Pick the last photo group that should stay
+                                    in {displayStopTitle(stop)}.
+                                  </p>
+                                  {stop.moments.slice(0, -1).map((moment) => {
+                                    const splitKey = `${stop.id}:${moment.id}`;
+                                    return (
+                                      <div
+                                        className="timeline-stop-split-option"
+                                        key={moment.id}
+                                      >
+                                        <div>
+                                          <strong>
+                                            {formatTimelineStopTime(
+                                              moment.endsAt,
+                                              moment.endsAtLocal ?? null,
+                                              timezoneId,
+                                            )}
+                                          </strong>
+                                          <span>
+                                            {moment.mediaCount} photos before
+                                            split
+                                          </span>
+                                          <div
+                                            className="timeline-stop-split-thumbs"
+                                            aria-hidden="true"
+                                          >
+                                            {moment.media
+                                              .slice(0, 4)
+                                              .map((item) =>
+                                                item.thumbnailUrl ? (
+                                                  <img
+                                                    key={item.id}
+                                                    src={item.thumbnailUrl}
+                                                    alt=""
+                                                    loading="lazy"
+                                                  />
+                                                ) : (
+                                                  <span key={item.id}>
+                                                    {item.contributor
+                                                      .slice(0, 1)
+                                                      .toUpperCase()}
+                                                  </span>
+                                                ),
+                                              )}
+                                          </div>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="secondary-button"
+                                          disabled={
+                                            splittingStopKey === splitKey
+                                          }
+                                          onClick={() =>
+                                            void splitStopAfterMoment(
+                                              stop.id,
+                                              moment.id,
+                                              day.id,
+                                            )
+                                          }
+                                        >
+                                          Split here
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                  {splitStopError ? (
+                                    <p className="error">{splitStopError}</p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
                       ) : null}
