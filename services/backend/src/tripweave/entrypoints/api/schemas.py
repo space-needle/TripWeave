@@ -295,6 +295,13 @@ class MediaListResponse(BaseModel):
     media: list[MediaItemResponse]
 
 
+class StoryUpdateStatusResponse(BaseModel):
+    needs_update: bool = Field(alias="needsUpdate")
+    unassigned_ready_media_count: int = Field(alias="unassignedReadyMediaCount")
+    ready_media_count: int = Field(alias="readyMediaCount")
+    story_media_count: int = Field(alias="storyMediaCount")
+
+
 class SimilarityMemberResponse(BaseModel):
     media_item_id: UUID = Field(alias="mediaItemId")
     filename: str | None = None
@@ -420,6 +427,7 @@ class ReconstructionResponse(BaseModel):
     latest_run: ReconstructionRunResponse | None = Field(default=None, alias="latestRun")
     days: list[ReconstructionDayResponse]
     review_items: list[ReviewItemResponse] = Field(alias="reviewItems")
+    story_update: StoryUpdateStatusResponse = Field(alias="storyUpdate")
 
 
 class EditOperationRequest(BaseModel):

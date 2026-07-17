@@ -274,6 +274,15 @@ function OwnerWorkspace() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
     [selectedTripId, trips],
   );
+  const storyUpdate = reconstruction?.storyUpdate ?? null;
+  const storyUpdateNeeded = Boolean(storyUpdate?.needsUpdate);
+  const storyUpdateLabel = storyUpdate
+    ? storyUpdate.unassignedReadyMediaCount > 0
+      ? `${storyUpdate.unassignedReadyMediaCount} new photo${
+          storyUpdate.unassignedReadyMediaCount === 1 ? "" : "s"
+        } need update`
+      : "Story is up to date"
+    : "";
 
   const selectedUploadFiles = useMemo(
     () => uploadSessions.flatMap((session) => session.files),
@@ -1248,12 +1257,24 @@ function OwnerWorkspace() {
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
               <button
+                className={storyUpdateNeeded ? "needs-update" : undefined}
                 type="button"
                 onClick={runReconstruction}
                 disabled={isBusy}
               >
-                Refresh story
+                Update story
               </button>
+              {storyUpdate ? (
+                <span
+                  className={
+                    storyUpdateNeeded
+                      ? "story-update-status needs-update"
+                      : "story-update-status"
+                  }
+                >
+                  {storyUpdateLabel}
+                </span>
+              ) : null}
             </div>
           ) : null}
           <nav className="trip-primary-nav" aria-label="Workspace sections">
@@ -1330,13 +1351,27 @@ function OwnerWorkspace() {
                 </div>
                 {["owner", "editor"].includes(selectedTrip.role) ? (
                   <div className="button-row">
-                    <button
-                      type="button"
-                      onClick={runReconstruction}
-                      disabled={isBusy}
-                    >
-                      Refresh story
-                    </button>
+                    <div className="story-action-stack">
+                      <button
+                        className={storyUpdateNeeded ? "needs-update" : undefined}
+                        type="button"
+                        onClick={runReconstruction}
+                        disabled={isBusy}
+                      >
+                        Update story
+                      </button>
+                      {storyUpdate ? (
+                        <span
+                          className={
+                            storyUpdateNeeded
+                              ? "story-update-status needs-update"
+                              : "story-update-status"
+                          }
+                        >
+                          {storyUpdateLabel}
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={publishTrip}

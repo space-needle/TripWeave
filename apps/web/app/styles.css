@@ -268,6 +268,23 @@ p {
   display: none;
 }
 
+.story-action-stack {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.story-update-status {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.story-update-status.needs-update {
+  color: #9f3a22;
+}
+
 .trip-primary-nav {
   display: grid;
   gap: 6px;
@@ -346,6 +363,12 @@ p {
 .trip-stage-header .button-row button {
   min-height: 34px;
   padding: 7px 10px;
+}
+
+button.needs-update {
+  border-color: #e8ae98;
+  background: #fff1ed;
+  color: #9f3a22;
 }
 
 .trip-management {
@@ -2205,8 +2228,15 @@ button.thumb-frame:focus-visible {
     color: var(--text);
   }
 
+  .mobile-story-actions button.needs-update {
+    border-color: #e8ae98;
+    background: #fff1ed;
+    color: #9f3a22;
+  }
+
   .mobile-story-actions {
-    display: block;
+    display: grid;
+    gap: 6px;
   }
 
   .publication-grid {

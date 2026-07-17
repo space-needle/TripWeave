@@ -206,6 +206,7 @@ export type ReconstructionResponse = {
   latestRun?: ReconstructionRunResponse | null;
   days: ReconstructionDayResponse[];
   reviewItems: ReviewItemResponse[];
+  storyUpdate: StoryUpdateStatusResponse;
 };
 
 export type ReconstructionRunResponse = {
@@ -288,6 +289,13 @@ export type SimilarityMemberResponse = {
   technicalScore?: number | null;
   similarityScore?: number | null;
   signals: Record<string, unknown>;
+};
+
+export type StoryUpdateStatusResponse = {
+  needsUpdate: boolean;
+  unassignedReadyMediaCount: number;
+  readyMediaCount: number;
+  storyMediaCount: number;
 };
 
 export type StoryVersionResponse = {

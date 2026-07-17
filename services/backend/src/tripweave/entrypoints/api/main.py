@@ -98,6 +98,7 @@ from tripweave.entrypoints.api.schemas import (
     SimilarityGroupResponse,
     SimilarityGroupsResponse,
     SimilarityMemberResponse,
+    StoryUpdateStatusResponse,
     StoryVersionResponse,
     TripCreateRequest,
     TripResponse,
@@ -884,6 +885,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             ),
             days=days,
             reviewItems=[],
+            storyUpdate=StoryUpdateStatusResponse(
+                needsUpdate=False,
+                unassignedReadyMediaCount=0,
+                readyMediaCount=0,
+                storyMediaCount=0,
+            ),
         )
 
     def list_payload(payload: dict[str, object], key: str) -> list[dict[str, object]]:
@@ -2952,6 +2959,69 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
         return media_item_response(db, media_item, contributor)
 
+    def story_update_status(
+        db: DbSession,
+        trip_id: UUID,
+        latest_run: orm.ReconstructionRun | None,
+    ) -> StoryUpdateStatusResponse:
+        ready_filters = (
+            orm.MediaItem.trip_id == trip_id,
+            orm.MediaItem.deleted_at.is_(None),
+            orm.MediaItem.processing_state == ProcessingState.READY.value,
+        )
+        ready_media_count = (
+            db.scalar(select(func.count()).select_from(orm.MediaItem).where(*ready_filters)) or 0
+        )
+        if latest_run is None:
+            return StoryUpdateStatusResponse(
+                needsUpdate=ready_media_count > 0,
+                unassignedReadyMediaCount=ready_media_count,
+                readyMediaCount=ready_media_count,
+                storyMediaCount=0,
+            )
+
+        represented_media_ids = select(orm.MomentMedia.media_item_id).where(
+            orm.MomentMedia.trip_id == trip_id,
+            or_(
+                orm.MomentMedia.reconstruction_run_id == latest_run.id,
+                orm.MomentMedia.user_locked.is_(True),
+            ),
+        )
+        story_media_count = (
+            db.scalar(
+                select(func.count(func.distinct(orm.MomentMedia.media_item_id)))
+                .select_from(orm.MomentMedia)
+                .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+                .where(
+                    orm.MomentMedia.trip_id == trip_id,
+                    or_(
+                        orm.MomentMedia.reconstruction_run_id == latest_run.id,
+                        orm.MomentMedia.user_locked.is_(True),
+                    ),
+                    orm.MediaItem.deleted_at.is_(None),
+                    orm.MediaItem.processing_state == ProcessingState.READY.value,
+                )
+            )
+            or 0
+        )
+        unassigned_ready_media_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(orm.MediaItem)
+                .where(
+                    *ready_filters,
+                    orm.MediaItem.id.notin_(represented_media_ids),
+                )
+            )
+            or 0
+        )
+        return StoryUpdateStatusResponse(
+            needsUpdate=unassigned_ready_media_count > 0,
+            unassignedReadyMediaCount=unassigned_ready_media_count,
+            readyMediaCount=ready_media_count,
+            storyMediaCount=story_media_count,
+        )
+
     def reconstruction_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
         latest_run = db.execute(
             select(orm.ReconstructionRun)
@@ -2959,8 +3029,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
             .limit(1)
         ).scalar_one_or_none()
+        story_update = story_update_status(db, trip_id, latest_run)
         if latest_run is None:
-            return ReconstructionResponse(latestRun=None, days=[], reviewItems=[])
+            return ReconstructionResponse(
+                latestRun=None,
+                days=[],
+                reviewItems=[],
+                storyUpdate=story_update,
+            )
 
         stop_lat: Any = literal_column("ST_Y(stops.centroid::geometry)").label("latitude")
         stop_lon: Any = literal_column("ST_X(stops.centroid::geometry)").label("longitude")
@@ -3209,6 +3285,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 )
                 for item in review_items
             ],
+            storyUpdate=story_update,
         )
 
     @app.post("/trips/{trip_id}/reconstruction-runs", response_model=ReconstructionResponse)

@@ -24,6 +24,12 @@ const reconstruction: ReconstructionResponse = {
     finishedAt: "2026-06-01T00:01:00Z",
   },
   reviewItems: [],
+  storyUpdate: {
+    needsUpdate: false,
+    unassignedReadyMediaCount: 0,
+    readyMediaCount: 2,
+    storyMediaCount: 2,
+  },
   days: [
     {
       id: "day-1",
