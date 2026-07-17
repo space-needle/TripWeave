@@ -9,13 +9,13 @@ variable "bucket_prefix" {
   default     = "tripweave"
 }
 
-variable "allowed_origins" {
-  description = "Browser origins allowed to use temporary upload and download grants."
-  type        = list(string)
-  default     = []
-}
-
 variable "runtime_dynamic_group_name" {
   description = "Dynamic group name for the deployed API/worker instance principals."
   type        = string
+}
+
+variable "backup_retention_days" {
+  description = "Number of days to retain database backup objects."
+  type        = number
+  default     = 14
 }

@@ -17,3 +17,9 @@ build/
 *.egg-info/
 local-blobs/
 postgres-data/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+terraform.tfvars

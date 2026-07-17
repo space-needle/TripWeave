@@ -1,0 +1,9 @@
+[
+  {
+    "allowedOrigins": ["https://example.com"],
+    "allowedMethods": ["GET", "HEAD", "PUT", "OPTIONS"],
+    "allowedHeaders": ["content-type", "content-length"],
+    "exposedHeaders": ["etag", "opc-request-id"],
+    "maxAgeInSeconds": 300
+  }
+]

@@ -1,0 +1,163 @@
+services:
+  db:
+    build:
+      context: ..
+      dockerfile: deploy/postgis.Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in root-owned env file}
+      POSTGRES_USER: ${POSTGRES_USER:?set in root-owned env file}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in root-owned env file}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: &json-logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: ../services/backend
+      args:
+        BACKEND_DEPENDENCY_GROUPS: oci
+    restart: unless-stopped
+    env_file:
+      - ${TRIPWEAVE_ENV_FILE:-/etc/tripweave/tripweave.env}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      TRIPWEAVE_ENV: production
+      TRIPWEAVE_STORAGE_ADAPTER: ${BLOBSTORE_BACKEND:-oci}
+      TRIPWEAVE_STORAGE_STORE_ALIASES: media_private,story_published,db_backups
+      TRIPWEAVE_OCI_AUTH_MODE: instance_principal
+      TRIPWEAVE_OCI_REGION: ${OCI_REGION:?set OCI_REGION}
+      TRIPWEAVE_OCI_NAMESPACE: ${OCI_NAMESPACE:?set OCI_NAMESPACE}
+      TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS: ${OCI_STORE_ALIAS_BUCKETS:?set OCI_STORE_ALIAS_BUCKETS}
+      TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS: ${OCI_USE_SINGLE_PUT_GRANTS:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - edge
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn tripweave.entrypoints.api.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *json-logs
+
+  worker:
+    build:
+      context: ../services/backend
+      args:
+        BACKEND_DEPENDENCY_GROUPS: oci
+    restart: unless-stopped
+    env_file:
+      - ${TRIPWEAVE_ENV_FILE:-/etc/tripweave/tripweave.env}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      TRIPWEAVE_ENV: production
+      TRIPWEAVE_STORAGE_ADAPTER: ${BLOBSTORE_BACKEND:-oci}
+      TRIPWEAVE_STORAGE_STORE_ALIASES: media_private,story_published,db_backups
+      TRIPWEAVE_OCI_AUTH_MODE: instance_principal
+      TRIPWEAVE_OCI_REGION: ${OCI_REGION:?set OCI_REGION}
+      TRIPWEAVE_OCI_NAMESPACE: ${OCI_NAMESPACE:?set OCI_NAMESPACE}
+      TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS: ${OCI_STORE_ALIAS_BUCKETS:?set OCI_STORE_ALIAS_BUCKETS}
+      TRIPWEAVE_OCI_USE_SINGLE_PUT_GRANTS: ${OCI_USE_SINGLE_PUT_GRANTS:-true}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - internal
+    command: ["tripweave-worker"]
+    logging: *json-logs
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?set PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL: ${NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/positron}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?set PUBLIC_API_BASE_URL}
+      NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL: ${NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/positron}
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - edge
+    logging: *json-logs
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      TRIPWEAVE_SITE_ADDRESS: ${TRIPWEAVE_SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    networks:
+      - edge
+    logging: *json-logs
+
+  backup-uploader:
+    build:
+      context: ../services/backend
+      args:
+        BACKEND_DEPENDENCY_GROUPS: oci
+    profiles: ["ops"]
+    env_file:
+      - ${TRIPWEAVE_ENV_FILE:-/etc/tripweave/tripweave.env}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      TRIPWEAVE_ENV: production
+      TRIPWEAVE_STORAGE_ADAPTER: ${BLOBSTORE_BACKEND:-oci}
+      TRIPWEAVE_STORAGE_STORE_ALIASES: media_private,story_published,db_backups
+      TRIPWEAVE_OCI_AUTH_MODE: instance_principal
+      TRIPWEAVE_OCI_REGION: ${OCI_REGION:?set OCI_REGION}
+      TRIPWEAVE_OCI_NAMESPACE: ${OCI_NAMESPACE:?set OCI_NAMESPACE}
+      TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS: ${OCI_STORE_ALIAS_BUCKETS:?set OCI_STORE_ALIAS_BUCKETS}
+    networks:
+      - internal
+    command: ["tripweave-backup", "--help"]
+    logging: *json-logs
+
+networks:
+  internal:
+    internal: true
+  edge:
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

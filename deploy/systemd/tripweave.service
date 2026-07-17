@@ -1,0 +1,17 @@
+[Unit]
+Description=TripWeave production Docker Compose stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/tripweave/current
+Environment=TRIPWEAVE_ENV_FILE=/etc/tripweave/tripweave.env
+ExecStart=/usr/bin/docker compose --env-file /etc/tripweave/tripweave.env -f deploy/compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose --env-file /etc/tripweave/tripweave.env -f deploy/compose.prod.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

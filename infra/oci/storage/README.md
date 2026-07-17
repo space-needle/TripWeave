@@ -23,7 +23,15 @@ For developer integration tests only, set `TRIPWEAVE_OCI_AUTH_MODE=config_profil
 
 Browser `single_put` upload grants require Object Storage CORS to allow the TripWeave web origin
 to issue `PUT`, `GET`, `HEAD`, and `OPTIONS` requests with `content-type`. Configure
-`allowed_origins` in `terraform.tfvars` to the deployed web origin before applying.
+`cors-policy.json` with the deployed web origin after storage is created, then apply it with the
+OCI Console or OCI CLI. Do not run the command until the exact buckets and origin are reviewed:
+
+```sh
+oci os bucket update \
+  --namespace-name "$OCI_NAMESPACE" \
+  --name "$BUCKET_NAME" \
+  --cors-rules file://infra/oci/storage/cors-policy.json
+```
 
 ## Integration Tests
 

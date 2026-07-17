@@ -1,0 +1,23 @@
+{
+	admin off
+}
+
+{$TRIPWEAVE_SITE_ADDRESS} {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /blob-upload/* {
+		reverse_proxy api:8000
+	}
+
+	handle /blob-download/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

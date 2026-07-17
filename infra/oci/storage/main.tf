@@ -2,6 +2,7 @@ locals {
   stores = {
     media_private   = "${var.bucket_prefix}-media-private"
     story_published = "${var.bucket_prefix}-story-published"
+    db_backups      = "${var.bucket_prefix}-db-backups"
   }
 }
 
@@ -14,14 +15,6 @@ resource "oci_objectstorage_bucket" "stores" {
   storage_tier   = "Standard"
 
   versioning = "Disabled"
-
-  cors_rules {
-    allowed_origins = var.allowed_origins
-    allowed_methods = ["GET", "HEAD", "PUT", "OPTIONS"]
-    allowed_headers = ["content-type", "content-length"]
-    exposed_headers = ["etag", "opc-request-id"]
-    max_age_in_seconds = 300
-  }
 }
 
 resource "oci_objectstorage_object_lifecycle_policy" "temporary_incoming_cleanup" {
@@ -29,13 +22,29 @@ resource "oci_objectstorage_object_lifecycle_policy" "temporary_incoming_cleanup
   bucket    = oci_objectstorage_bucket.stores["media_private"].name
 
   rules {
-    name        = "cleanup-temporary-incoming"
-    action      = "DELETE"
-    is_enabled  = true
+    name       = "cleanup-temporary-incoming"
+    action     = "DELETE"
+    is_enabled = true
     object_name_filter {
       inclusion_prefixes = ["tmp/", "incoming/tmp/"]
     }
     time_amount = 7
+    time_unit   = "DAYS"
+  }
+}
+
+resource "oci_objectstorage_object_lifecycle_policy" "backup_retention" {
+  namespace = data.oci_objectstorage_namespace.current.namespace
+  bucket    = oci_objectstorage_bucket.stores["db_backups"].name
+
+  rules {
+    name       = "delete-expired-db-backups"
+    action     = "DELETE"
+    is_enabled = true
+    object_name_filter {
+      inclusion_prefixes = ["postgres/"]
+    }
+    time_amount = var.backup_retention_days
     time_unit   = "DAYS"
   }
 }
