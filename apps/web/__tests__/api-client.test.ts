@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, csrfTokenFromCookie } from "../app/api-client";
+import { api, csrfTokenFromCookie, resolveApiBaseUrl } from "../app/api-client";
 
 describe("api client", () => {
   afterEach(() => {
@@ -11,6 +11,22 @@ describe("api client", () => {
     expect(
       csrfTokenFromCookie("other=1; tripweave_csrf=abc123; theme=light"),
     ).toBe("abc123");
+  });
+
+  it("uses the page host when the default API URL is loopback", () => {
+    expect(
+      resolveApiBaseUrl("http://localhost:8000", {
+        hostname: "192.168.1.25",
+      } as Location),
+    ).toBe("http://192.168.1.25:8000");
+  });
+
+  it("keeps explicit non-loopback API URLs unchanged", () => {
+    expect(
+      resolveApiBaseUrl("http://api.tripweave.test", {
+        hostname: "192.168.1.25",
+      } as Location),
+    ).toBe("http://api.tripweave.test");
   });
 
   it("sends credentials and CSRF header for trip mutations", async () => {

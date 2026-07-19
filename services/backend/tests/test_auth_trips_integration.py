@@ -916,6 +916,7 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     thumbnail_url = public_story.json()["story"]["days"][0]["stops"][0]["moments"][0]["media"][0][
         "thumbnailUrl"
     ]
+    assert thumbnail_url.startswith("http://testserver/")
     asset_path = upload_path(thumbnail_url)
     public_asset = client.get(asset_path)
     assert public_asset.status_code == 200

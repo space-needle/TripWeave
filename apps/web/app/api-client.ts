@@ -30,8 +30,39 @@ import type {
   UploadSessionsListResponse,
 } from "./api-types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEFAULT_API_BASE_URL = "http://localhost:8000";
+
+export function resolveApiBaseUrl(
+  configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ??
+    DEFAULT_API_BASE_URL,
+  browserLocation: Location | undefined = typeof window === "undefined"
+    ? undefined
+    : window.location,
+): string {
+  if (!browserLocation) {
+    return configuredBaseUrl;
+  }
+  try {
+    const apiUrl = new URL(configuredBaseUrl);
+    const pageHost = browserLocation.hostname;
+    const apiHost = apiUrl.hostname;
+    const apiIsLoopback =
+      apiHost === "localhost" || apiHost === "127.0.0.1" || apiHost === "::1";
+    const pageIsLoopback =
+      pageHost === "localhost" ||
+      pageHost === "127.0.0.1" ||
+      pageHost === "::1";
+    if (apiIsLoopback && !pageIsLoopback) {
+      apiUrl.hostname = pageHost;
+      return apiUrl.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return configuredBaseUrl;
+  }
+  return configuredBaseUrl;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(

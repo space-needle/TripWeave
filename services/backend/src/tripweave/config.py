@@ -1,8 +1,19 @@
 from functools import lru_cache
+from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+LOCAL_WEB_ORIGIN_REGEX = (
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|"
+    r"10(?:\.\d{1,3}){3}|"
+    r"172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|"
+    r"192\.168(?:\.\d{1,3}){2}"
+    r"):3000$"
+)
 
 
 class Settings(BaseSettings):
@@ -113,6 +124,32 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_web_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        if self.environment != "local":
+            return None
+        return LOCAL_WEB_ORIGIN_REGEX
+
+    def web_origin_is_allowed(self, origin: str | None) -> bool:
+        if not origin:
+            return False
+        if origin in self.cors_origins:
+            return True
+        if self.environment != "local":
+            return False
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"} or parsed.port != 3000:
+            return False
+        host = parsed.hostname
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            return True
+        if host is None:
+            return False
+        try:
+            return ip_address(host).is_private
+        except ValueError:
+            return False
 
     @property
     def store_aliases(self) -> set[str]:

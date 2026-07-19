@@ -177,6 +177,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
+        allow_origin_regex=resolved_settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["content-type", "x-csrf-token", "x-request-id"],
@@ -668,13 +669,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     def invitation_url(request: Request, token: str) -> str:
         origin = request.headers.get("origin")
-        if origin in resolved_settings.cors_origins:
+        if resolved_settings.web_origin_is_allowed(origin):
             return f"{origin}/invite/{token}"
         return f"http://localhost:3000/invite/{token}"
 
     def share_url(request: Request, token: str) -> str:
         origin = request.headers.get("origin")
-        if origin in resolved_settings.cors_origins:
+        if resolved_settings.web_origin_is_allowed(origin):
             return f"{origin}/story/{token}"
         return f"http://localhost:3000/story/{token}"
 
@@ -859,12 +860,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return link
 
     def public_story_response(
+        request: Request,
         token: str,
         link: orm.ShareLink,
         version: orm.StoryVersion,
         manifest: dict[str, object],
     ) -> PublicStoryResponse:
-        asset_urls = public_asset_urls(token, manifest)
+        asset_urls = public_asset_urls(request, token, manifest)
         story = reconstruction_from_manifest(manifest, asset_urls)
         trip = dict_or_empty(manifest.get("trip"))
         return PublicStoryResponse(
@@ -874,14 +876,22 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             participants=list_of_dicts(manifest.get("participants")),
         )
 
-    def public_asset_urls(token: str, manifest: dict[str, object]) -> dict[str, str]:
+    def public_asset_urls(
+        request: Request, token: str, manifest: dict[str, object]
+    ) -> dict[str, str]:
         assets = manifest.get("assets")
         if not isinstance(assets, list):
             return {}
+        request_base_url = str(request.base_url).rstrip("/")
+        if (
+            resolved_settings.environment == "local"
+            and resolved_settings.public_api_base_url == "http://localhost:8000"
+        ):
+            public_base_url = request_base_url
+        else:
+            public_base_url = resolved_settings.public_api_base_url.rstrip("/")
         return {
-            str(
-                asset["id"]
-            ): f"{resolved_settings.public_api_base_url}/public/shares/{token}/assets/{asset['id']}"
+            str(asset["id"]): f"{public_base_url}/public/shares/{token}/assets/{asset['id']}"
             for asset in assets
             if isinstance(asset, dict) and isinstance(asset.get("id"), str)
         }
@@ -3618,7 +3628,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/public/shares/{token}", response_model=PublicStoryResponse)
-    def get_public_story(token: str, db: DbSession = Depends(db_session)) -> PublicStoryResponse:
+    def get_public_story(
+        request: Request, token: str, db: DbSession = Depends(db_session)
+    ) -> PublicStoryResponse:
         link = active_share_link_for_token(db, token)
         version = db.get(orm.StoryVersion, link.story_version_id)
         if version is None or version.state == StoryVersionState.FAILED.value:
@@ -3634,7 +3646,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
             ) from exc
         db.commit()
-        return public_story_response(token, link, version, manifest)
+        return public_story_response(request, token, link, version, manifest)
 
     @app.get("/public/shares/{token}/assets/{asset_id}")
     def get_public_story_asset(
