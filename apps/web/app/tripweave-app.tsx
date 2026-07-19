@@ -264,6 +264,7 @@ function OwnerWorkspace() {
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
+  const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
   const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
@@ -1387,37 +1388,49 @@ function OwnerWorkspace() {
                   </p>
                 </div>
                 {["owner", "editor"].includes(selectedTrip.role) ? (
-                  <div className="button-row">
-                    <div className="story-action-stack">
+                  <div className="trip-stage-header-actions">
+                    <button
+                      className="story-photo-icon-button"
+                      type="button"
+                      aria-label="Browse selected day photos"
+                      title="Browse selected day photos"
+                      onClick={() => setOwnerStoryPhotosOpen(true)}
+                      disabled={!reconstruction?.latestRun}
+                    >
+                      <StoryHeaderIcon action="photos" />
+                    </button>
+                    <div className="button-row">
+                      <div className="story-action-stack">
+                        <button
+                          className={
+                            storyUpdateNeeded ? "needs-update" : undefined
+                          }
+                          type="button"
+                          onClick={runReconstruction}
+                          disabled={isBusy}
+                        >
+                          Update story
+                        </button>
+                        {storyUpdate ? (
+                          <span
+                            className={
+                              storyUpdateNeeded
+                                ? "story-update-status needs-update"
+                                : "story-update-status"
+                            }
+                          >
+                            {storyUpdateLabel}
+                          </span>
+                        ) : null}
+                      </div>
                       <button
-                        className={
-                          storyUpdateNeeded ? "needs-update" : undefined
-                        }
                         type="button"
-                        onClick={runReconstruction}
+                        onClick={publishTrip}
                         disabled={isBusy}
                       >
-                        Update story
+                        Publish
                       </button>
-                      {storyUpdate ? (
-                        <span
-                          className={
-                            storyUpdateNeeded
-                              ? "story-update-status needs-update"
-                              : "story-update-status"
-                          }
-                        >
-                          {storyUpdateLabel}
-                        </span>
-                      ) : null}
                     </div>
-                    <button
-                      type="button"
-                      onClick={publishTrip}
-                      disabled={isBusy}
-                    >
-                      Publish
-                    </button>
                   </div>
                 ) : null}
               </div>
@@ -1435,8 +1448,15 @@ function OwnerWorkspace() {
                   onSetDayNote={setDayNote}
                   onSetStopNote={setStopNote}
                   onSplitStop={splitStop}
-                  mobilePane={mobileTab === "timeline" ? "timeline" : "map"}
+                  mobilePane={
+                    ownerStoryPhotosOpen
+                      ? "photos"
+                      : mobileTab === "timeline"
+                        ? "timeline"
+                        : "map"
+                  }
                   onMobilePaneChange={(pane) => {
+                    setOwnerStoryPhotosOpen(pane === "photos");
                     if (pane === "map") {
                       setMobileTab("story");
                     } else if (pane === "timeline") {

@@ -360,6 +360,34 @@ p {
   font-size: 0.86rem;
 }
 
+.trip-stage-header-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.story-photo-icon-button {
+  width: 34px;
+  min-height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 0;
+}
+
+.story-photo-icon-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .trip-stage-header .button-row button {
   min-height: 34px;
   padding: 7px 10px;
@@ -2389,7 +2417,10 @@ button.thumb-frame:focus-visible {
   }
 
   .trip-stage-header {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 0 2px 4px;
   }
 
@@ -2414,7 +2445,11 @@ button.thumb-frame:focus-visible {
     white-space: nowrap;
   }
 
-  .trip-stage-header > .button-row {
+  .trip-stage-header-actions {
+    flex: 0 0 auto;
+  }
+
+  .trip-stage-header-actions > .button-row {
     display: none;
   }
 
