@@ -289,6 +289,7 @@ def build_manifest(
                 "id": str(stop.id),
                 "position": stop.position,
                 "title": stop.title,
+                "note": stop.note,
                 "startsAt": iso(stop.starts_at_utc),
                 "endsAt": iso(stop.ends_at_utc),
                 "startsAtLocal": iso(min(local_times) if local_times else None),
@@ -321,6 +322,7 @@ def build_manifest(
             "date": day.day_date.isoformat(),
             "position": day.position,
             "title": day.title,
+            "note": day.note,
             "stops": stops_by_day.get(day.id, []),
             "legs": legs_by_day.get(day.id, []),
         }

@@ -151,6 +151,8 @@ class EditOperationType(StrEnum):
     RENAME_DAY = "rename_day"
     RENAME_STOP = "rename_stop"
     RENAME_MOMENT = "rename_moment"
+    SET_DAY_NOTE = "set_day_note"
+    SET_STOP_NOTE = "set_stop_note"
     MOVE_STOP_ON_MAP = "move_stop_on_map"
     CHANGE_ROUTE_MODE = "change_route_mode"
     EXCLUDE_MEDIA_FROM_STORY = "exclude_media_from_story"

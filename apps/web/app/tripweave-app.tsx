@@ -1040,6 +1040,40 @@ function OwnerWorkspace() {
     }
   }
 
+  async function setDayNote(dayId: string, note: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "set_day_note",
+        payload: { dayId, note },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
+  async function setStopNote(stopId: string, note: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "set_stop_note",
+        payload: { stopId, note },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function mergeStops(sourceStopId: string, targetStopId: string) {
     if (!selectedTrip) {
       return;
@@ -1398,6 +1432,8 @@ function OwnerWorkspace() {
                   onStateChange={setStoryState}
                   onMergeStops={mergeStops}
                   onRenameStop={renameStop}
+                  onSetDayNote={setDayNote}
+                  onSetStopNote={setStopNote}
                   onSplitStop={splitStop}
                   mobilePane={mobileTab === "timeline" ? "timeline" : "map"}
                   timezoneId={selectedTrip.timezoneId}
@@ -2100,6 +2136,8 @@ function TripStoryExplorer({
   onStateChange,
   onMergeStops,
   onRenameStop,
+  onSetDayNote,
+  onSetStopNote,
   onSplitStop,
   mobilePane = "map",
   onMobilePaneChange,
@@ -2110,6 +2148,8 @@ function TripStoryExplorer({
   onStateChange: (state: StoryMapState) => void;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
+  onSetDayNote?: (dayId: string, note: string) => Promise<void>;
+  onSetStopNote?: (stopId: string, note: string) => Promise<void>;
   onSplitStop?: (stopId: string, afterMomentId: string) => Promise<void>;
   mobilePane?: StoryMobilePane;
   onMobilePaneChange?: (pane: StoryMobilePane) => void;
@@ -2141,6 +2181,10 @@ function TripStoryExplorer({
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [renameStopError, setRenameStopError] = useState("");
   const [savingStopId, setSavingStopId] = useState<string | null>(null);
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteError, setNoteError] = useState("");
+  const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
   const [mergeStopError, setMergeStopError] = useState("");
   const [mergingStopKey, setMergingStopKey] = useState<string | null>(null);
   const [pendingMergeKey, setPendingMergeKey] = useState<string | null>(null);
@@ -2395,6 +2439,12 @@ function TripStoryExplorer({
     setRenameStopError("");
   }
 
+  function startEditingNote(key: string, note: string | null | undefined) {
+    setEditingNoteKey(key);
+    setNoteDraft(note ?? "");
+    setNoteError("");
+  }
+
   async function saveStopTitle(stopId: string) {
     const nextTitle = stopTitleDraft.trim();
     if (!onRenameStop || !nextTitle) {
@@ -2410,6 +2460,28 @@ function TripStoryExplorer({
       setRenameStopError(messageFrom(error));
     } finally {
       setSavingStopId(null);
+    }
+  }
+
+  async function saveTimelineNote(
+    kind: "day" | "stop",
+    id: string,
+    key: string,
+  ) {
+    const save = kind === "day" ? onSetDayNote : onSetStopNote;
+    if (!save) {
+      return;
+    }
+    setSavingNoteKey(key);
+    setNoteError("");
+    try {
+      await save(id, noteDraft);
+      setEditingNoteKey(null);
+      setNoteDraft("");
+    } catch (error) {
+      setNoteError(messageFrom(error));
+    } finally {
+      setSavingNoteKey(null);
     }
   }
 
@@ -2554,6 +2626,8 @@ function TripStoryExplorer({
           0,
         )} photos`
       : "Select a stop on the map to see its note here.";
+  const selectedNote =
+    selectedStopDetail?.note?.trim() || activeDay?.note?.trim() || "";
 
   return (
     <div
@@ -2568,6 +2642,64 @@ function TripStoryExplorer({
           onStopMarkerClick={openStopPhotos}
           reducedMotion={reducedMotion}
         />
+        <div className="story-selected-stop-summary" aria-live="polite">
+          <div>
+            <span>
+              {selectedStop
+                ? "Selected stop"
+                : activeDay
+                  ? "Selected day"
+                  : "Map note"}
+            </span>
+            <strong>
+              {selectedStopTitle
+                ? selectedStopTitle
+                : activeDay
+                  ? (activeDay.title ?? `Day ${activeDay.position}`)
+                  : "No stop selected"}
+            </strong>
+            <p>{selectedStopSummary}</p>
+            {selectedNote ? (
+              <p className="story-selected-note">{selectedNote}</p>
+            ) : null}
+          </div>
+          <div className="story-summary-actions">
+            {summaryNavigator ? (
+              <div
+                className="story-summary-pager"
+                aria-label={
+                  summaryNavigator.type === "stop"
+                    ? "Navigate stops"
+                    : "Navigate days"
+                }
+              >
+                <button
+                  type="button"
+                  aria-label={
+                    summaryNavigator.type === "stop"
+                      ? "Previous stop"
+                      : "Previous day"
+                  }
+                  disabled={summaryNavigator.previousDisabled}
+                  onClick={() => navigateStorySummary("previous")}
+                >
+                  ‹
+                </button>
+                <span>{summaryNavigator.label}</span>
+                <button
+                  type="button"
+                  aria-label={
+                    summaryNavigator.type === "stop" ? "Next stop" : "Next day"
+                  }
+                  disabled={summaryNavigator.nextDisabled}
+                  onClick={() => navigateStorySummary("next")}
+                >
+                  ›
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <aside className="story-side-panel">
@@ -2693,59 +2825,6 @@ function TripStoryExplorer({
             </button>
           </div>
         ) : null}
-        <div className="story-selected-stop-summary" aria-live="polite">
-          <div>
-            <span>
-              {selectedStop
-                ? "Selected stop"
-                : activeDay
-                  ? "Selected day"
-                  : "Map note"}
-            </span>
-            <strong>
-              {selectedStopTitle
-                ? selectedStopTitle
-                : activeDay
-                  ? (activeDay.title ?? `Day ${activeDay.position}`)
-                  : "No stop selected"}
-            </strong>
-            <p>{selectedStopSummary}</p>
-          </div>
-          {summaryNavigator ? (
-            <div
-              className="story-summary-pager"
-              aria-label={
-                summaryNavigator.type === "stop"
-                  ? "Navigate stops"
-                  : "Navigate days"
-              }
-            >
-              <button
-                type="button"
-                aria-label={
-                  summaryNavigator.type === "stop"
-                    ? "Previous stop"
-                    : "Previous day"
-                }
-                disabled={summaryNavigator.previousDisabled}
-                onClick={() => navigateStorySummary("previous")}
-              >
-                ‹
-              </button>
-              <span>{summaryNavigator.label}</span>
-              <button
-                type="button"
-                aria-label={
-                  summaryNavigator.type === "stop" ? "Next stop" : "Next day"
-                }
-                disabled={summaryNavigator.nextDisabled}
-                onClick={() => navigateStorySummary("next")}
-              >
-                ›
-              </button>
-            </div>
-          ) : null}
-        </div>
         <section
           className="story-timeline"
           aria-label="Chronological timeline"
@@ -2762,14 +2841,67 @@ function TripStoryExplorer({
               }`}
               key={day.id}
             >
-              <button
-                type="button"
-                className="timeline-day-button"
-                onClick={() => onStateChange(selectStoryDay(state, day.id))}
-              >
-                <span>{day.title ?? `Day ${day.position}`}</span>
-                <small>{day.date}</small>
-              </button>
+              <div className="timeline-day-heading">
+                <button
+                  type="button"
+                  className="timeline-day-button"
+                  onClick={() => onStateChange(selectStoryDay(state, day.id))}
+                >
+                  <span>{day.title ?? `Day ${day.position}`}</span>
+                  <small>{day.date}</small>
+                </button>
+                {onSetDayNote ? (
+                  <button
+                    type="button"
+                    className="timeline-note-button"
+                    onClick={() => startEditingNote(`day:${day.id}`, day.note)}
+                  >
+                    {day.note ? "Edit note" : "Add note"}
+                  </button>
+                ) : null}
+              </div>
+              {editingNoteKey === `day:${day.id}` ? (
+                <form
+                  className="timeline-note-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveTimelineNote("day", day.id, `day:${day.id}`);
+                  }}
+                >
+                  <label>
+                    Day note
+                    <textarea
+                      autoFocus
+                      value={noteDraft}
+                      onChange={(event) => setNoteDraft(event.target.value)}
+                      maxLength={2000}
+                      rows={3}
+                    />
+                  </label>
+                  <div className="button-row">
+                    <button
+                      type="submit"
+                      disabled={savingNoteKey === `day:${day.id}`}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setEditingNoteKey(null);
+                        setNoteDraft("");
+                        setNoteError("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {noteError ? <p className="error">{noteError}</p> : null}
+                </form>
+              ) : day.note ? (
+                <p className="timeline-note-preview">{day.note}</p>
+              ) : null}
               {day.stops.map((stop, stopIndex) => {
                 const previousStop = day.stops[stopIndex - 1] ?? null;
                 const nextStop = day.stops[stopIndex + 1] ?? null;
@@ -2820,7 +2952,10 @@ function TripStoryExplorer({
                             travelers
                           </small>
                         </button>
-                        {onRenameStop || onMergeStops || onSplitStop ? (
+                        {onRenameStop ||
+                        onSetStopNote ||
+                        onMergeStops ||
+                        onSplitStop ? (
                           <button
                             type="button"
                             className="timeline-stop-edit"
@@ -2837,12 +2972,86 @@ function TripStoryExplorer({
                               setPendingMergeKey(null);
                               setSplitStopId(null);
                               setSplitStopError("");
+                              setEditingNoteKey(null);
+                              setNoteDraft("");
+                              setNoteError("");
                             }}
                           >
                             {isEditingTools ? "Done" : "Edit"}
                           </button>
                         ) : null}
                       </div>
+                      {onSetStopNote ? (
+                        editingNoteKey === `stop:${stop.id}` ? (
+                          <form
+                            className="timeline-note-form"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void saveTimelineNote(
+                                "stop",
+                                stop.id,
+                                `stop:${stop.id}`,
+                              );
+                            }}
+                          >
+                            <label>
+                              Stop note
+                              <textarea
+                                autoFocus
+                                value={noteDraft}
+                                onChange={(event) =>
+                                  setNoteDraft(event.target.value)
+                                }
+                                maxLength={2000}
+                                rows={3}
+                              />
+                            </label>
+                            <div className="button-row">
+                              <button
+                                type="submit"
+                                disabled={savingNoteKey === `stop:${stop.id}`}
+                              >
+                                Save note
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => {
+                                  setEditingNoteKey(null);
+                                  setNoteDraft("");
+                                  setNoteError("");
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {noteError ? (
+                              <p className="error">{noteError}</p>
+                            ) : null}
+                          </form>
+                        ) : (
+                          <div className="timeline-stop-note-row">
+                            <p
+                              className={
+                                stop.note
+                                  ? "timeline-note-preview"
+                                  : "timeline-note-preview empty"
+                              }
+                            >
+                              {stop.note ?? "No stop note yet."}
+                            </p>
+                            <button
+                              type="button"
+                              className="timeline-note-button"
+                              onClick={() =>
+                                startEditingNote(`stop:${stop.id}`, stop.note)
+                              }
+                            >
+                              {stop.note ? "Edit note" : "Add note"}
+                            </button>
+                          </div>
+                        )
+                      ) : null}
                       {isEditingTools ? (
                         <div className="timeline-stop-edit-panel">
                           {editingStopId === stop.id ? (

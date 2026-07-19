@@ -379,6 +379,7 @@ class ReconstructionStopResponse(BaseModel):
     id: UUID
     position: int
     title: str | None = None
+    note: str | None = None
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime = Field(alias="endsAt")
     starts_at_local: datetime | None = Field(default=None, alias="startsAtLocal")
@@ -404,6 +405,7 @@ class ReconstructionDayResponse(BaseModel):
     date: date
     position: int
     title: str | None = None
+    note: str | None = None
     stops: list[ReconstructionStopResponse]
     legs: list[ReconstructionLegResponse] = Field(default_factory=list)
 

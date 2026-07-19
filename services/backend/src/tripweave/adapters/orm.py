@@ -672,6 +672,7 @@ class TripDay(Base, GeneratedRecordMixin):
     )
     day_date: Mapped[date] = mapped_column(Date, nullable=False)
     title: Mapped[str | None] = mapped_column(String(255))
+    note: Mapped[str | None] = mapped_column(Text)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -718,6 +719,7 @@ class Stop(Base, GeneratedRecordMixin):
         PostgresUUID(as_uuid=True), ForeignKey("places.id", ondelete="RESTRICT"), nullable=False
     )
     title: Mapped[str | None] = mapped_column(String(255))
+    note: Mapped[str | None] = mapped_column(Text)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

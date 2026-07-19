@@ -960,6 +960,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         title=str(stop_payload["title"])
                         if stop_payload.get("title") is not None
                         else None,
+                        note=str(stop_payload["note"])
+                        if stop_payload.get("note") is not None
+                        else None,
                         startsAt=parse_datetime_required(stop_payload.get("startsAt")),
                         endsAt=parse_datetime_required(stop_payload.get("endsAt")),
                         startsAtLocal=parse_datetime(stop_payload.get("startsAtLocal")),
@@ -995,6 +998,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     title=str(day_payload["title"])
                     if day_payload.get("title") is not None
                     else None,
+                    note=str(day_payload["note"]) if day_payload.get("note") is not None else None,
                     stops=stops,
                     legs=legs,
                 )
@@ -1594,6 +1598,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is required"
             )
         return value
+
+    def payload_optional_note(payload: dict[str, object]) -> str | None:
+        value = payload.get("note")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="note is invalid"
+            )
+        note = value.strip()
+        return note or None
 
     def json_value(value: object) -> object:
         if isinstance(value, UUID):
@@ -2203,6 +2218,24 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             after = record_values(record, ["title", "user_locked"])
             target_type, target_id = label, record.id
 
+        elif operation_type in {
+            EditOperationType.SET_DAY_NOTE.value,
+            EditOperationType.SET_STOP_NOTE.value,
+        }:
+            model_by_type = {
+                EditOperationType.SET_DAY_NOTE.value: (orm.TripDay, "day", "dayId"),
+                EditOperationType.SET_STOP_NOTE.value: (orm.Stop, "stop", "stopId"),
+            }
+            model, label, key = model_by_type[operation_type]
+            record = get_trip_record(db, model, payload_uuid(data, key), trip_id, label)
+            expected_fresh(record, payload.expected_updated_at)
+            before = record_values(record, ["note", "user_locked"])
+            record.note = payload_optional_note(data)
+            lock_record(record)
+            lock_reconstruction_parents(db, record)
+            after = record_values(record, ["note", "user_locked"])
+            target_type, target_id = label, record.id
+
         elif operation_type == EditOperationType.MOVE_STOP_ON_MAP.value:
             stop = db.get(orm.Stop, payload_uuid(data, "stopId"))
             if stop is None or stop.trip_id != trip_id:
@@ -2475,6 +2508,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             EditOperationType.RENAME_DAY.value,
             EditOperationType.RENAME_STOP.value,
             EditOperationType.RENAME_MOMENT.value,
+            EditOperationType.SET_DAY_NOTE.value,
+            EditOperationType.SET_STOP_NOTE.value,
             EditOperationType.MOVE_STOP_ON_MAP.value,
             EditOperationType.CHANGE_ROUTE_MODE.value,
             EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value,
@@ -2532,6 +2567,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 "effective_captured_at_utc": "effective_captured_at_utc",
                 "include_in_story": "include_in_story",
                 "title": "title",
+                "note": "note",
                 "centroid": "centroid",
                 "route_source": "route_source",
                 "user_locked": "user_locked",
@@ -3406,6 +3442,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     id=stop.id,
                     position=stop.position,
                     title=stop.title,
+                    note=stop.note,
                     startsAt=stop.starts_at_utc,
                     endsAt=stop.ends_at_utc,
                     startsAtLocal=min(stop_local_times) if stop_local_times else None,
@@ -3447,6 +3484,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     date=day.day_date,
                     position=day.position,
                     title=day.title,
+                    note=day.note,
                     stops=stops_by_day.get(day.id, []),
                     legs=legs_by_day.get(day.id, []),
                 )

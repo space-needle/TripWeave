@@ -891,14 +891,37 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
         headers={"x-csrf-token": csrf_token},
     )
     assert reconstructed.status_code == 200
-    assert reconstructed.json()["days"]
+    reconstructed_body = reconstructed.json()
+    assert reconstructed_body["days"]
+    day_id = reconstructed_body["days"][0]["id"]
+    stop_id = reconstructed_body["days"][0]["stops"][0]["id"]
+    day_note = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "set_day_note",
+            "payload": {"dayId": day_id, "note": "Start with temple photos."},
+        },
+    )
+    assert day_note.status_code == 200, day_note.text
+    stop_note = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "set_stop_note",
+            "payload": {"stopId": stop_id, "note": "Golden hour by the river."},
+        },
+    )
+    assert stop_note.status_code == 200, stop_note.text
 
     publication = client.post(
         f"/trips/{trip_id}/publications",
         headers={"x-csrf-token": csrf_token},
     )
     assert publication.status_code == 200
-    share_url = publication.json()["shareLink"]["shareUrl"]
+    share_link = publication.json()["shareLink"]
+    link_id = share_link["id"]
+    share_url = share_link["shareUrl"]
     assert isinstance(share_url, str)
     token = share_url.rsplit("/", 1)[-1]
 
@@ -912,13 +935,12 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     assert "sourceBlobRef" not in body
     assert "private-original-name.jpg" not in body
     assert "rawExif" not in body
+    story_day = public_story.json()["story"]["days"][0]
+    assert story_day["note"] == "Start with temple photos."
+    assert story_day["stops"][0]["note"] == "Golden hour by the river."
 
-    thumbnail_url = public_story.json()["story"]["days"][0]["stops"][0]["moments"][0]["media"][0][
-        "thumbnailUrl"
-    ]
-    preview_url = public_story.json()["story"]["days"][0]["stops"][0]["moments"][0]["media"][0][
-        "previewUrl"
-    ]
+    thumbnail_url = story_day["stops"][0]["moments"][0]["media"][0]["thumbnailUrl"]
+    preview_url = story_day["stops"][0]["moments"][0]["media"][0]["previewUrl"]
     assert thumbnail_url.startswith("http://testserver/")
     assert preview_url.startswith("http://testserver/")
     asset_path = upload_path(thumbnail_url)
@@ -940,7 +962,7 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
 
     links = client.get(f"/trips/{trip_id}/publications")
     assert links.status_code == 200
-    link_id = links.json()["shareLinks"][0]["id"]
+    assert any(link["id"] == link_id for link in links.json()["shareLinks"])
     revoked = client.delete(f"/share-links/{link_id}", headers={"x-csrf-token": csrf_token})
     assert revoked.status_code == 204
     assert client.get(f"/public/shares/{token}").status_code == 404
@@ -1110,6 +1132,8 @@ def test_review_edit_operations_authorization_undo_and_rerun(
         ("move_after_midnight_media", {"mediaItemId": media_ids[0], "direction": "previous"}),
         ("rename_day", {"dayId": day_id, "title": "Arrival day"}),
         ("rename_stop", {"stopId": stop_one["id"], "title": "Harbor"}),
+        ("set_day_note", {"dayId": day_id, "note": "Meet at the ferry before lunch."}),
+        ("set_stop_note", {"stopId": stop_one["id"], "note": "Best photos are near the pier."}),
         ("rename_moment", {"momentId": moment_one["id"], "title": "First look"}),
         ("move_stop_on_map", {"stopId": stop_one["id"], "latitude": 35.001, "longitude": 127.001}),
         ("change_route_mode", {"tripLegId": route_id, "routeSource": "manual"}),
@@ -1162,7 +1186,14 @@ def test_review_edit_operations_authorization_undo_and_rerun(
         f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
     )
     assert rerun.status_code == 200
-    assert any(day.get("title") == "Arrival day" for day in rerun.json()["days"])
+    rerun_days = rerun.json()["days"]
+    assert any(day.get("title") == "Arrival day" for day in rerun_days)
+    assert any(day.get("note") == "Meet at the ferry before lunch." for day in rerun_days)
+    assert any(
+        stop.get("note") == "Best photos are near the pier."
+        for day in rerun_days
+        for stop in day["stops"]
+    )
 
     other_csrf = register(client, "review-other@example.com")
     denied = client.post(

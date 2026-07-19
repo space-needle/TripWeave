@@ -166,6 +166,7 @@ export type ReconstructionDayResponse = {
   date: string;
   position: number;
   title?: string | null;
+  note?: string | null;
   stops: ReconstructionStopResponse[];
   legs?: ReconstructionLegResponse[];
 };
@@ -224,6 +225,7 @@ export type ReconstructionStopResponse = {
   id: string;
   position: number;
   title?: string | null;
+  note?: string | null;
   startsAt: string;
   endsAt: string;
   startsAtLocal?: string | null;

@@ -741,6 +741,8 @@ button.needs-update {
 
 .story-map-panel {
   position: relative;
+  display: grid;
+  grid-template-rows: minmax(540px, 1fr) auto;
   min-width: 0;
   min-height: 680px;
   background: #e7efe9;
@@ -887,11 +889,97 @@ button.needs-update {
 }
 
 .story-selected-stop-summary {
-  display: none;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.story-selected-stop-summary > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.story-selected-stop-summary span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.story-selected-stop-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.98rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-selected-stop-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.story-selected-stop-summary .story-selected-note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.story-summary-actions {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
 }
 
 .story-summary-pager {
-  display: none;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 34px minmax(44px, auto) 34px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.story-summary-pager button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: 1.25rem;
+  font-weight: 900;
+  padding: 0;
+}
+
+.story-summary-pager button:disabled {
+  color: #b7c0c9;
+}
+
+.story-summary-pager span {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: none;
 }
 
 .photo-roll-modal {
@@ -1055,10 +1143,9 @@ button.needs-update {
 }
 
 .story-map-shell {
-  position: absolute;
-  inset: 0;
+  position: relative;
   height: 100%;
-  min-height: 0;
+  min-height: 540px;
   overflow: hidden;
   border: 0;
   border-radius: 0;
@@ -1424,6 +1511,13 @@ button.needs-update {
   border-left-color: transparent;
 }
 
+.timeline-day-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
 .timeline-day-button,
 .timeline-stop-button,
 .timeline-moment button {
@@ -1563,6 +1657,16 @@ button.needs-update {
   padding: 5px 8px;
 }
 
+.timeline-note-button {
+  min-height: 30px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
 .timeline-stop-edit-panel {
   display: grid;
   gap: 8px;
@@ -1585,6 +1689,57 @@ button.needs-update {
 .timeline-stop-rename {
   display: grid;
   gap: 10px;
+}
+
+.timeline-note-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.timeline-note-form textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.timeline-note-form .button-row button {
+  flex: 1 1 90px;
+}
+
+.timeline-note-preview {
+  margin: -4px 0 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.timeline-note-preview.empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.timeline-stop-note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.timeline-stop-note-row .timeline-note-preview {
+  margin: 0;
+}
+
+.timeline-stop-note-row .timeline-note-button {
+  border-color: #d78363;
+  background: #fff3ee;
+  color: #9f3a22;
 }
 
 .timeline-stop-rename .button-row button {
@@ -2263,9 +2418,14 @@ button.thumb-frame:focus-visible {
   }
 
   .story-map-panel {
+    grid-template-rows: minmax(360px, 1fr) auto;
     min-height: 58vh;
     overflow: hidden;
     border-radius: 18px 18px 0 0;
+  }
+
+  .story-map-shell {
+    min-height: 360px;
   }
 
   .story-side-panel {
@@ -2296,77 +2456,12 @@ button.thumb-frame:focus-visible {
   }
 
   .story-selected-stop-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     gap: 4px;
-    border-top: 1px solid var(--border);
-    background: #fff;
     padding: 12px 14px 14px;
   }
 
-  .story-selected-stop-summary > div:first-child {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
-
-  .story-selected-stop-summary span {
-    color: var(--muted);
-    font-size: 0.72rem;
-    font-weight: 850;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
   .story-selected-stop-summary strong {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text);
     font-size: 0.96rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .story-selected-stop-summary p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.84rem;
-    font-weight: 750;
-  }
-
-  .story-summary-pager {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: 34px minmax(44px, auto) 34px;
-    align-items: center;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: #fff;
-  }
-
-  .story-summary-pager button {
-    min-height: 34px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: var(--accent-strong);
-    font-size: 1.25rem;
-    font-weight: 900;
-    padding: 0;
-  }
-
-  .story-summary-pager button:disabled {
-    color: #b7c0c9;
-  }
-
-  .story-summary-pager span {
-    color: var(--text);
-    font-size: 0.78rem;
-    font-weight: 900;
-    text-align: center;
-    text-transform: none;
   }
 
   .photo-roll-modal {
@@ -2407,12 +2502,6 @@ button.thumb-frame:focus-visible {
 
   .photo-browser-stage img {
     max-height: 58vh;
-  }
-
-  .story-map-shell {
-    position: absolute;
-    height: 100%;
-    min-height: 0;
   }
 
   .story-timeline {
