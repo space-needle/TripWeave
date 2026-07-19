@@ -693,9 +693,21 @@ button.needs-update {
 }
 
 .public-story-shell .app-header {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
+.public-story-title {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.public-story-title h1,
+.public-story-title p {
+  overflow-wrap: anywhere;
+}
+
+.public-story-view-toggle,
 .public-story-mobile-tabs {
   display: none;
 }
@@ -2276,7 +2288,7 @@ button.thumb-frame:focus-visible {
   }
 
   .story-photo-roll-launch {
-    padding: 12px 14px;
+    display: none;
   }
 
   .story-photo-roll-launch button {
@@ -2434,27 +2446,77 @@ button.thumb-frame:focus-visible {
     padding-bottom: 118px;
   }
 
-  .public-story-mobile-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    background: #fff;
-    padding: 5px;
+  .public-story-shell {
+    width: min(100% - 20px, 1120px);
+    padding-top: 14px;
   }
 
-  .public-story-mobile-tabs button {
-    min-height: 42px;
+  .public-story-shell .app-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 10px;
+  }
+
+  .public-story-title {
+    gap: 3px;
+  }
+
+  .public-story-title .eyebrow {
+    font-size: 0.68rem;
+  }
+
+  .public-story-title h1 {
+    font-size: 1.18rem;
+    line-height: 1.05;
+  }
+
+  .public-story-title p {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1.2;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .public-story-view-toggle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    padding: 3px;
+  }
+
+  .public-story-view-toggle button {
+    width: 32px;
+    min-height: 32px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 999px;
     background: transparent;
     color: var(--muted);
+    font-size: 1.02rem;
     font-weight: 900;
+    line-height: 1;
+    padding: 0;
   }
 
-  .public-story-mobile-tabs button.active {
+  .public-story-view-toggle svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .public-story-view-toggle button.active {
     background: var(--accent);
     color: #fff;
   }
@@ -2474,6 +2536,11 @@ button.thumb-frame:focus-visible {
   .app-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .public-story-shell .app-header {
+    flex-direction: row;
+    align-items: center;
   }
 
   .field-grid {

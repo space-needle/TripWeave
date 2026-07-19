@@ -67,7 +67,7 @@ type GalleryPhoto = {
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
 type MobileWorkspaceTab = "story" | "timeline" | "photos" | "share" | "more";
-type StoryMobilePane = "map" | "timeline";
+type StoryMobilePane = "map" | "timeline" | "photos";
 
 type TripForm = {
   title: string;
@@ -2101,6 +2101,7 @@ function TripStoryExplorer({
   onRenameStop,
   onSplitStop,
   mobilePane = "map",
+  onMobilePaneChange,
   timezoneId,
 }: {
   reconstruction: ReconstructionResponse | null;
@@ -2110,6 +2111,7 @@ function TripStoryExplorer({
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
   onSplitStop?: (stopId: string, afterMomentId: string) => Promise<void>;
   mobilePane?: StoryMobilePane;
+  onMobilePaneChange?: (pane: StoryMobilePane) => void;
   timezoneId: string;
 }) {
   const model = useMemo(
@@ -2145,6 +2147,7 @@ function TripStoryExplorer({
   const [splitStopError, setSplitStopError] = useState("");
   const [splittingStopKey, setSplittingStopKey] = useState<string | null>(null);
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
+  const displayMobilePane = mobilePane === "photos" ? "map" : mobilePane;
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
     [filteredModel.stops],
@@ -2196,6 +2199,14 @@ function TripStoryExplorer({
       ),
     [photoRollDays],
   );
+  const isPhotoRollVisible =
+    isPhotoRollOpen || (mobilePane === "photos" && photoRollDays.length > 0);
+  const closePhotoRoll = useCallback(() => {
+    setIsPhotoRollOpen(false);
+    if (mobilePane === "photos") {
+      onMobilePaneChange?.("map");
+    }
+  }, [mobilePane, onMobilePaneChange]);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -2251,17 +2262,17 @@ function TripStoryExplorer({
   }, [filteredModel.stops, onStateChange, state.viewMode]);
 
   useEffect(() => {
-    if (!isPhotoRollOpen) {
+    if (!isPhotoRollVisible) {
       return;
     }
     function onKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsPhotoRollOpen(false);
+        closePhotoRoll();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isPhotoRollOpen]);
+  }, [closePhotoRoll, isPhotoRollVisible]);
 
   if (!reconstruction?.latestRun) {
     return (
@@ -2352,7 +2363,7 @@ function TripStoryExplorer({
     }
     setGalleryPhotoIds(photoIds);
     setGalleryMediaId(photoId);
-    setIsPhotoRollOpen(false);
+    closePhotoRoll();
   }
 
   function showDayStops(dayId: string) {
@@ -2545,7 +2556,7 @@ function TripStoryExplorer({
 
   return (
     <div
-      className={`story-explorer story-shell story-mobile-pane-${mobilePane}`}
+      className={`story-explorer story-shell story-mobile-pane-${displayMobilePane}`}
     >
       <div className="story-map-panel">
         <StoryMapCanvas
@@ -3048,7 +3059,7 @@ function TripStoryExplorer({
           ))}
         </section>
       </aside>
-      {isPhotoRollOpen ? (
+      {isPhotoRollVisible ? (
         <div
           className="photo-roll-modal"
           role="dialog"
@@ -3059,7 +3070,7 @@ function TripStoryExplorer({
             className="photo-roll-backdrop"
             type="button"
             aria-label="Close photo browser"
-            onClick={() => setIsPhotoRollOpen(false)}
+            onClick={closePhotoRoll}
           />
           <div className="photo-roll-panel">
             <div className="photo-roll-toolbar">
@@ -3072,7 +3083,7 @@ function TripStoryExplorer({
                 </h3>
                 <span>{photoRollPhotoCount} photos grouped by stop</span>
               </div>
-              <button type="button" onClick={() => setIsPhotoRollOpen(false)}>
+              <button type="button" onClick={closePhotoRoll}>
                 Close
               </button>
             </div>
@@ -4616,7 +4627,7 @@ function PublicStoryViewer({ token }: { token: string }) {
   return (
     <main className="app-shell public-story-shell">
       <header className="app-header">
-        <div>
+        <div className="public-story-title">
           <p className="eyebrow">TripWeave story</p>
           <h1>{title}</h1>
           <p>
@@ -4625,33 +4636,67 @@ function PublicStoryViewer({ token }: { token: string }) {
               : `Published version ${story.version.versionNumber}`}
           </p>
         </div>
+        <nav className="public-story-view-toggle" aria-label="Story view">
+          {(
+            [
+              ["map", "Map"],
+              ["timeline", "Timeline"],
+              ["photos", "Photos"],
+            ] as Array<[StoryMobilePane, string]>
+          ).map(([action, label]) => (
+            <button
+              type="button"
+              aria-label={label}
+              aria-pressed={mobilePane === action}
+              className={mobilePane === action ? "active" : ""}
+              key={action}
+              onClick={() => setMobilePane(action)}
+              title={label}
+            >
+              <StoryHeaderIcon action={action} />
+            </button>
+          ))}
+        </nav>
       </header>
-      <nav className="public-story-mobile-tabs" aria-label="Story view">
-        {(
-          [
-            ["map", "Map"],
-            ["timeline", "Timeline"],
-          ] as Array<[StoryMobilePane, string]>
-        ).map(([pane, label]) => (
-          <button
-            type="button"
-            aria-pressed={mobilePane === pane}
-            className={mobilePane === pane ? "active" : ""}
-            key={pane}
-            onClick={() => setMobilePane(pane)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
       <TripStoryExplorer
         reconstruction={story.story}
         state={storyState}
         onStateChange={setStoryState}
         mobilePane={mobilePane}
+        onMobilePaneChange={setMobilePane}
         timezoneId={timezoneId}
       />
     </main>
+  );
+}
+
+function StoryHeaderIcon({ action }: { action: StoryMobilePane }) {
+  if (action === "map") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M9 5 3.8 7.1v12L9 17l6 2 5.2-2.1v-12L15 7 9 5Z" />
+        <path d="M9 5v12" />
+        <path d="M15 7v12" />
+      </svg>
+    );
+  }
+
+  if (action === "photos") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 7.5h14v11H5z" />
+        <path d="m8 15 2.5-3 2 2.2 1.5-1.7 2.2 2.5" />
+        <path d="M8.5 10h.01" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M5 7h14" />
+      <path d="M5 12h14" />
+      <path d="M5 17h14" />
+    </svg>
   );
 }
 
