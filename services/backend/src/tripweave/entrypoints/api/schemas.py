@@ -282,6 +282,7 @@ class MediaItemResponse(BaseModel):
     contributor: str
     contributor_member_id: UUID = Field(alias="contributorMemberId")
     thumbnail: MediaAssetResponse | None = None
+    preview: MediaAssetResponse | None = None
     similarity_group_id: UUID | None = Field(default=None, alias="similarityGroupId")
     similarity_group_count: int = Field(default=1, alias="similarityGroupCount")
     similarity_group_type: str | None = Field(default=None, alias="similarityGroupType")
@@ -358,6 +359,7 @@ class ReconstructionMediaResponse(BaseModel):
     contributor_member_id: UUID = Field(alias="contributorMemberId")
     contributor: str
     thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
+    preview_url: str | None = Field(default=None, alias="previewUrl")
 
 
 class ReconstructionMomentResponse(BaseModel):

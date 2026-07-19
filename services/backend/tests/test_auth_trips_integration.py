@@ -916,11 +916,18 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     thumbnail_url = public_story.json()["story"]["days"][0]["stops"][0]["moments"][0]["media"][0][
         "thumbnailUrl"
     ]
+    preview_url = public_story.json()["story"]["days"][0]["stops"][0]["moments"][0]["media"][0][
+        "previewUrl"
+    ]
     assert thumbnail_url.startswith("http://testserver/")
+    assert preview_url.startswith("http://testserver/")
     asset_path = upload_path(thumbnail_url)
     public_asset = client.get(asset_path)
     assert public_asset.status_code == 200
     assert public_asset.content == b"thumbnail-webp"
+    preview_asset = client.get(upload_path(preview_url))
+    assert preview_asset.status_code == 200
+    assert preview_asset.content == b"display-webp"
 
     second_publication = client.post(
         f"/trips/{trip_id}/publications",

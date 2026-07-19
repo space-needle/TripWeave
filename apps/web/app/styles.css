@@ -988,14 +988,14 @@ button.needs-update {
 .story-photo-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 8px;
+  gap: 2px;
 }
 
 .story-photo-tiles button {
   position: relative;
   overflow: hidden;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: #dfe8e4;
   aspect-ratio: 1;
   cursor: zoom-in;
@@ -2035,7 +2035,7 @@ button.thumb-frame:focus-visible {
 
 .photo-browser-strip {
   display: flex;
-  gap: 8px;
+  gap: 2px;
   overflow-x: auto;
   padding-bottom: 2px;
 }
@@ -2048,7 +2048,7 @@ button.thumb-frame:focus-visible {
   place-items: center;
   overflow: hidden;
   border-color: rgb(255 255 255 / 20%);
-  border-radius: 9px;
+  border-radius: 0;
   background: rgb(255 255 255 / 8%);
   color: #fff;
   padding: 0;
@@ -2388,7 +2388,8 @@ button.thumb-frame:focus-visible {
   }
 
   .story-photo-tiles {
-    grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
   }
 
   .photo-browser {

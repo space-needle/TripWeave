@@ -58,6 +58,7 @@ import {
 type GalleryPhoto = {
   id: string;
   imageUrl: string | null;
+  thumbnailUrl: string | null;
   filename: string | null;
   contributor: string;
   capturedAt: string | null;
@@ -3115,9 +3116,11 @@ function TripStoryExplorer({
                                 openPhotoRollPhoto(photo.id, dayPhotoIds)
                               }
                             >
-                              {photo.imageUrl ? (
+                              {(photo.thumbnailUrl ?? photo.imageUrl) ? (
                                 <img
-                                  src={photo.imageUrl}
+                                  src={
+                                    photo.thumbnailUrl ?? photo.imageUrl ?? ""
+                                  }
                                   alt={photo.filename ?? "Trip photo"}
                                   loading="lazy"
                                 />
@@ -3170,7 +3173,8 @@ function galleryPhotoFromStoryMedia(
 ): GalleryPhoto {
   return {
     id: item.id,
-    imageUrl: item.thumbnailUrl,
+    imageUrl: item.previewUrl ?? item.thumbnailUrl,
+    thumbnailUrl: item.thumbnailUrl,
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt,
@@ -3181,7 +3185,8 @@ function galleryPhotoFromStoryMedia(
 function galleryPhotoFromMediaItem(item: MediaItemResponse): GalleryPhoto {
   return {
     id: item.id,
-    imageUrl: item.thumbnail?.downloadUrl ?? null,
+    imageUrl: item.preview?.downloadUrl ?? item.thumbnail?.downloadUrl ?? null,
+    thumbnailUrl: item.thumbnail?.downloadUrl ?? null,
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt ?? null,
@@ -3312,8 +3317,12 @@ function PhotoBrowser({
                 aria-label={photo.filename ?? "Trip photo"}
                 onClick={() => onSelect(photo.id)}
               >
-                {photo.imageUrl ? (
-                  <img src={photo.imageUrl} alt="" loading="lazy" />
+                {(photo.thumbnailUrl ?? photo.imageUrl) ? (
+                  <img
+                    src={photo.thumbnailUrl ?? photo.imageUrl ?? ""}
+                    alt=""
+                    loading="lazy"
+                  />
                 ) : (
                   <span>{photo.contributor.slice(0, 1)}</span>
                 )}

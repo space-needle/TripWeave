@@ -929,6 +929,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                             contributorMemberId=UUID(str(media_payload["contributorMemberId"])),
                             contributor=str(media_payload.get("contributor") or "Traveler"),
                             thumbnailUrl=asset_urls.get(str(media_payload.get("thumbnailAssetId"))),
+                            previewUrl=asset_urls.get(str(media_payload.get("previewAssetId"))),
                         )
                         for media_payload in list_payload(moment_payload, "media")
                         if isinstance(media_payload.get("id"), str)
@@ -1499,6 +1500,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
             None,
         )
+        preview = next(
+            (asset for asset in media_item.assets if asset.asset_type == "display"),
+            None,
+        )
         dimensions = media_item.original_metadata_json.get("dimensions", {})
         width = dimensions.get("width") if isinstance(dimensions, dict) else None
         height = dimensions.get("height") if isinstance(dimensions, dict) else None
@@ -1525,6 +1530,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             contributor=contributor.display_name,
             contributorMemberId=contributor.id,
             thumbnail=media_asset_response(thumbnail) if thumbnail is not None else None,
+            preview=media_asset_response(preview) if preview is not None else None,
             similarityGroupId=group_id if isinstance(group_id, UUID) else None,
             similarityGroupCount=member_count if isinstance(member_count, int) else 1,
             similarityGroupType=group_type if isinstance(group_type, str) else None,
@@ -3304,6 +3310,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
                 None,
             )
+            preview = next(
+                (asset for asset in media_item.assets if asset.asset_type == "display"),
+                None,
+            )
             captured_at = (
                 media_item.effective_captured_at_utc
                 or media_item.original_captured_at_utc
@@ -3323,6 +3333,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         media_asset_response(thumbnail).download_url
                         if thumbnail is not None
                         else None
+                    ),
+                    previewUrl=(
+                        media_asset_response(preview).download_url if preview is not None else None
                     ),
                 )
             )

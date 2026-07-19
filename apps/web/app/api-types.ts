@@ -113,6 +113,7 @@ export type MediaItemResponse = {
   contributor: string;
   contributorMemberId: string;
   thumbnail?: MediaAssetResponse | null;
+  preview?: MediaAssetResponse | null;
   similarityGroupId?: string | null;
   similarityGroupCount?: number;
   similarityGroupType?: string | null;
@@ -187,6 +188,7 @@ export type ReconstructionMediaResponse = {
   contributorMemberId: string;
   contributor: string;
   thumbnailUrl?: string | null;
+  previewUrl?: string | null;
 };
 
 export type ReconstructionMomentResponse = {

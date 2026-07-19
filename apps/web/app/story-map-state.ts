@@ -30,6 +30,7 @@ export type StoryMediaPoint = {
   capturedAt: string | null;
   filename: string | null;
   thumbnailUrl: string | null;
+  previewUrl: string | null;
   coordinates: [number, number] | null;
 };
 
@@ -282,6 +283,7 @@ export function buildStoryModel(
             capturedAt: item.capturedAt ?? null,
             filename: item.filename ?? null,
             thumbnailUrl: item.thumbnailUrl ?? null,
+            previewUrl: item.previewUrl ?? null,
             coordinates:
               typeof item.longitude === "number" &&
               typeof item.latitude === "number"
