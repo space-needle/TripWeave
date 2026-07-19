@@ -1648,6 +1648,34 @@ button.needs-update {
   align-items: start;
 }
 
+.timeline-stop-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.timeline-map-button {
+  width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border-color: #d78363;
+  background: #fff3ee;
+  color: #9f3a22;
+  padding: 0;
+}
+
+.timeline-map-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .timeline-stop-edit {
   min-height: 30px;
   border-color: var(--border);

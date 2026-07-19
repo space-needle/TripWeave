@@ -1436,6 +1436,13 @@ function OwnerWorkspace() {
                   onSetStopNote={setStopNote}
                   onSplitStop={splitStop}
                   mobilePane={mobileTab === "timeline" ? "timeline" : "map"}
+                  onMobilePaneChange={(pane) => {
+                    if (pane === "map") {
+                      setMobileTab("story");
+                    } else if (pane === "timeline") {
+                      setMobileTab("timeline");
+                    }
+                  }}
                   timezoneId={selectedTrip.timezoneId}
                 />
               ) : (
@@ -2173,6 +2180,7 @@ function TripStoryExplorer({
   const timelineRef = useRef<HTMLElement | null>(null);
   const latestStateRef = useRef(state);
   const skipNextTimelineSelectionRef = useRef(false);
+  const timelinePaneFocusStopRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
@@ -2265,6 +2273,36 @@ function TripStoryExplorer({
   }, [model, onStateChange, state]);
 
   useEffect(() => {
+    if (displayMobilePane !== "timeline" || !state.selectedStopId) {
+      return;
+    }
+    const element = activeStopRefs.current[state.selectedStopId];
+    if (!element) {
+      return;
+    }
+    timelinePaneFocusStopRef.current = state.selectedStopId;
+    skipNextTimelineSelectionRef.current = true;
+    const frameId = window.requestAnimationFrame(() => {
+      element.scrollIntoView({
+        block: "center",
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    });
+    const timeoutId = window.setTimeout(
+      () => {
+        if (timelinePaneFocusStopRef.current === state.selectedStopId) {
+          timelinePaneFocusStopRef.current = null;
+        }
+      },
+      reducedMotion ? 0 : 500,
+    );
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [displayMobilePane, reducedMotion, state.selectedStopId]);
+
+  useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode)) {
       return;
     }
@@ -2285,6 +2323,12 @@ function TripStoryExplorer({
         const stopId = visible?.target.getAttribute("data-stop-id");
         const dayId = visible?.target.getAttribute("data-day-id");
         const currentState = latestStateRef.current;
+        if (
+          timelinePaneFocusStopRef.current &&
+          timelinePaneFocusStopRef.current === currentState.selectedStopId
+        ) {
+          return;
+        }
         if (skipNextTimelineSelectionRef.current) {
           skipNextTimelineSelectionRef.current = false;
           return;
@@ -2368,6 +2412,11 @@ function TripStoryExplorer({
         onStateChange(selectStoryStop(state, stopId, dayId));
       }
     }
+  }
+
+  function focusTimelineStopOnMap(stopId: string, dayId: string) {
+    onStateChange(selectStoryStop(state, stopId, dayId));
+    onMobilePaneChange?.("map");
   }
 
   function openStopPhotos(stopId: string, dayId: string) {
@@ -2906,6 +2955,8 @@ function TripStoryExplorer({
                 const previousStop = day.stops[stopIndex - 1] ?? null;
                 const nextStop = day.stops[stopIndex + 1] ?? null;
                 const isEditingTools = editToolsStopId === stop.id;
+                const canEditStop =
+                  onRenameStop || onSetStopNote || onMergeStops || onSplitStop;
                 return (
                   <section
                     className={`timeline-stop ${
@@ -2952,34 +3003,44 @@ function TripStoryExplorer({
                             travelers
                           </small>
                         </button>
-                        {onRenameStop ||
-                        onSetStopNote ||
-                        onMergeStops ||
-                        onSplitStop ? (
+                        <div className="timeline-stop-actions">
+                          {canEditStop ? (
+                            <button
+                              type="button"
+                              className="timeline-stop-edit"
+                              aria-expanded={isEditingTools}
+                              onClick={() => {
+                                const nextStopId = isEditingTools
+                                  ? null
+                                  : stop.id;
+                                setEditToolsStopId(nextStopId);
+                                setEditingStopId(null);
+                                setStopTitleDraft("");
+                                setRenameStopError("");
+                                setMergeStopError("");
+                                setPendingMergeKey(null);
+                                setSplitStopId(null);
+                                setSplitStopError("");
+                                setEditingNoteKey(null);
+                                setNoteDraft("");
+                                setNoteError("");
+                              }}
+                            >
+                              {isEditingTools ? "Done" : "Edit"}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            className="timeline-stop-edit"
-                            aria-expanded={isEditingTools}
-                            onClick={() => {
-                              const nextStopId = isEditingTools
-                                ? null
-                                : stop.id;
-                              setEditToolsStopId(nextStopId);
-                              setEditingStopId(null);
-                              setStopTitleDraft("");
-                              setRenameStopError("");
-                              setMergeStopError("");
-                              setPendingMergeKey(null);
-                              setSplitStopId(null);
-                              setSplitStopError("");
-                              setEditingNoteKey(null);
-                              setNoteDraft("");
-                              setNoteError("");
-                            }}
+                            className="timeline-map-button"
+                            aria-label={`View ${displayStopTitle(stop)} on map`}
+                            title="View on map"
+                            onClick={() =>
+                              focusTimelineStopOnMap(stop.id, day.id)
+                            }
                           >
-                            {isEditingTools ? "Done" : "Edit"}
+                            <StoryHeaderIcon action="map" />
                           </button>
-                        ) : null}
+                        </div>
                       </div>
                       {onSetStopNote ? (
                         editingNoteKey === `stop:${stop.id}` ? (
