@@ -489,6 +489,26 @@ def test_owner_invites_guest_and_guest_uploads_with_attribution(
     assert owner_media.json()["media"][0]["contributor"] == "Traveler"
 
 
+def test_guest_actor_header_uses_guest_session_when_user_session_also_exists(
+    client: TestClient,
+) -> None:
+    csrf_owner = register(client, "same-browser-owner@example.com")
+    trip = create_trip(client, csrf_owner)
+    invitation = create_invitation(client, csrf_owner, trip["id"])
+    token = token_from_invite_url(str(invitation["inviteUrl"]))
+
+    accept_invitation(client, token, "Same Browser Guest")
+
+    guest_me = client.get("/guest/me", headers={"x-tripweave-actor": "guest"})
+    assert guest_me.status_code == 200
+    assert guest_me.json()["tripId"] == trip["id"]
+    assert guest_me.json()["displayName"] == "Same Browser Guest"
+
+    owner_me = client.get("/auth/me")
+    assert owner_me.status_code == 200
+    assert owner_me.json()["user"]["email"] == "same-browser-owner@example.com"
+
+
 def test_invitation_rejects_expired_revoked_and_malformed(
     client: TestClient, engine: Engine
 ) -> None:

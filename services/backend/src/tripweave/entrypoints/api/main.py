@@ -180,7 +180,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         allow_origin_regex=resolved_settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["content-type", "x-csrf-token", "x-request-id"],
+        allow_headers=["content-type", "x-csrf-token", "x-request-id", "x-tripweave-actor"],
     )
 
     @app.middleware("http")
@@ -287,6 +287,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         request: Request,
         db: DbSession = Depends(db_session),
     ) -> AuthenticatedActor:
+        if request.headers.get("x-tripweave-actor") == "guest":
+            guest = optional_guest(request, db)
+            if guest is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+                )
+            return AuthenticatedActor(
+                user=None,
+                user_session=None,
+                guest_session=guest.session,
+                guest_member=guest.member,
+            )
         user = optional_user(request, db)
         if user is not None:
             return AuthenticatedActor(

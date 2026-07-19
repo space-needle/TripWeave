@@ -123,6 +123,12 @@ async function apiRequest<TResponse>(
   return (await response.json()) as TResponse;
 }
 
+function withGuestActor(options: RequestInit = {}): RequestInit {
+  const headers = new Headers(options.headers);
+  headers.set("x-tripweave-actor", "guest");
+  return { ...options, headers };
+}
+
 export const api = {
   register(payload: RegisterRequest): Promise<AuthResponse> {
     return apiRequest<AuthResponse>("/auth/register", {
@@ -295,6 +301,48 @@ export const api = {
   },
   cancelUploadFile(id: string): Promise<void> {
     return apiRequest<void>(`/upload-files/${id}`, { method: "DELETE" });
+  },
+};
+
+export const guestApi = {
+  guestMe(): Promise<GuestMemberResponse> {
+    return apiRequest<GuestMemberResponse>("/guest/me", withGuestActor());
+  },
+  media(tripId: string): Promise<MediaListResponse> {
+    return apiRequest<MediaListResponse>(
+      `/trips/${tripId}/media`,
+      withGuestActor(),
+    );
+  },
+  createUploadSession(
+    tripId: string,
+    payload: UploadSessionCreateRequest,
+  ): Promise<UploadSessionResponse> {
+    return apiRequest<UploadSessionResponse>(
+      `/trips/${tripId}/upload-sessions`,
+      withGuestActor({
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+  uploadSessions(tripId: string): Promise<UploadSessionsListResponse> {
+    return apiRequest<UploadSessionsListResponse>(
+      `/upload-sessions?trip_id=${encodeURIComponent(tripId)}`,
+      withGuestActor(),
+    );
+  },
+  completeUploadFile(id: string): Promise<CompleteUploadFileResponse> {
+    return apiRequest<CompleteUploadFileResponse>(
+      `/upload-files/${id}/complete`,
+      withGuestActor({ method: "POST" }),
+    );
+  },
+  cancelUploadFile(id: string): Promise<void> {
+    return apiRequest<void>(
+      `/upload-files/${id}`,
+      withGuestActor({ method: "DELETE" }),
+    );
   },
 };
 

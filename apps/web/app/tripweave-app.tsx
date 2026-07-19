@@ -18,7 +18,7 @@ import maplibregl, {
   Marker,
 } from "maplibre-gl";
 import QRCode from "qrcode";
-import { ApiError, api, uploadWithProgress } from "./api-client";
+import { ApiError, api, guestApi, uploadWithProgress } from "./api-client";
 import type {
   GuestMemberResponse,
   InvitationPreviewResponse,
@@ -1836,8 +1836,8 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
 
   const loadContribution = useCallback(async () => {
     const [sessionResult, mediaResult] = await Promise.all([
-      api.uploadSessions(tripId),
-      api.media(tripId),
+      guestApi.uploadSessions(tripId),
+      guestApi.media(tripId),
     ]);
     setUploadSessions(sessionResult.uploadSessions);
     setMedia(mediaResult.media);
@@ -1847,7 +1847,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
     let cancelled = false;
     async function loadGuest() {
       try {
-        const result = await api.guestMe();
+        const result = await guestApi.guestMe();
         if (!cancelled) {
           setGuest(result);
           await loadContribution();
@@ -1877,7 +1877,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
     let timeout: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
       try {
-        const result = await api.media(tripId);
+        const result = await guestApi.media(tripId);
         if (cancelled) {
           return;
         }
@@ -1932,7 +1932,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
     abortUpload.current.set(uploadFile.id, transfer.abort);
     try {
       await transfer.promise;
-      await api.completeUploadFile(uploadFile.id);
+      await guestApi.completeUploadFile(uploadFile.id);
       rememberProgress(uploadFile.id, {
         loaded: file.size,
         total: file.size,
@@ -1956,7 +1956,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
     }
     setError("");
     try {
-      const session = await api.createUploadSession(tripId, {
+      const session = await guestApi.createUploadSession(tripId, {
         files: files.map((file) => ({
           filename: file.name,
           byteSize: file.size,
@@ -1994,7 +1994,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       total: uploadFile.byteSize ?? 0,
       status: "cancelled",
     });
-    await api.cancelUploadFile(uploadFile.id);
+    await guestApi.cancelUploadFile(uploadFile.id);
     await loadContribution();
   }
 

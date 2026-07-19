@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, csrfTokenFromCookie, resolveApiBaseUrl } from "../app/api-client";
+import {
+  api,
+  csrfTokenFromCookie,
+  guestApi,
+  resolveApiBaseUrl,
+} from "../app/api-client";
 
 describe("api client", () => {
   afterEach(() => {
@@ -58,5 +63,27 @@ describe("api client", () => {
     expect(options.credentials).toBe("include");
     expect(options.method).toBe("POST");
     expect((options.headers as Headers).get("x-csrf-token")).toBe("csrf-value");
+  });
+
+  it("marks contributor workspace requests as guest actor requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "guest-id",
+          tripId: "trip-id",
+          displayName: "Traveler",
+          role: "contributor",
+          csrfToken: "csrf-value",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await guestApi.guestMe();
+
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.credentials).toBe("include");
+    expect((options.headers as Headers).get("x-tripweave-actor")).toBe("guest");
   });
 });
