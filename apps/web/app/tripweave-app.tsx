@@ -3007,8 +3007,14 @@ function TripStoryExplorer({
                           {canEditStop ? (
                             <button
                               type="button"
-                              className="timeline-stop-edit"
+                              className="timeline-icon-button"
                               aria-expanded={isEditingTools}
+                              aria-label={
+                                isEditingTools
+                                  ? `Close editing tools for ${displayStopTitle(stop)}`
+                                  : `Edit ${displayStopTitle(stop)}`
+                              }
+                              title={isEditingTools ? "Done" : "Edit"}
                               onClick={() => {
                                 const nextStopId = isEditingTools
                                   ? null
@@ -3021,17 +3027,23 @@ function TripStoryExplorer({
                                 setPendingMergeKey(null);
                                 setSplitStopId(null);
                                 setSplitStopError("");
-                                setEditingNoteKey(null);
-                                setNoteDraft("");
+                                setEditingNoteKey(
+                                  nextStopId ? `stop:${stop.id}` : null,
+                                );
+                                setNoteDraft(
+                                  nextStopId ? (stop.note ?? "") : "",
+                                );
                                 setNoteError("");
                               }}
                             >
-                              {isEditingTools ? "Done" : "Edit"}
+                              <TimelineActionIcon
+                                name={isEditingTools ? "check" : "edit"}
+                              />
                             </button>
                           ) : null}
                           <button
                             type="button"
-                            className="timeline-map-button"
+                            className="timeline-icon-button timeline-map-button"
                             aria-label={`View ${displayStopTitle(stop)} on map`}
                             title="View on map"
                             onClick={() =>
@@ -3042,79 +3054,25 @@ function TripStoryExplorer({
                           </button>
                         </div>
                       </div>
-                      {onSetStopNote ? (
-                        editingNoteKey === `stop:${stop.id}` ? (
-                          <form
-                            className="timeline-note-form"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              void saveTimelineNote(
-                                "stop",
-                                stop.id,
-                                `stop:${stop.id}`,
-                              );
-                            }}
-                          >
-                            <label>
-                              Stop note
-                              <textarea
-                                autoFocus
-                                value={noteDraft}
-                                onChange={(event) =>
-                                  setNoteDraft(event.target.value)
-                                }
-                                maxLength={2000}
-                                rows={3}
-                              />
-                            </label>
-                            <div className="button-row">
-                              <button
-                                type="submit"
-                                disabled={savingNoteKey === `stop:${stop.id}`}
-                              >
-                                Save note
-                              </button>
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => {
-                                  setEditingNoteKey(null);
-                                  setNoteDraft("");
-                                  setNoteError("");
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                            {noteError ? (
-                              <p className="error">{noteError}</p>
-                            ) : null}
-                          </form>
-                        ) : (
-                          <div className="timeline-stop-note-row">
-                            <p
-                              className={
-                                stop.note
-                                  ? "timeline-note-preview"
-                                  : "timeline-note-preview empty"
-                              }
-                            >
-                              {stop.note ?? "No stop note yet."}
-                            </p>
-                            <button
-                              type="button"
-                              className="timeline-note-button"
-                              onClick={() =>
-                                startEditingNote(`stop:${stop.id}`, stop.note)
-                              }
-                            >
-                              {stop.note ? "Edit note" : "Add note"}
-                            </button>
-                          </div>
-                        )
+                      {onSetStopNote && stop.note && !isEditingTools ? (
+                        <p className="timeline-note-preview">{stop.note}</p>
                       ) : null}
                       {isEditingTools ? (
                         <div className="timeline-stop-edit-panel">
+                          <div className="timeline-edit-context">
+                            <strong>{displayStopTitle(stop)}</strong>
+                            {onRenameStop && editingStopId !== stop.id ? (
+                              <button
+                                type="button"
+                                className="timeline-tool-button"
+                                aria-label={`Rename ${displayStopTitle(stop)}`}
+                                title="Rename"
+                                onClick={() => startRenamingStop(stop)}
+                              >
+                                <TimelineActionIcon name="edit" />
+                              </button>
+                            ) : null}
+                          </div>
                           {editingStopId === stop.id ? (
                             <form
                               className="timeline-stop-rename"
@@ -3135,47 +3093,115 @@ function TripStoryExplorer({
                                   required
                                 />
                               </label>
-                              <div className="button-row">
+                              <div className="timeline-inline-actions">
                                 <button
                                   type="submit"
+                                  className="timeline-icon-button"
+                                  aria-label="Save stop name"
+                                  title="Save"
                                   disabled={
                                     savingStopId === stop.id ||
                                     !stopTitleDraft.trim()
                                   }
                                 >
-                                  Save
+                                  <TimelineActionIcon name="check" />
                                 </button>
                                 <button
                                   type="button"
-                                  className="secondary-button"
+                                  className="timeline-icon-button"
+                                  aria-label="Cancel renaming"
+                                  title="Cancel"
                                   onClick={() => {
                                     setEditingStopId(null);
                                     setStopTitleDraft("");
                                     setRenameStopError("");
                                   }}
                                 >
-                                  Cancel
+                                  <TimelineActionIcon name="x" />
                                 </button>
                               </div>
                               {renameStopError ? (
                                 <p className="error">{renameStopError}</p>
                               ) : null}
                             </form>
-                          ) : onRenameStop ? (
-                            <button
-                              type="button"
-                              className="timeline-stop-edit"
-                              onClick={() => startRenamingStop(stop)}
-                            >
-                              Rename
-                            </button>
                           ) : null}
-                          {onMergeStops && (previousStop || nextStop) ? (
-                            <div className="timeline-stop-merge">
-                              {previousStop ? (
+                          {onSetStopNote &&
+                          editingNoteKey === `stop:${stop.id}` ? (
+                            <form
+                              className="timeline-note-form"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void saveTimelineNote(
+                                  "stop",
+                                  stop.id,
+                                  `stop:${stop.id}`,
+                                );
+                              }}
+                            >
+                              <label>
+                                Stop note
+                                <textarea
+                                  value={noteDraft}
+                                  onChange={(event) =>
+                                    setNoteDraft(event.target.value)
+                                  }
+                                  maxLength={2000}
+                                  rows={3}
+                                />
+                              </label>
+                              <div className="timeline-inline-actions">
+                                <button
+                                  type="submit"
+                                  className="timeline-icon-button"
+                                  aria-label="Save stop note"
+                                  title="Save note"
+                                  disabled={savingNoteKey === `stop:${stop.id}`}
+                                >
+                                  <TimelineActionIcon name="check" />
+                                </button>
                                 <button
                                   type="button"
-                                  className="secondary-button"
+                                  className="timeline-icon-button"
+                                  aria-label="Cancel note editing"
+                                  title="Cancel"
+                                  onClick={() => {
+                                    setEditingNoteKey(null);
+                                    setNoteDraft("");
+                                    setNoteError("");
+                                  }}
+                                >
+                                  <TimelineActionIcon name="x" />
+                                </button>
+                              </div>
+                              {noteError ? (
+                                <p className="error">{noteError}</p>
+                              ) : null}
+                            </form>
+                          ) : null}
+                          {(onMergeStops && (previousStop || nextStop)) ||
+                          (onSplitStop && stop.moments.length > 1) ? (
+                            <div className="timeline-structure-tools">
+                              {onMergeStops && previousStop ? (
+                                <button
+                                  type="button"
+                                  className={
+                                    pendingMergeKey ===
+                                    `${previousStop.id}:${stop.id}`
+                                      ? "timeline-tool-button pending"
+                                      : "timeline-tool-button"
+                                  }
+                                  aria-label={
+                                    pendingMergeKey ===
+                                    `${previousStop.id}:${stop.id}`
+                                      ? "Confirm merge previous stop"
+                                      : "Merge with previous stop"
+                                  }
+                                  title={
+                                    pendingMergeKey ===
+                                    `${previousStop.id}:${stop.id}`
+                                      ? "Confirm merge previous"
+                                      : "Merge previous"
+                                  }
                                   disabled={
                                     mergingStopKey ===
                                     `${previousStop.id}:${stop.id}`
@@ -3191,14 +3217,31 @@ function TripStoryExplorer({
                                 >
                                   {pendingMergeKey ===
                                   `${previousStop.id}:${stop.id}`
-                                    ? "Confirm merge previous"
-                                    : "Merge previous"}
+                                    ? "Confirm prev"
+                                    : "Merge prev"}
                                 </button>
                               ) : null}
-                              {nextStop ? (
+                              {onMergeStops && nextStop ? (
                                 <button
                                   type="button"
-                                  className="secondary-button"
+                                  className={
+                                    pendingMergeKey ===
+                                    `${nextStop.id}:${stop.id}`
+                                      ? "timeline-tool-button pending"
+                                      : "timeline-tool-button"
+                                  }
+                                  aria-label={
+                                    pendingMergeKey ===
+                                    `${nextStop.id}:${stop.id}`
+                                      ? "Confirm merge next stop"
+                                      : "Merge with next stop"
+                                  }
+                                  title={
+                                    pendingMergeKey ===
+                                    `${nextStop.id}:${stop.id}`
+                                      ? "Confirm merge next"
+                                      : "Merge next"
+                                  }
                                   disabled={
                                     mergingStopKey ===
                                     `${nextStop.id}:${stop.id}`
@@ -3214,8 +3257,34 @@ function TripStoryExplorer({
                                 >
                                   {pendingMergeKey ===
                                   `${nextStop.id}:${stop.id}`
-                                    ? "Confirm merge next"
+                                    ? "Confirm next"
                                     : "Merge next"}
+                                </button>
+                              ) : null}
+                              {onSplitStop && stop.moments.length > 1 ? (
+                                <button
+                                  type="button"
+                                  className="timeline-tool-button"
+                                  aria-label={
+                                    splitStopId === stop.id
+                                      ? "Cancel split"
+                                      : "Split stop"
+                                  }
+                                  title={
+                                    splitStopId === stop.id
+                                      ? "Cancel split"
+                                      : "Split stop"
+                                  }
+                                  onClick={() => {
+                                    setSplitStopId(
+                                      splitStopId === stop.id ? null : stop.id,
+                                    );
+                                    setSplitStopError("");
+                                  }}
+                                >
+                                  {splitStopId === stop.id
+                                    ? "Cancel split"
+                                    : "Split"}
                                 </button>
                               ) : null}
                               {pendingMergeKey ? (
@@ -3229,95 +3298,81 @@ function TripStoryExplorer({
                               ) : null}
                             </div>
                           ) : null}
-                          {onSplitStop && stop.moments.length > 1 ? (
+                          {onSplitStop &&
+                          stop.moments.length > 1 &&
+                          splitStopId === stop.id ? (
                             <div className="timeline-stop-split">
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => {
-                                  setSplitStopId(
-                                    splitStopId === stop.id ? null : stop.id,
-                                  );
-                                  setSplitStopError("");
-                                }}
-                              >
-                                {splitStopId === stop.id
-                                  ? "Cancel split"
-                                  : "Split stop"}
-                              </button>
-                              {splitStopId === stop.id ? (
-                                <div className="timeline-stop-split-panel">
-                                  <p>
-                                    Pick the last photo group that should stay
-                                    in {displayStopTitle(stop)}.
-                                  </p>
-                                  {stop.moments.slice(0, -1).map((moment) => {
-                                    const splitKey = `${stop.id}:${moment.id}`;
-                                    return (
-                                      <div
-                                        className="timeline-stop-split-option"
-                                        key={moment.id}
-                                      >
-                                        <div>
-                                          <strong>
-                                            {formatTimelineStopTime(
-                                              moment.endsAt,
-                                              moment.endsAtLocal ?? null,
-                                              timezoneId,
-                                            )}
-                                          </strong>
-                                          <span>
-                                            {moment.mediaCount} photos before
-                                            split
-                                          </span>
-                                          <div
-                                            className="timeline-stop-split-thumbs"
-                                            aria-hidden="true"
-                                          >
-                                            {moment.media
-                                              .slice(0, 4)
-                                              .map((item) =>
-                                                item.thumbnailUrl ? (
-                                                  <img
-                                                    key={item.id}
-                                                    src={item.thumbnailUrl}
-                                                    alt=""
-                                                    loading="lazy"
-                                                  />
-                                                ) : (
-                                                  <span key={item.id}>
-                                                    {item.contributor
-                                                      .slice(0, 1)
-                                                      .toUpperCase()}
-                                                  </span>
-                                                ),
-                                              )}
-                                          </div>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          className="secondary-button"
-                                          disabled={
-                                            splittingStopKey === splitKey
-                                          }
-                                          onClick={() =>
-                                            void splitStopAfterMoment(
-                                              stop.id,
-                                              moment.id,
-                                              day.id,
-                                            )
-                                          }
+                              <div className="timeline-stop-split-panel">
+                                <p>
+                                  Pick the last photo group that should stay in{" "}
+                                  {displayStopTitle(stop)}.
+                                </p>
+                                {stop.moments.slice(0, -1).map((moment) => {
+                                  const splitKey = `${stop.id}:${moment.id}`;
+                                  return (
+                                    <div
+                                      className="timeline-stop-split-option"
+                                      key={moment.id}
+                                    >
+                                      <div>
+                                        <strong>
+                                          {formatTimelineStopTime(
+                                            moment.endsAt,
+                                            moment.endsAtLocal ?? null,
+                                            timezoneId,
+                                          )}
+                                        </strong>
+                                        <span>
+                                          {moment.mediaCount} photos before
+                                          split
+                                        </span>
+                                        <div
+                                          className="timeline-stop-split-thumbs"
+                                          aria-hidden="true"
                                         >
-                                          Split here
-                                        </button>
+                                          {moment.media
+                                            .slice(0, 4)
+                                            .map((item) =>
+                                              item.thumbnailUrl ? (
+                                                <img
+                                                  key={item.id}
+                                                  src={item.thumbnailUrl}
+                                                  alt=""
+                                                  loading="lazy"
+                                                />
+                                              ) : (
+                                                <span key={item.id}>
+                                                  {item.contributor
+                                                    .slice(0, 1)
+                                                    .toUpperCase()}
+                                                </span>
+                                              ),
+                                            )}
+                                        </div>
                                       </div>
-                                    );
-                                  })}
-                                  {splitStopError ? (
-                                    <p className="error">{splitStopError}</p>
-                                  ) : null}
-                                </div>
-                              ) : null}
+                                      <button
+                                        type="button"
+                                        className="timeline-tool-button"
+                                        aria-label="Split here"
+                                        title="Split here"
+                                        disabled={splittingStopKey === splitKey}
+                                        onClick={() =>
+                                          void splitStopAfterMoment(
+                                            stop.id,
+                                            moment.id,
+                                            day.id,
+                                          )
+                                        }
+                                      >
+                                        Split here
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                                {splitStopError ? (
+                                  <p className="error">{splitStopError}</p>
+                                ) : null}
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -3354,8 +3409,14 @@ function TripStoryExplorer({
                 </h3>
                 <span>{photoRollPhotoCount} photos grouped by stop</span>
               </div>
-              <button type="button" onClick={closePhotoRoll}>
-                Close
+              <button
+                type="button"
+                className="modal-icon-button"
+                aria-label="Close photo browser"
+                title="Close"
+                onClick={closePhotoRoll}
+              >
+                <TimelineActionIcon name="x" />
               </button>
             </div>
             <div className="story-photo-roll" aria-label="Photos by stop">
@@ -3535,8 +3596,14 @@ function PhotoBrowser({
               {formatDate(selectedPhoto.capturedAt, timezoneId)}
             </strong>
           </div>
-          <button type="button" onClick={onClose}>
-            Close
+          <button
+            type="button"
+            className="modal-icon-button"
+            aria-label="Close photo browser"
+            title="Close"
+            onClick={onClose}
+          >
+            <TimelineActionIcon name="x" />
           </button>
         </div>
         <div className="photo-browser-stage">
@@ -3618,6 +3685,32 @@ function storyViewLabel(viewMode: ViewMode): string {
     case "TRIP_OVERVIEW":
       return "All";
   }
+}
+
+function TimelineActionIcon({ name }: { name: "check" | "edit" | "x" }) {
+  if (name === "check") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="m5 12 4 4 10-10" />
+      </svg>
+    );
+  }
+
+  if (name === "edit") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z" />
+        <path d="m13 6 5 5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M6 6 18 18" />
+      <path d="m18 6-12 12" />
+    </svg>
+  );
 }
 
 const storyDayColors = ["#e87856", "#8467b7", "#2fa7a2", "#d1a13d", "#4b7cc4"];

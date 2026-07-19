@@ -1036,6 +1036,24 @@ button.needs-update {
   flex: 0 0 auto;
 }
 
+.modal-icon-button {
+  width: 34px;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.modal-icon-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .story-photo-roll {
   display: grid;
   gap: 16px;
@@ -1655,18 +1673,37 @@ button.needs-update {
   justify-content: flex-end;
 }
 
-.timeline-map-button {
+.timeline-icon-button {
   width: 32px;
   min-height: 32px;
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
   border-color: #d78363;
   background: #fff3ee;
   color: #9f3a22;
   padding: 0;
 }
 
-.timeline-map-button svg {
+.timeline-tool-button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  border-color: #d78363;
+  background: #fff3ee;
+  color: #9f3a22;
+  font-size: 0.76rem;
+  font-weight: 850;
+  line-height: 1;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.timeline-icon-button svg,
+.timeline-tool-button svg {
   width: 16px;
   height: 16px;
   fill: none;
@@ -1676,13 +1713,11 @@ button.needs-update {
   stroke-width: 2;
 }
 
-.timeline-stop-edit {
-  min-height: 30px;
-  border-color: var(--border);
-  background: #fff;
-  color: var(--accent-strong);
-  font-size: 0.76rem;
-  padding: 5px 8px;
+.timeline-icon-button[aria-expanded="true"],
+.timeline-tool-button.pending {
+  border-color: #9f3a22;
+  background: #9f3a22;
+  color: #fff;
 }
 
 .timeline-note-button {
@@ -1696,14 +1731,30 @@ button.needs-update {
 }
 
 .timeline-stop-edit-panel {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
   border-top: 1px solid var(--border);
   padding-top: 8px;
 }
 
-.timeline-stop-edit-panel > .timeline-stop-edit {
-  justify-self: start;
+.timeline-edit-context {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.timeline-edit-context strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-stop-edit-hint {
@@ -1715,11 +1766,13 @@ button.needs-update {
 }
 
 .timeline-stop-rename {
+  flex: 1 0 100%;
   display: grid;
   gap: 10px;
 }
 
 .timeline-note-form {
+  flex: 1 0 100%;
   display: grid;
   gap: 10px;
   border: 1px solid var(--border);
@@ -1728,13 +1781,19 @@ button.needs-update {
   padding: 10px;
 }
 
+.timeline-note-form + .timeline-structure-tools {
+  margin-top: 2px;
+}
+
 .timeline-note-form textarea {
   min-height: 84px;
   resize: vertical;
 }
 
-.timeline-note-form .button-row button {
-  flex: 1 1 90px;
+.timeline-inline-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .timeline-note-preview {
@@ -1751,43 +1810,17 @@ button.needs-update {
   font-style: italic;
 }
 
-.timeline-stop-note-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.timeline-structure-tools {
+  flex: 1 0 100%;
+  display: flex;
   gap: 8px;
   align-items: center;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-}
-
-.timeline-stop-note-row .timeline-note-preview {
-  margin: 0;
-}
-
-.timeline-stop-note-row .timeline-note-button {
-  border-color: #d78363;
-  background: #fff3ee;
-  color: #9f3a22;
-}
-
-.timeline-stop-rename .button-row button {
-  flex: 1 1 90px;
-}
-
-.timeline-stop-merge {
-  display: flex;
-  gap: 6px;
   flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
 }
 
-.timeline-stop-merge button {
-  min-height: 30px;
-  flex: 1 1 120px;
-  font-size: 0.76rem;
-  padding: 5px 8px;
-}
-
-.timeline-stop-merge .error {
+.timeline-structure-tools .error {
   flex: 1 0 100%;
 }
 
@@ -1797,10 +1830,7 @@ button.needs-update {
 }
 
 .timeline-stop-split > button {
-  min-height: 30px;
   justify-self: start;
-  font-size: 0.76rem;
-  padding: 5px 8px;
 }
 
 .timeline-stop-split-panel {
@@ -1844,9 +1874,7 @@ button.needs-update {
 }
 
 .timeline-stop-split-option button {
-  min-height: 30px;
-  font-size: 0.76rem;
-  padding: 5px 8px;
+  justify-self: end;
 }
 
 .timeline-stop-split-thumbs {
