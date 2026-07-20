@@ -14,7 +14,7 @@ make backup-restore-drill
 
 - Authentication lifecycle, session expiration, logout revocation, CSRF.
 - Owner trip CRUD and non-leaky cross-user trip access.
-- Guest invitation acceptance, revocation, expiration, reuse, and trip-scoped sessions.
+- Account-linked invitation acceptance, revocation, expiration, reuse, and trip membership.
 - Upload grant creation, duplicate filenames, wrong size, wrong user completion, path traversal, store isolation, token expiration.
 - MIME-signature validation, corrupt image failure, decompression-bomb limits, idempotent media processing.
 - Reconstruction days, stops, moments, missing GPS, midnight cutoff, repeated place visits, locked edit preservation.
@@ -30,8 +30,8 @@ make backup-restore-drill
 1. Owner registers.
 2. Owner creates a trip.
 3. Owner creates two invitations.
-4. Two isolated request contexts join as guests.
-5. Owner and guests upload photos.
+4. Two isolated request contexts register contributor accounts and accept invitations.
+5. Owner and account contributors upload photos.
 6. Worker processes media.
 7. Reconstruction creates story structure.
 8. Owner publishes locally.
@@ -40,7 +40,7 @@ make backup-restore-drill
 11. Owner revokes the share link.
 12. Viewer loses access.
 
-The deterministic seed command covers additional fixture variety: three-day trip, two guests, EXIF time/GPS, no-GPS media, duplicate media, corrupt media, after-midnight media, and a known-offset camera pattern.
+The deterministic seed command covers additional fixture variety: three-day trip, two account contributors, EXIF time/GPS, no-GPS media, duplicate media, corrupt media, after-midnight media, and a known-offset camera pattern.
 
 ## Manual Performance Drill
 

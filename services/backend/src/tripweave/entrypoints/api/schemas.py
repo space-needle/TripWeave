@@ -182,7 +182,9 @@ class InvitationPreviewResponse(BaseModel):
 
 
 class InvitationAcceptRequest(BaseModel):
-    display_name: str = Field(alias="displayName", min_length=1, max_length=160)
+    display_name: str | None = Field(
+        default=None, alias="displayName", min_length=1, max_length=160
+    )
 
 
 class MemberResponse(BaseModel):

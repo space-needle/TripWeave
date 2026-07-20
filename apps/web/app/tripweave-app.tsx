@@ -276,6 +276,8 @@ function OwnerWorkspace() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
     [selectedTripId, trips],
   );
+  const canOrganizeSelectedTrip =
+    selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
   const storyUpdate = reconstruction?.storyUpdate ?? null;
   const storyUpdateNeeded = Boolean(storyUpdate?.needsUpdate);
   const storyUpdateLabel = storyUpdate
@@ -392,8 +394,17 @@ function OwnerWorkspace() {
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
     void loadReconstruction(trip.id);
-    void loadCollaboration(trip.id);
-    void loadPublications(trip.id);
+    if (trip.role === "owner") {
+      void loadCollaboration(trip.id);
+    } else {
+      setInvitations([]);
+      setMembers([]);
+    }
+    if (["owner", "editor"].includes(trip.role)) {
+      void loadPublications(trip.id);
+    } else {
+      setPublications(null);
+    }
   }
 
   function removeTripFromState(tripId: string) {
@@ -435,7 +446,11 @@ function OwnerWorkspace() {
           return;
         }
         setUser(result.user);
-        await loadTrips();
+        const preferredTripId =
+          typeof window === "undefined"
+            ? null
+            : new URLSearchParams(window.location.search).get("tripId");
+        await loadTrips(preferredTripId);
       } catch {
         if (!cancelled) {
           setUser(null);
@@ -1387,7 +1402,7 @@ function OwnerWorkspace() {
                     {selectedTrip.startDate} - {selectedTrip.endDate}
                   </p>
                 </div>
-                {["owner", "editor"].includes(selectedTrip.role) ? (
+                {canOrganizeSelectedTrip ? (
                   <div className="trip-stage-header-actions">
                     <button
                       className="story-photo-icon-button"
@@ -1437,17 +1452,24 @@ function OwnerWorkspace() {
               {reconstructionError ? (
                 <p className="error">{reconstructionError}</p>
               ) : null}
-              {selectedTrip &&
-              ["owner", "editor"].includes(selectedTrip.role) ? (
+              {selectedTrip ? (
                 <TripStoryExplorer
                   reconstruction={reconstruction}
                   state={storyState}
                   onStateChange={setStoryState}
-                  onMergeStops={mergeStops}
-                  onRenameStop={renameStop}
-                  onSetDayNote={setDayNote}
-                  onSetStopNote={setStopNote}
-                  onSplitStop={splitStop}
+                  onMergeStops={
+                    canOrganizeSelectedTrip ? mergeStops : undefined
+                  }
+                  onRenameStop={
+                    canOrganizeSelectedTrip ? renameStop : undefined
+                  }
+                  onSetDayNote={
+                    canOrganizeSelectedTrip ? setDayNote : undefined
+                  }
+                  onSetStopNote={
+                    canOrganizeSelectedTrip ? setStopNote : undefined
+                  }
+                  onSplitStop={canOrganizeSelectedTrip ? splitStop : undefined}
                   mobilePane={
                     ownerStoryPhotosOpen
                       ? "photos"
@@ -1465,11 +1487,7 @@ function OwnerWorkspace() {
                   }}
                   timezoneId={selectedTrip.timezoneId}
                 />
-              ) : (
-                <div className="story-empty">
-                  <p>This trip is not editable from this workspace.</p>
-                </div>
-              )}
+              ) : null}
             </>
           ) : (
             <div className="story-empty trip-start">
@@ -1544,16 +1562,20 @@ function OwnerWorkspace() {
                 {mediaError ? <p className="error">{mediaError}</p> : null}
                 <MediaList
                   media={media}
-                  onRetry={retryMedia}
-                  onVisibilityChange={updateMediaVisibility}
+                  onRetry={canOrganizeSelectedTrip ? retryMedia : undefined}
+                  onVisibilityChange={
+                    canOrganizeSelectedTrip ? updateMediaVisibility : undefined
+                  }
                   timezoneId={selectedTrip?.timezoneId}
                 />
-                <SimilarityGroupsPanel
-                  groups={similarityGroups}
-                  onChangeRepresentative={(groupId, mediaId) =>
-                    void changeSimilarityRepresentative(groupId, mediaId)
-                  }
-                />
+                {canOrganizeSelectedTrip ? (
+                  <SimilarityGroupsPanel
+                    groups={similarityGroups}
+                    onChangeRepresentative={(groupId, mediaId) =>
+                      void changeSimilarityRepresentative(groupId, mediaId)
+                    }
+                  />
+                ) : null}
               </div>
             ) : (
               <p>Select a trip before uploading photos.</p>
@@ -1743,6 +1765,10 @@ function InviteAcceptance({ token }: { token: string }) {
   const [preview, setPreview] = useState<InvitationPreviewResponse | null>(
     null,
   );
+  const [user, setUser] = useState<UserResponse | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1766,13 +1792,60 @@ function InviteAcceptance({ token }: { token: string }) {
     };
   }, [token]);
 
-  async function accept(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .me()
+      .then((result) => {
+        if (!cancelled) {
+          setUser(result.user);
+          setDisplayName(result.user.display_name);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUser(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function joinTrip() {
+    const member = await api.acceptInvitation(token, {});
+    window.location.assign(`/?tripId=${encodeURIComponent(member.tripId)}`);
+  }
+
+  async function authenticateAndAccept(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const guest = await api.acceptInvitation(token, { displayName });
-      window.location.assign(`/contribute/${guest.tripId}`);
+      const result =
+        authMode === "register"
+          ? await api.register({ email, password, displayName })
+          : await api.login({ email, password });
+      setUser(result.user);
+      const member = await api.acceptInvitation(token, {
+        displayName:
+          authMode === "register" && displayName.trim()
+            ? displayName.trim()
+            : result.user.display_name,
+      });
+      window.location.assign(`/?tripId=${encodeURIComponent(member.tripId)}`);
+    } catch (reason) {
+      setError(messageFrom(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function acceptExistingSession() {
+    setBusy(true);
+    setError("");
+    try {
+      await joinTrip();
     } catch (reason) {
       setError(messageFrom(reason));
     } finally {
@@ -1787,22 +1860,85 @@ function InviteAcceptance({ token }: { token: string }) {
         <h1 id="invite-title">
           {preview ? preview.title : "Loading invitation"}
         </h1>
-        {preview ? <p>Join this trip as a {preview.role}.</p> : null}
-        <form className="stack" onSubmit={accept}>
-          <label>
-            Display name
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              required
-              maxLength={160}
-            />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={busy || !preview}>
-            Join trip
-          </button>
-        </form>
+        {preview ? (
+          <p>
+            Sign in or create an account to join this trip as a {preview.role}.
+          </p>
+        ) : null}
+        {user ? (
+          <div className="stack">
+            <p>Signed in as {user.display_name}.</p>
+            {error ? <p className="error">{error}</p> : null}
+            <button
+              type="button"
+              onClick={acceptExistingSession}
+              disabled={busy || !preview}
+            >
+              Join trip
+            </button>
+          </div>
+        ) : (
+          <form className="stack" onSubmit={authenticateAndAccept}>
+            <div
+              className="auth-toggle"
+              role="tablist"
+              aria-label="Invitation account mode"
+            >
+              <button
+                type="button"
+                className={authMode === "login" ? "active" : ""}
+                onClick={() => setAuthMode("login")}
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                className={authMode === "register" ? "active" : ""}
+                onClick={() => setAuthMode("register")}
+              >
+                Create account
+              </button>
+            </div>
+            <label>
+              Email
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                required
+                maxLength={320}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                required
+                minLength={authMode === "register" ? 8 : 1}
+                maxLength={256}
+              />
+            </label>
+            {authMode === "register" ? (
+              <label>
+                Display name
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  required
+                  maxLength={160}
+                />
+              </label>
+            ) : null}
+            {error ? <p className="error">{error}</p> : null}
+            <button type="submit" disabled={busy || !preview}>
+              {authMode === "register"
+                ? "Create account and join"
+                : "Log in and join"}
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );
@@ -3074,7 +3210,7 @@ function TripStoryExplorer({
                           </button>
                         </div>
                       </div>
-                      {onSetStopNote && stop.note && !isEditingTools ? (
+                      {stop.note && !isEditingTools ? (
                         <p className="timeline-note-preview">{stop.note}</p>
                       ) : null}
                       {isEditingTools ? (
@@ -5352,7 +5488,7 @@ function MediaList({
   timezoneId,
 }: {
   media: MediaItemResponse[];
-  onRetry: (item: MediaItemResponse) => void;
+  onRetry?: (item: MediaItemResponse) => void;
   onVisibilityChange?: (item: MediaItemResponse, visibility: string) => void;
   onDelete?: (item: MediaItemResponse) => void;
   timezoneId?: string;
@@ -5423,7 +5559,7 @@ function MediaList({
               {item.errorMessage ? (
                 <p className="error">{item.errorMessage}</p>
               ) : null}
-              {item.processingState === "failed" ? (
+              {item.processingState === "failed" && onRetry ? (
                 <button type="button" onClick={() => onRetry(item)}>
                   Retry processing
                 </button>

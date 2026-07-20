@@ -60,13 +60,17 @@ def client(engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> I
     get_settings.cache_clear()
 
 
-def register(client: TestClient, email: str = "owner@example.com") -> str:
+def register(
+    client: TestClient,
+    email: str = "owner@example.com",
+    display_name: str = "Owner",
+) -> str:
     response = client.post(
         "/auth/register",
         json={
             "email": email,
             "password": "long-enough-password",
-            "displayName": "Owner",
+            "displayName": display_name,
         },
     )
     assert response.status_code == 201
@@ -301,13 +305,20 @@ def token_from_invite_url(invite_url: str) -> str:
     return invite_url.rsplit("/", 1)[-1]
 
 
-def accept_invitation(client: TestClient, token: str, display_name: str = "Guest") -> str:
+def accept_invitation(
+    client: TestClient,
+    token: str,
+    csrf_token: str,
+    display_name: str | None = None,
+) -> dict[str, object]:
+    payload = {"displayName": display_name} if display_name is not None else {}
     response = client.post(
         f"/invitations/{token}/accept",
-        json={"displayName": display_name},
+        headers={"x-csrf-token": csrf_token},
+        json=payload,
     )
     assert response.status_code == 200
-    return str(response.json()["csrfToken"])
+    return dict(response.json())
 
 
 def test_authentication_lifecycle_and_trip_management(client: TestClient) -> None:
@@ -425,7 +436,7 @@ def test_second_user_cannot_access_private_trip(
     assert response.status_code == 404
 
 
-def test_owner_invites_guest_and_guest_uploads_with_attribution(
+def test_owner_invites_account_contributor_and_contributor_uploads_with_attribution(
     client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:
     url = get_test_database_url()
@@ -435,7 +446,7 @@ def test_owner_invites_guest_and_guest_uploads_with_attribution(
     invitation = create_invitation(client, csrf_owner, trip["id"])
     token = token_from_invite_url(str(invitation["inviteUrl"]))
 
-    guest_client = TestClient(
+    contributor_client = TestClient(
         create_app(
             settings=Settings(
                 DATABASE_URL=PostgresDsn(url),
@@ -445,16 +456,28 @@ def test_owner_invites_guest_and_guest_uploads_with_attribution(
             engine=engine,
         )
     )
-    preview = guest_client.get(f"/invitations/{token}")
+    preview = contributor_client.get(f"/invitations/{token}")
     assert preview.status_code == 200
     assert preview.json()["title"] == "Kyoto"
-    csrf_guest = accept_invitation(guest_client, token, "Traveler")
-    repeated = guest_client.post(
+    unauthenticated = contributor_client.post(
         f"/invitations/{token}/accept",
-        json={"displayName": "Traveler Again"},
+        json={"displayName": "Traveler"},
+    )
+    assert unauthenticated.status_code == 401
+    csrf_contributor = register(contributor_client, "traveler@example.com", "Traveler")
+    missing_csrf = contributor_client.post(
+        f"/invitations/{token}/accept",
+        json={},
+    )
+    assert missing_csrf.status_code == 403
+    accepted = accept_invitation(contributor_client, token, csrf_contributor)
+    assert accepted["displayName"] == "Traveler"
+    repeated = contributor_client.post(
+        f"/invitations/{token}/accept",
+        headers={"x-csrf-token": csrf_contributor},
+        json={},
     )
     assert repeated.status_code == 200
-    csrf_guest = str(repeated.json()["csrfToken"])
     other_browser = TestClient(
         create_app(
             settings=Settings(
@@ -465,48 +488,154 @@ def test_owner_invites_guest_and_guest_uploads_with_attribution(
             engine=engine,
         )
     )
+    csrf_other = register(other_browser, "imposter@example.com")
     reused_elsewhere = other_browser.post(
         f"/invitations/{token}/accept",
-        json={"displayName": "Imposter"},
+        headers={"x-csrf-token": csrf_other},
+        json={},
     )
     assert reused_elsewhere.status_code == 404
 
     media_item_id = upload_completed_jpeg(
-        guest_client,
-        csrf_guest,
+        contributor_client,
+        csrf_contributor,
         trip["id"],
         jpeg_bytes(),
         filename="guest.jpg",
     )
 
-    guest_media = guest_client.get(f"/trips/{trip['id']}/media")
-    assert guest_media.status_code == 200
-    assert guest_media.json()["media"][0]["id"] == media_item_id
-    assert guest_media.json()["media"][0]["contributor"] == "Traveler"
+    contributor_media = contributor_client.get(f"/trips/{trip['id']}/media")
+    assert contributor_media.status_code == 200
+    assert contributor_media.json()["media"][0]["id"] == media_item_id
+    assert contributor_media.json()["media"][0]["contributor"] == "Traveler"
 
     owner_media = client.get(f"/trips/{trip['id']}/media")
     assert owner_media.status_code == 200
     assert owner_media.json()["media"][0]["contributor"] == "Traveler"
 
 
-def test_guest_actor_header_uses_guest_session_when_user_session_also_exists(
-    client: TestClient,
+def test_account_invitation_adds_trip_to_contributor_library(
+    client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:
-    csrf_owner = register(client, "same-browser-owner@example.com")
+    url = get_test_database_url()
+    assert url is not None
+    csrf_owner = register(client, "library-owner@example.com")
     trip = create_trip(client, csrf_owner)
     invitation = create_invitation(client, csrf_owner, trip["id"])
     token = token_from_invite_url(str(invitation["inviteUrl"]))
 
-    accept_invitation(client, token, "Same Browser Guest")
+    contributor_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_contributor = register(
+        contributor_client, "library-contributor@example.com", "Library Contributor"
+    )
+    accept_invitation(contributor_client, token, csrf_contributor)
 
-    guest_me = client.get("/guest/me", headers={"x-tripweave-actor": "guest"})
-    assert guest_me.status_code == 200
-    assert guest_me.json()["tripId"] == trip["id"]
-    assert guest_me.json()["displayName"] == "Same Browser Guest"
+    trips = contributor_client.get("/trips")
+    assert trips.status_code == 200
+    assert trips.json()["trips"][0]["id"] == trip["id"]
+    assert trips.json()["trips"][0]["role"] == "contributor"
 
-    owner_me = client.get("/auth/me")
-    assert owner_me.status_code == 200
-    assert owner_me.json()["user"]["email"] == "same-browser-owner@example.com"
+
+def test_account_contributor_can_view_shared_story_without_editing(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    csrf_owner = register(client, "story-owner@example.com")
+    trip = create_trip(client, csrf_owner)
+    invitation = create_invitation(client, csrf_owner, trip["id"])
+
+    contributor_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_contributor = register(
+        contributor_client, "story-contributor@example.com", "Story Contributor"
+    )
+    accepted = accept_invitation(
+        contributor_client,
+        token_from_invite_url(str(invitation["inviteUrl"])),
+        csrf_contributor,
+    )
+    contributor_member_id = str(accepted["id"])
+    with engine.connect() as connection:
+        owner_member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id
+                    FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip["id"]},
+            ).scalar_one()
+        )
+
+    insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(trip["id"]),
+        member_id=owner_member_id,
+        filename="owner-story.jpg",
+        captured_at=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+        latitude=35.0,
+        longitude=127.0,
+        sha256="a" * 64,
+    )
+    insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(trip["id"]),
+        member_id=contributor_member_id,
+        filename="contributor-story.jpg",
+        captured_at=datetime(2026, 6, 1, 9, 15, tzinfo=UTC),
+        latitude=35.001,
+        longitude=127.001,
+        sha256="b" * 64,
+    )
+
+    reconstructed = client.post(
+        f"/trips/{trip['id']}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_owner},
+    )
+    assert reconstructed.status_code == 200
+
+    shared_media = contributor_client.get(f"/trips/{trip['id']}/media")
+    assert shared_media.status_code == 200
+    assert {item["contributor"] for item in shared_media.json()["media"]} == {
+        "Owner",
+        "Story Contributor",
+    }
+
+    story = contributor_client.get(f"/trips/{trip['id']}/reconstruction")
+    assert story.status_code == 200
+    contributors = {
+        item["contributor"]
+        for day in story.json()["days"]
+        for stop in day["stops"]
+        for moment in stop["moments"]
+        for item in moment["media"]
+    }
+    assert contributors == {"Owner", "Story Contributor"}
+
+    cannot_reconstruct = contributor_client.post(
+        f"/trips/{trip['id']}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_contributor},
+    )
+    assert cannot_reconstruct.status_code == 404
+
+    cannot_edit = contributor_client.patch(
+        f"/trips/{trip['id']}",
+        headers={"x-csrf-token": csrf_contributor},
+        json={"title": "Edited by contributor"},
+    )
+    assert cannot_edit.status_code == 404
 
 
 def test_invitation_rejects_expired_revoked_and_malformed(
@@ -531,7 +660,12 @@ def test_invitation_rejects_expired_revoked_and_malformed(
     )
     assert revoked.status_code == 204
     assert (
-        client.post(f"/invitations/{token}/accept", json={"displayName": "Nope"}).status_code == 404
+        client.post(
+            f"/invitations/{token}/accept",
+            headers={"x-csrf-token": csrf_owner},
+            json={},
+        ).status_code
+        == 404
     )
 
 
@@ -591,7 +725,7 @@ def test_action_rate_limits_cover_invites_uploads_and_publication(
     command.downgrade(config, "base")
 
 
-def test_guest_cannot_access_other_trip_or_alter_other_contributor_media(
+def test_contributor_cannot_access_other_trip_or_alter_other_contributor_media(
     client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:
     url = get_test_database_url()
@@ -600,13 +734,13 @@ def test_guest_cannot_access_other_trip_or_alter_other_contributor_media(
     trip_one = create_trip(client, csrf_owner, "One")
     trip_two = create_trip(client, csrf_owner, "Two")
 
-    guest_one = TestClient(
+    contributor_one = TestClient(
         create_app(
             settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
             engine=engine,
         )
     )
-    guest_two = TestClient(
+    contributor_two = TestClient(
         create_app(
             settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
             engine=engine,
@@ -614,22 +748,30 @@ def test_guest_cannot_access_other_trip_or_alter_other_contributor_media(
     )
     invite_one = create_invitation(client, csrf_owner, trip_one["id"])
     invite_two = create_invitation(client, csrf_owner, trip_one["id"])
-    csrf_guest_one = accept_invitation(
-        guest_one, token_from_invite_url(str(invite_one["inviteUrl"])), "One"
+    csrf_contributor_one = register(contributor_one, "one@example.com", "One")
+    csrf_contributor_two = register(contributor_two, "two@example.com", "Two")
+    accept_invitation(
+        contributor_one, token_from_invite_url(str(invite_one["inviteUrl"])), csrf_contributor_one
     )
-    csrf_guest_two = accept_invitation(
-        guest_two, token_from_invite_url(str(invite_two["inviteUrl"])), "Two"
+    accept_invitation(
+        contributor_two, token_from_invite_url(str(invite_two["inviteUrl"])), csrf_contributor_two
     )
 
-    media_one = upload_completed_jpeg(guest_one, csrf_guest_one, trip_one["id"], jpeg_bytes())
+    media_one = upload_completed_jpeg(
+        contributor_one, csrf_contributor_one, trip_one["id"], jpeg_bytes()
+    )
     upload_completed_jpeg(
-        guest_two, csrf_guest_two, trip_one["id"], jpeg_bytes(), filename="two.jpg"
+        contributor_two,
+        csrf_contributor_two,
+        trip_one["id"],
+        jpeg_bytes(),
+        filename="two.jpg",
     )
 
-    assert guest_one.get(f"/trips/{trip_two['id']}/media").status_code == 404
-    denied = guest_two.patch(
+    assert contributor_one.get(f"/trips/{trip_two['id']}/media").status_code == 404
+    denied = contributor_two.patch(
         f"/media/{media_one}",
-        headers={"x-csrf-token": csrf_guest_two},
+        headers={"x-csrf-token": csrf_contributor_two},
         json={"visibility": "story"},
     )
     assert denied.status_code == 404
@@ -643,21 +785,24 @@ def test_removed_contributor_loses_future_access_but_media_ownership_remains(
     csrf_owner = register(client, "remove-owner@example.com")
     trip = create_trip(client, csrf_owner)
     invitation = create_invitation(client, csrf_owner, trip["id"])
-    guest_client = TestClient(
+    contributor_client = TestClient(
         create_app(
             settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
             engine=engine,
         )
     )
-    csrf_guest = accept_invitation(
-        guest_client, token_from_invite_url(str(invitation["inviteUrl"])), "Removed"
+    csrf_contributor = register(contributor_client, "removed@example.com", "Removed")
+    accepted = accept_invitation(
+        contributor_client, token_from_invite_url(str(invitation["inviteUrl"])), csrf_contributor
     )
-    media_item_id = upload_completed_jpeg(guest_client, csrf_guest, trip["id"], jpeg_bytes())
-    member_id = guest_client.get("/guest/me").json()["id"]
+    media_item_id = upload_completed_jpeg(
+        contributor_client, csrf_contributor, trip["id"], jpeg_bytes()
+    )
+    member_id = accepted["id"]
 
     removed = client.delete(f"/trip-members/{member_id}", headers={"x-csrf-token": csrf_owner})
     assert removed.status_code == 204
-    assert guest_client.get(f"/trips/{trip['id']}/media").status_code == 401
+    assert contributor_client.get(f"/trips/{trip['id']}/media").status_code == 404
 
     with engine.connect() as connection:
         owner = connection.execute(

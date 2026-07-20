@@ -6,8 +6,8 @@ Status legend: `PASS` verified locally, `PARTIAL` implemented with documented ga
 
 - `PASS` Owner can register, log in, create a trip, manage settings, and log out.
 - `PASS` Owner can create invitation links and revoke invitations.
-- `PASS` Guest contributors can join with display names without full accounts.
-- `PASS` Owner and guests can upload JPEG/HEIC files through provider-neutral grants.
+- `PASS` Contributors can join invitations after logging in or creating an account.
+- `PASS` Owner and account contributors can upload JPEG/HEIC files through provider-neutral grants.
 - `PASS` Worker processes valid media independently from corrupt media.
 - `PASS` Reconstruction creates days, stops, moments, routes, and review items.
 - `PASS` Review operations are transactional and auditable.
@@ -19,7 +19,7 @@ Status legend: `PASS` verified locally, `PARTIAL` implemented with documented ga
 
 - `PASS` Originals remain in `media_private`; public stories use `story_published`.
 - `PASS` Public manifests omit raw EXIF, original filenames, private blob refs, and source blob refs.
-- `PASS` Session tokens, guest tokens, invitation tokens, and share tokens are stored only as hashes.
+- `PASS` Session tokens, invitation tokens, and share tokens are stored only as hashes.
 - `PASS` CSRF is required for state-changing browser requests.
 - `PASS` Auth, invitation creation, upload registration, and publication have local rate limits.
 - `PASS` Upload size, file count, MIME type, extension, path traversal, and token-expiration checks are covered.

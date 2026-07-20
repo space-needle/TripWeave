@@ -168,19 +168,42 @@ def create_trip(client: ApiClient) -> dict[str, Any]:
     )
 
 
-def accept_guest(owner: ApiClient, trip_id: str, display_name: str) -> ApiClient:
+def accept_contributor(owner: ApiClient, trip_id: str, display_name: str) -> ApiClient:
     invitation = owner.json("POST", f"/trips/{trip_id}/invitations", {})
     token = str(invitation["inviteUrl"]).rsplit("/", 1)[-1]
-    guest = ApiClient()
-    accepted = guest.request(
-        "POST", f"/invitations/{token}/accept", body={"displayName": display_name}
+    contributor = ApiClient()
+    email = f"{display_name.lower().replace(' ', '.')}@demo.tripweave.local"
+    registered = contributor.request(
+        "POST",
+        "/auth/register",
+        body={
+            "email": email,
+            "password": PASSWORD,
+            "displayName": display_name,
+        },
+    )
+    if registered.status not in {200, 201}:
+        logged_in = contributor.request(
+            "POST", "/auth/login", body={"email": email, "password": PASSWORD}
+        )
+        if logged_in.status != 200:
+            raise RuntimeError(
+                f"Contributor account failed: {registered.status} {registered.body}"
+            )
+        contributor.csrf_token = str(logged_in.body["csrfToken"])
+    else:
+        contributor.csrf_token = str(registered.body["csrfToken"])
+    accepted = contributor.request(
+        "POST",
+        f"/invitations/{token}/accept",
+        body={},
+        headers={"x-csrf-token": contributor.csrf_token},
     )
     if accepted.status != 200:
         raise RuntimeError(
-            f"Guest invitation failed: {accepted.status} {accepted.body}"
+            f"Contributor invitation failed: {accepted.status} {accepted.body}"
         )
-    guest.csrf_token = str(accepted.body["csrfToken"])
-    return guest
+    return contributor
 
 
 def upload(client: ApiClient, trip_id: str, filename: str, payload: bytes) -> None:
@@ -228,8 +251,8 @@ def main() -> None:
     ensure_owner(owner)
     trip = create_trip(owner)
     trip_id = str(trip["id"])
-    guest_one = accept_guest(owner, trip_id, "Demo Guest One")
-    guest_two = accept_guest(owner, trip_id, "Demo Guest Two")
+    contributor_one = accept_contributor(owner, trip_id, "Demo Contributor One")
+    contributor_two = accept_contributor(owner, trip_id, "Demo Contributor Two")
 
     fixtures = [
         (
@@ -257,8 +280,8 @@ def main() -> None:
             ),
         ),
         (
-            guest_one,
-            "guest1-day2-nogps.jpg",
+            contributor_one,
+            "contributor1-day2-nogps.jpg",
             jpeg_fixture(
                 color="blue",
                 captured_at="2026:06:07 11:00:00",
@@ -269,8 +292,8 @@ def main() -> None:
             ),
         ),
         (
-            guest_one,
-            "guest1-offset-match.jpg",
+            contributor_one,
+            "contributor1-offset-match.jpg",
             jpeg_fixture(
                 color="green",
                 captured_at="2026:06:07 11:15:00",
@@ -281,32 +304,32 @@ def main() -> None:
             ),
         ),
         (
-            guest_two,
-            "guest2-day2-match.jpg",
+            contributor_two,
+            "contributor2-day2-match.jpg",
             jpeg_fixture(
                 color="green",
                 captured_at="2026:06:07 11:30:00",
                 latitude=35.6895,
                 longitude=139.6917,
                 make="TripWeaveCam",
-                model="GuestTwo",
+                model="ContributorTwo",
             ),
         ),
         (
-            guest_two,
-            "guest2-day3.jpg",
+            contributor_two,
+            "contributor2-day3.jpg",
             jpeg_fixture(
                 color="purple",
                 captured_at="2026:06:08 13:00:00",
                 latitude=35.7101,
                 longitude=139.8107,
                 make="TripWeaveCam",
-                model="GuestTwo",
+                model="ContributorTwo",
             ),
         ),
     ]
     duplicate = fixtures[0][2]
-    fixtures.append((guest_two, "exact-duplicate.jpg", duplicate))
+    fixtures.append((contributor_two, "exact-duplicate.jpg", duplicate))
     fixtures.append((owner, "corrupt.jpg", b"not really a jpeg"))
 
     for client, filename, payload in fixtures:

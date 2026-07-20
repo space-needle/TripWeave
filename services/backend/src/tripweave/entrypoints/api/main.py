@@ -1235,9 +1235,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         token: str,
         payload: InvitationAcceptRequest,
         request: Request,
-        response: Response,
+        auth: AuthenticatedUser = Depends(current_user),
         db: DbSession = Depends(db_session),
     ) -> GuestMemberResponse:
+        require_csrf(request)
         invitation = active_invitation_for_token(db, token)
         now = datetime.now(UTC)
         member = (
@@ -1246,50 +1247,37 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             else None
         )
         if member is None:
-            if invitation.use_count >= invitation.max_uses:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            member = member_for_trip(db, invitation.trip_id, auth.user.id)
+            if member is None:
+                if invitation.use_count >= invitation.max_uses:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+                    )
+                member = orm.TripMember(
+                    trip_id=invitation.trip_id,
+                    user_id=auth.user.id,
+                    role=invitation.role,
+                    display_name=(payload.display_name or auth.user.display_name).strip(),
+                    joined_at=now,
                 )
-            member = orm.TripMember(
-                trip_id=invitation.trip_id,
-                user_id=None,
-                role=invitation.role,
-                display_name=payload.display_name.strip(),
-                joined_at=now,
-            )
-            db.add(member)
-            db.flush()
+                db.add(member)
+                db.flush()
             invitation.accepted_member_id = member.id
             invitation.accepted_at = now
             invitation.use_count += 1
             invitation.status = InvitationStatus.ACCEPTED.value
-        elif member.removed_at is not None:
+        elif member.removed_at is not None or member.user_id != auth.user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
             )
-        else:
-            guest = optional_guest(request, db)
-            if guest is None or guest.member.id != member.id:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
-                )
-        secrets_value = new_session_secrets(resolved_settings.guest_session_lifetime_seconds)
-        db.add(
-            orm.GuestSession(
-                trip_id=member.trip_id,
-                member_id=member.id,
-                token_hash=secrets_value.session_token_hash,
-                expires_at=secrets_value.expires_at,
-            )
-        )
+        csrf_token = request.cookies.get(resolved_settings.csrf_cookie_name, "")
         db.commit()
-        set_guest_cookies(response, secrets_value.session_token, secrets_value.csrf_token)
         return GuestMemberResponse(
             id=member.id,
             tripId=member.trip_id,
             displayName=member.display_name,
             role=member.role,
-            csrfToken=secrets_value.csrf_token,
+            csrfToken=csrf_token,
         )
 
     @app.get("/guest/me", response_model=GuestMemberResponse)
@@ -3012,7 +3000,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .where(orm.MediaItem.trip_id == trip_id, orm.MediaItem.deleted_at.is_(None))
             .order_by(orm.MediaItem.created_at.desc(), orm.MediaItem.id)
         )
-        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+        if actor.is_guest:
             statement = statement.where(orm.MediaItem.contributor_member_id == member.id)
         rows = db.execute(statement).all()
         group_summary = similarity_summary_by_media(db, trip_id)
@@ -3049,7 +3037,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             .order_by(orm.SimilarityGroup.created_at, orm.SimilarityGroupMember.rank)
         )
-        if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
+        if actor.is_guest:
             statement = statement.where(orm.MediaItem.contributor_member_id == member.id)
         rows = db.execute(statement).all()
         by_group: dict[UUID, tuple[orm.SimilarityGroup, list[SimilarityMemberResponse]]] = {}

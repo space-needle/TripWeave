@@ -49,7 +49,7 @@ export type HTTPValidationError = {
 };
 
 export type InvitationAcceptRequest = {
-  displayName: string;
+  displayName?: string | null;
 };
 
 export type InvitationCreateRequest = {

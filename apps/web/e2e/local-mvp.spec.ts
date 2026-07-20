@@ -22,9 +22,20 @@ async function registerOwner() {
 
 async function acceptInvite(inviteUrl: string, displayName: string) {
   const context = await request.newContext({ baseURL: apiBase });
+  const email = `e2e-${displayName.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}@tripweave.local`;
+  const registered = await context.post("/auth/register", {
+    data: {
+      email,
+      password: "local-e2e-password",
+      displayName,
+    },
+  });
+  expect(registered.status()).toBe(201);
+  const registeredBody = await registered.json();
   const token = inviteUrl.split("/").at(-1);
   const response = await context.post(`/invitations/${token}/accept`, {
-    data: { displayName },
+    headers: { "x-csrf-token": registeredBody.csrfToken as string },
+    data: {},
   });
   expect(response.status()).toBe(200);
   const body = await response.json();
@@ -106,18 +117,28 @@ test("local MVP publication path", async ({ page }) => {
   });
   expect(inviteTwo.status()).toBe(201);
 
-  const guestOne = await acceptInvite(
+  const contributorOne = await acceptInvite(
     (await inviteOne.json()).inviteUrl,
-    "Guest One",
+    "Contributor One",
   );
-  const guestTwo = await acceptInvite(
+  const contributorTwo = await acceptInvite(
     (await inviteTwo.json()).inviteUrl,
-    "Guest Two",
+    "Contributor Two",
   );
 
   await uploadPhoto(owner.context, owner.csrf, trip.id, "owner.jpg");
-  await uploadPhoto(guestOne.context, guestOne.csrf, trip.id, "guest-one.jpg");
-  await uploadPhoto(guestTwo.context, guestTwo.csrf, trip.id, "guest-two.jpg");
+  await uploadPhoto(
+    contributorOne.context,
+    contributorOne.csrf,
+    trip.id,
+    "contributor-one.jpg",
+  );
+  await uploadPhoto(
+    contributorTwo.context,
+    contributorTwo.csrf,
+    trip.id,
+    "contributor-two.jpg",
+  );
   await waitForReadyMedia(owner.context, trip.id, 3);
 
   const reconstructed = await owner.context.post(
@@ -156,7 +177,7 @@ test("local MVP publication path", async ({ page }) => {
     page.getByRole("heading", { name: "Playwright Local MVP" }),
   ).toBeVisible();
   const travelerFilter = page.getByLabel("Traveler");
-  await travelerFilter.selectOption({ label: "Guest One" });
+  await travelerFilter.selectOption({ label: "Contributor One" });
   await expect(travelerFilter).not.toHaveValue("everyone");
 
   const links = await owner.context.get(`/trips/${trip.id}/publications`);

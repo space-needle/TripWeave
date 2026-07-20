@@ -33,8 +33,9 @@ Current core capabilities include:
 - Account registration and login for trip owners.
 - Owner-created trips with title, dates, timezone, and settings.
 - Contributor invite links.
-- Guest contributors can accept an invite without creating an account.
-- Guest contributors can upload photos after joining with a display name.
+- Contributors accept invite links after logging in or creating an account.
+- Account-linked contributors can upload photos and return to joined trips from
+  their trip library.
 - Uploads are stored through provider-neutral blob references.
 - Original files are private processing inputs, immutable while retained, and may be deleted after optimized story derivatives and metadata are created.
 - Media processing extracts thumbnails, previews, timestamps, location data, and
@@ -72,8 +73,7 @@ This includes:
 
 - Trips they created.
 - Trips where they are an editor, contributor, or viewer.
-- Trips where they previously joined as a guest and later claimed the membership
-  with their account.
+- Trips they joined from an invitation link.
 - Trips shared privately by family or friends.
 
 The library should support both list and map views. Over time, it becomes the
@@ -97,15 +97,7 @@ for publication.
 
 ### Contributor Flow
 
-Invite links should support a low-friction path and an account-linked path.
-
-The low-friction path remains:
-
-- Open invite link.
-- Enter display name.
-- Upload photos without creating an account.
-
-The account-linked path should be added:
+Invite links should start with an account-linked path:
 
 - Open invite link.
 - Log in or create an account.
@@ -113,10 +105,9 @@ The account-linked path should be added:
 - Upload photos.
 - See the story later from the user's own story library.
 
-Guest contributors should also be able to claim their guest membership later.
-When they sign up or log in, the system should link the existing guest
-`trip_member` to their account without changing ownership of already uploaded
-media.
+A low-friction guest upload path can be reconsidered later, but it should not
+be the V0 default because guest uploads need a separate claim and recovery
+model.
 
 ## Roles And Permissions
 
@@ -208,10 +199,7 @@ Near-term product improvements:
 
 - Show all account-linked trips in the logged-in user's home view, not only
   owner-created trips.
-- Add account claiming for guest invite acceptances.
-- Add "join with account" and "continue as guest" choices on invite pages.
 - Let contributors see an authenticated shared story view after joining.
-- Add a "save this trip to my account" prompt after guest upload.
 - Make contributor workspace link to the member story view.
 
 Collaborative story improvements:
@@ -250,7 +238,7 @@ The current database model already has many useful foundations:
 - `trips`
 - `trip_members`
 - `trip_invitations`
-- guest sessions
+- account sessions
 - upload sessions and files
 - media items and derivatives
 - reconstruction tables
@@ -259,8 +247,6 @@ The current database model already has many useful foundations:
 
 Important future backend work:
 
-- Add an endpoint to link a guest `trip_member` to the current authenticated
-  user.
 - Ensure `/trips` returns every active trip where `trip_members.user_id` matches
   the current user, regardless of role.
 - Add tests proving non-owner account members see shared stories in their
@@ -276,8 +262,7 @@ Important future frontend work:
 - Rename the owner-centric home into a story library.
 - Add role badges and shared-with-me affordances.
 - Split owner/editor review tools from member story viewing.
-- Add invite acceptance choices for guest versus account-linked joining.
-- Add a guest-to-account claim prompt after upload.
+- Polish invite acceptance for existing sessions, login, and account creation.
 - Add map and timeline archive views for many stories.
 
 ## Product Summary
