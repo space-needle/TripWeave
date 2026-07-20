@@ -384,6 +384,7 @@ class ReconstructionMomentResponse(BaseModel):
 class ReconstructionStopResponse(BaseModel):
     id: UUID
     position: int
+    display_position: str | None = Field(default=None, alias="displayPosition")
     title: str | None = None
     note: str | None = None
     starts_at: datetime = Field(alias="startsAt")
@@ -403,6 +404,7 @@ class ReconstructionLegResponse(BaseModel):
     from_stop_id: UUID = Field(alias="fromStopId")
     to_stop_id: UUID = Field(alias="toStopId")
     route_source: str = Field(alias="routeSource")
+    is_forked: bool = Field(default=False, alias="isForked")
     geometry: dict[str, object] | None = None
 
 

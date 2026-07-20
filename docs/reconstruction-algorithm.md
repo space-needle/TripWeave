@@ -55,7 +55,13 @@ Missing GPS is assigned only when the media is tightly bracketed in time by high
 
 ## Routes
 
-The algorithm creates legs between consecutive stops in the same day. Initial geometry is straight-line geography and `route_source = photo_inferred`. No directions or external map provider is used.
+The algorithm creates legs from each contributor's camera-roll trace within the same day, then merges identical stop-to-stop edges. This lets the shared story represent fork-and-join paths without forcing the whole group into one linear route. For example, if two contributors share stop 1, split to separate stops, and meet again at stop 3, the inferred edges are `1 -> 2a -> 3` and `1 -> 2b -> 3` rather than `1 -> 2a -> 2b -> 3`.
+
+Initial geometry is straight-line geography and `route_source = photo_inferred`. No directions or external map provider is used.
+
+## Stop Display Order
+
+Stored stop positions remain integer ordering for persistence and edits. API responses additionally derive display labels from the day's stop graph. Linear stops display as `1`, `2`, `3`; parallel stops at the same graph depth display as `2a`, `2b`, `2c`. Timeline navigation follows the display order, such as `1 -> 2a -> 2b -> 3`, while map route lines follow the contributor trace edges.
 
 ## Geocoding
 

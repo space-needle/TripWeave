@@ -1703,6 +1703,28 @@ button.needs-update {
   display: block;
 }
 
+.timeline-stop-button > span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.timeline-stop-number {
+  min-width: 30px;
+  min-height: 24px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #1f4f54;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0 8px;
+}
+
 .timeline-stop-button small {
   margin-top: 4px;
   color: var(--muted);
@@ -1902,6 +1924,28 @@ button.needs-update {
 
 .timeline-structure-tools .error {
   flex: 1 0 100%;
+}
+
+.timeline-stop-merge-picker {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faf8;
+  padding: 10px;
+}
+
+.timeline-stop-merge-picker > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.timeline-stop-merge-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .timeline-stop-split {

@@ -2,6 +2,7 @@
 import json
 import os
 import secrets
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -3311,6 +3312,93 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             storyMediaCount=story_media_count,
         )
 
+    def display_positions_for_stops(
+        *,
+        stops: list[orm.Stop],
+        raw_legs_by_day: dict[UUID, list[tuple[orm.TripLeg, dict[str, object] | None]]],
+    ) -> dict[UUID, str]:
+        display_positions: dict[UUID, str] = {}
+        stops_by_day: dict[UUID, list[orm.Stop]] = defaultdict(list)
+        for stop in stops:
+            stops_by_day[stop.trip_day_id].append(stop)
+
+        for trip_day_id, day_stops in stops_by_day.items():
+            ordered_stops = sorted(
+                day_stops,
+                key=lambda stop: (stop.starts_at_utc, stop.ends_at_utc, stop.position, stop.id),
+            )
+            stop_ids = {stop.id for stop in ordered_stops}
+            if not raw_legs_by_day.get(trip_day_id):
+                for index, stop in enumerate(ordered_stops, start=1):
+                    display_positions[stop.id] = str(index)
+                continue
+            parent_ids: dict[UUID, set[UUID]] = {stop.id: set() for stop in ordered_stops}
+            for leg, _ in raw_legs_by_day.get(trip_day_id, []):
+                if leg.from_stop_id in stop_ids and leg.to_stop_id in stop_ids:
+                    parent_ids[leg.to_stop_id].add(leg.from_stop_id)
+
+            rank_by_stop_id: dict[UUID, int] = {}
+            remaining = set(stop_ids)
+            while remaining:
+                progressed = False
+                for stop in ordered_stops:
+                    if stop.id not in remaining:
+                        continue
+                    parents = parent_ids[stop.id]
+                    if not parents:
+                        rank_by_stop_id[stop.id] = 1
+                    elif parents.issubset(rank_by_stop_id):
+                        rank_by_stop_id[stop.id] = (
+                            max(rank_by_stop_id[parent_id] for parent_id in parents) + 1
+                        )
+                    else:
+                        continue
+                    remaining.remove(stop.id)
+                    progressed = True
+                if not progressed:
+                    for stop in ordered_stops:
+                        if stop.id in remaining:
+                            rank_by_stop_id[stop.id] = stop.position
+                    break
+
+            stops_by_rank: dict[int, list[orm.Stop]] = defaultdict(list)
+            for stop in ordered_stops:
+                stops_by_rank[rank_by_stop_id.get(stop.id, stop.position)].append(stop)
+
+            for rank, rank_stops in stops_by_rank.items():
+                sorted_rank_stops = sorted(
+                    rank_stops,
+                    key=lambda stop: (stop.starts_at_utc, stop.ends_at_utc, stop.position, stop.id),
+                )
+                if len(sorted_rank_stops) == 1:
+                    display_positions[sorted_rank_stops[0].id] = str(rank)
+                    continue
+                for index, stop in enumerate(sorted_rank_stops):
+                    display_positions[stop.id] = f"{rank}{alpha_suffix(index)}"
+
+        return display_positions
+
+    def alpha_suffix(index: int) -> str:
+        value = index
+        result = ""
+        while True:
+            result = chr(ord("a") + (value % 26)) + result
+            value = value // 26 - 1
+            if value < 0:
+                return result
+
+    def display_position_sort_key(value: str | None) -> tuple[int, str]:
+        if not value:
+            return (0, "")
+        digits = ""
+        suffix = ""
+        for character in value:
+            if character.isdigit() and not suffix:
+                digits += character
+            else:
+                suffix += character
+        return (int(digits) if digits else 0, suffix)
+
     def reconstruction_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
         latest_run = db.execute(
             select(orm.ReconstructionRun)
@@ -3464,18 +3552,37 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             .order_by(orm.TripLeg.created_at, orm.TripLeg.id)
         ).all()
-        legs_by_day: dict[UUID, list[ReconstructionLegResponse]] = {}
+        raw_legs_by_day: dict[UUID, list[tuple[orm.TripLeg, dict[str, object] | None]]] = {}
         for leg, geometry_json in leg_rows:
             geometry = json.loads(geometry_json) if isinstance(geometry_json, str) else None
-            legs_by_day.setdefault(leg.trip_day_id, []).append(
-                ReconstructionLegResponse(
-                    id=leg.id,
-                    fromStopId=leg.from_stop_id,
-                    toStopId=leg.to_stop_id,
-                    routeSource=leg.route_source,
-                    geometry=geometry,
+            raw_legs_by_day.setdefault(leg.trip_day_id, []).append((leg, geometry))
+
+        stop_display_position_by_id = display_positions_for_stops(
+            stops=[stop for stop, _, _, _ in stops],
+            raw_legs_by_day=raw_legs_by_day,
+        )
+        legs_by_day: dict[UUID, list[ReconstructionLegResponse]] = {}
+        for trip_day_id, raw_legs in raw_legs_by_day.items():
+            outgoing_counts: dict[UUID, int] = defaultdict(int)
+            incoming_counts: dict[UUID, int] = defaultdict(int)
+            for leg, _ in raw_legs:
+                outgoing_counts[leg.from_stop_id] += 1
+                incoming_counts[leg.to_stop_id] += 1
+            for leg, geometry in raw_legs:
+                is_forked = (
+                    outgoing_counts[leg.from_stop_id] > 1
+                    or incoming_counts[leg.to_stop_id] > 1
                 )
-            )
+                legs_by_day.setdefault(trip_day_id, []).append(
+                    ReconstructionLegResponse(
+                        id=leg.id,
+                        fromStopId=leg.from_stop_id,
+                        toStopId=leg.to_stop_id,
+                        routeSource=leg.route_source,
+                        isForked=is_forked,
+                        geometry=geometry,
+                    )
+                )
         for day_legs in legs_by_day.values():
             day_legs.sort(
                 key=lambda leg: (
@@ -3515,6 +3622,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 ReconstructionStopResponse(
                     id=stop.id,
                     position=stop.position,
+                    displayPosition=stop_display_position_by_id.get(stop.id),
                     title=stop.title,
                     note=stop.note,
                     startsAt=stop.starts_at_utc,
@@ -3527,6 +3635,16 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     mediaCount=media_count,
                     contributorCount=contributor_count,
                     moments=moment_items,
+                )
+            )
+        for day_stops in stops_by_day.values():
+            day_stops.sort(
+                key=lambda stop: (
+                    display_position_sort_key(stop.display_position),
+                    stop.starts_at,
+                    stop.ends_at,
+                    stop.position,
+                    stop.id,
                 )
             )
 

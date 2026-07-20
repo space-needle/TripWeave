@@ -2341,6 +2341,9 @@ function TripStoryExplorer({
   const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
   const [mergeStopError, setMergeStopError] = useState("");
   const [mergingStopKey, setMergingStopKey] = useState<string | null>(null);
+  const [mergePickerStopId, setMergePickerStopId] = useState<string | null>(
+    null,
+  );
   const [pendingMergeKey, setPendingMergeKey] = useState<string | null>(null);
   const [splitStopId, setSplitStopId] = useState<string | null>(null);
   const [splitStopError, setSplitStopError] = useState("");
@@ -2680,16 +2683,15 @@ function TripStoryExplorer({
     }
   }
 
-  async function mergeAdjacentStop(
-    sourceStopId: string,
-    targetStopId: string,
+  async function mergeTimelineStop(
+    mergeCandidateStopId: string,
+    selectedTargetStopId: string,
     dayId: string,
-    direction: "previous" | "next",
   ) {
     if (!onMergeStops) {
       return;
     }
-    const key = `${sourceStopId}:${targetStopId}`;
+    const key = `${mergeCandidateStopId}:${selectedTargetStopId}`;
     if (pendingMergeKey !== key) {
       setPendingMergeKey(key);
       setMergeStopError("");
@@ -2698,13 +2700,14 @@ function TripStoryExplorer({
     setMergingStopKey(key);
     setMergeStopError("");
     try {
-      await onMergeStops(sourceStopId, targetStopId);
-      onStateChange(selectStoryStop(state, targetStopId, dayId));
+      await onMergeStops(mergeCandidateStopId, selectedTargetStopId);
+      onStateChange(selectStoryStop(state, selectedTargetStopId, dayId));
       setPendingMergeKey(null);
+      setMergePickerStopId(null);
       setEditToolsStopId(null);
     } catch (error) {
       setMergeStopError(
-        `Could not merge ${direction} stop. ${messageFrom(error)}`,
+        `Could not merge stops. ${messageFrom(error)}`,
       );
     } finally {
       setMergingStopKey(null);
@@ -3097,12 +3100,13 @@ function TripStoryExplorer({
               ) : day.note ? (
                 <p className="timeline-note-preview">{day.note}</p>
               ) : null}
-              {day.stops.map((stop, stopIndex) => {
-                const previousStop = day.stops[stopIndex - 1] ?? null;
-                const nextStop = day.stops[stopIndex + 1] ?? null;
+              {day.stops.map((stop) => {
                 const isEditingTools = editToolsStopId === stop.id;
                 const canEditStop =
                   onRenameStop || onSetStopNote || onMergeStops || onSplitStop;
+                const mergeCandidates = day.stops.filter(
+                  (candidate) => candidate.id !== stop.id,
+                );
                 return (
                   <section
                     className={`timeline-stop ${
@@ -3143,7 +3147,12 @@ function TripStoryExplorer({
                             )
                           }
                         >
-                          <span>{displayStopTitle(stop)}</span>
+                          <span>
+                            <span className="timeline-stop-number">
+                              {stop.displayPosition}
+                            </span>
+                            {displayStopTitle(stop)}
+                          </span>
                           <small>
                             {stop.mediaCount} photos · {stop.contributorCount}{" "}
                             travelers
@@ -3170,6 +3179,7 @@ function TripStoryExplorer({
                                 setStopTitleDraft("");
                                 setRenameStopError("");
                                 setMergeStopError("");
+                                setMergePickerStopId(null);
                                 setPendingMergeKey(null);
                                 setSplitStopId(null);
                                 setSplitStopError("");
@@ -3324,87 +3334,36 @@ function TripStoryExplorer({
                               ) : null}
                             </form>
                           ) : null}
-                          {(onMergeStops && (previousStop || nextStop)) ||
+                          {(onMergeStops && mergeCandidates.length > 0) ||
                           (onSplitStop && stop.moments.length > 1) ? (
                             <div className="timeline-structure-tools">
-                              {onMergeStops && previousStop ? (
+                              {onMergeStops && mergeCandidates.length > 0 ? (
                                 <button
                                   type="button"
-                                  className={
-                                    pendingMergeKey ===
-                                    `${previousStop.id}:${stop.id}`
-                                      ? "timeline-tool-button pending"
-                                      : "timeline-tool-button"
-                                  }
+                                  className="timeline-tool-button"
                                   aria-label={
-                                    pendingMergeKey ===
-                                    `${previousStop.id}:${stop.id}`
-                                      ? "Confirm merge previous stop"
-                                      : "Merge with previous stop"
+                                    mergePickerStopId === stop.id
+                                      ? "Cancel merge"
+                                      : "Merge with another stop"
                                   }
                                   title={
-                                    pendingMergeKey ===
-                                    `${previousStop.id}:${stop.id}`
-                                      ? "Confirm merge previous"
-                                      : "Merge previous"
+                                    mergePickerStopId === stop.id
+                                      ? "Cancel merge"
+                                      : "Merge"
                                   }
-                                  disabled={
-                                    mergingStopKey ===
-                                    `${previousStop.id}:${stop.id}`
-                                  }
-                                  onClick={() =>
-                                    void mergeAdjacentStop(
-                                      previousStop.id,
-                                      stop.id,
-                                      day.id,
-                                      "previous",
-                                    )
-                                  }
+                                  onClick={() => {
+                                    setMergePickerStopId(
+                                      mergePickerStopId === stop.id
+                                        ? null
+                                        : stop.id,
+                                    );
+                                    setPendingMergeKey(null);
+                                    setMergeStopError("");
+                                  }}
                                 >
-                                  {pendingMergeKey ===
-                                  `${previousStop.id}:${stop.id}`
-                                    ? "Confirm prev"
-                                    : "Merge prev"}
-                                </button>
-                              ) : null}
-                              {onMergeStops && nextStop ? (
-                                <button
-                                  type="button"
-                                  className={
-                                    pendingMergeKey ===
-                                    `${nextStop.id}:${stop.id}`
-                                      ? "timeline-tool-button pending"
-                                      : "timeline-tool-button"
-                                  }
-                                  aria-label={
-                                    pendingMergeKey ===
-                                    `${nextStop.id}:${stop.id}`
-                                      ? "Confirm merge next stop"
-                                      : "Merge with next stop"
-                                  }
-                                  title={
-                                    pendingMergeKey ===
-                                    `${nextStop.id}:${stop.id}`
-                                      ? "Confirm merge next"
-                                      : "Merge next"
-                                  }
-                                  disabled={
-                                    mergingStopKey ===
-                                    `${nextStop.id}:${stop.id}`
-                                  }
-                                  onClick={() =>
-                                    void mergeAdjacentStop(
-                                      nextStop.id,
-                                      stop.id,
-                                      day.id,
-                                      "next",
-                                    )
-                                  }
-                                >
-                                  {pendingMergeKey ===
-                                  `${nextStop.id}:${stop.id}`
-                                    ? "Confirm next"
-                                    : "Merge next"}
+                                  {mergePickerStopId === stop.id
+                                    ? "Cancel merge"
+                                    : "Merge"}
                                 </button>
                               ) : null}
                               {onSplitStop && stop.moments.length > 1 ? (
@@ -3435,13 +3394,48 @@ function TripStoryExplorer({
                               ) : null}
                               {pendingMergeKey ? (
                                 <p className="timeline-stop-edit-hint">
-                                  Merge combines two stops. Click confirm to
-                                  continue.
+                                  Click the same stop again to confirm.
                                 </p>
                               ) : null}
                               {mergeStopError ? (
                                 <p className="error">{mergeStopError}</p>
                               ) : null}
+                            </div>
+                          ) : null}
+                          {onMergeStops &&
+                          mergePickerStopId === stop.id &&
+                          mergeCandidates.length > 0 ? (
+                            <div className="timeline-stop-merge-picker">
+                              <p>Merge {displayStopTitle(stop)} with:</p>
+                              <div className="timeline-stop-merge-options">
+                                {mergeCandidates.map((candidate) => {
+                                  const mergeKey = `${candidate.id}:${stop.id}`;
+                                  const pending = pendingMergeKey === mergeKey;
+                                  return (
+                                    <button
+                                      type="button"
+                                      className={
+                                        pending
+                                          ? "timeline-tool-button pending"
+                                          : "timeline-tool-button"
+                                      }
+                                      key={candidate.id}
+                                      disabled={mergingStopKey === mergeKey}
+                                      onClick={() =>
+                                        void mergeTimelineStop(
+                                          candidate.id,
+                                          stop.id,
+                                          day.id,
+                                        )
+                                      }
+                                    >
+                                      {pending
+                                        ? `Confirm ${candidate.displayPosition}`
+                                        : candidate.displayPosition}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           ) : null}
                           {onSplitStop &&
@@ -3948,6 +3942,7 @@ function StoryMapCanvas({
             dayId: leg.dayId,
             dayColor: dayColorMap.get(leg.dayId) ?? storyDayColors[0],
             routeSource: leg.routeSource,
+            isForked: leg.isForked,
           },
           geometry: leg.geometry,
         })),
@@ -4059,17 +4054,6 @@ function StoryMapCanvas({
         .filter((item) => item.coordinates),
     [dayColorMap, model.media, model.stops, stopDisplayCoordinates],
   );
-  const displayStopOrder = useMemo(() => {
-    const order = new Map<string, { position: number; count: number }>();
-    const dayIds = Array.from(new Set(model.stops.map((stop) => stop.dayId)));
-    for (const dayId of dayIds) {
-      const dayStops = model.stops.filter((stop) => stop.dayId === dayId);
-      dayStops.forEach((stop, index) => {
-        order.set(stop.id, { position: index + 1, count: dayStops.length });
-      });
-    }
-    return order;
-  }, [model.stops]);
   const stopMarkerData = useMemo(
     () =>
       model.stops
@@ -4086,32 +4070,18 @@ function StoryMapCanvas({
           );
           const featuredMedia =
             stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0] ?? null;
-          const order = displayStopOrder.get(stop.id);
-          const displayPosition = order?.position ?? stop.position;
-          const displayCount = order?.count ?? 1;
           return {
             stop,
             coordinates,
             featuredMedia,
             count: stopMedia.length,
-            flowLabel:
-              displayPosition === 1
-                ? "Start"
-                : displayPosition === displayCount
-                  ? "End"
-                  : String(displayPosition),
-            flowTone:
-              displayPosition === 1
-                ? "start"
-                : displayPosition === displayCount
-                  ? "end"
-                  : "step",
+            flowLabel: stop.displayPosition,
+            flowTone: stop.displayPosition === "1" ? "start" : "step",
             color: dayColorMap.get(stop.dayId) ?? storyDayColors[0],
           };
         }),
     [
       dayColorMap,
-      displayStopOrder,
       model.media,
       model.stops,
       state.selectedDayId,
@@ -4191,7 +4161,7 @@ function StoryMapCanvas({
         filter: ["!=", ["get", "routeSource"], "photo_inferred"],
         paint: {
           "line-color": ["get", "dayColor"],
-          "line-width": 4,
+          "line-width": ["case", ["==", ["get", "isForked"], true], 2.4, 4],
           "line-opacity": 0.9,
         },
       });
@@ -4202,7 +4172,7 @@ function StoryMapCanvas({
         filter: ["==", ["get", "routeSource"], "photo_inferred"],
         paint: {
           "line-color": ["get", "dayColor"],
-          "line-width": 3.4,
+          "line-width": ["case", ["==", ["get", "isForked"], true], 2, 3.4],
           "line-dasharray": [2, 2],
           "line-opacity": 0.82,
         },
@@ -4446,7 +4416,7 @@ function StoryMapCanvas({
         mediaFrame.appendChild(image);
       } else {
         const fallback = document.createElement("span");
-        fallback.textContent = String(stop.position);
+        fallback.textContent = stop.displayPosition;
         mediaFrame.appendChild(fallback);
       }
       bubble.appendChild(mediaFrame);

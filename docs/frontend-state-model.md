@@ -35,6 +35,10 @@ The frontend converts reconstruction API responses into a `StoryModel`:
 
 MapLibre receives GeoJSON sources for stops, media, and routes. Large point sets use source clustering. HTML markers are reserved only for a small selected set, such as the active stop or active moment photos.
 
+Stop markers use the reconstruction API's `displayPosition` value so forked days can show labels such as `2a` and `2b` without adding a separate map mode. Forked route edges remain visible in the same map mode but render thinner than ordinary shared route edges. Timeline stop navigation follows the displayed stop order, while map lines continue to represent actual contributor trace edges.
+
+Manual stop merge stays in the timeline editing surface. A user opens a stop's edit tools, chooses merge, then selects any other stop from the same day; the initially selected stop is kept as the merge target so labels and context remain as stable as possible.
+
 ## Map Style
 
 `NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL` can point to any MapLibre-compatible style. If it is empty, the app uses a bundled minimal local fallback style with no external tiles. External styles are responsible for correct tile attribution through the MapLibre style metadata.

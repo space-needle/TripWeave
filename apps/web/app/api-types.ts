@@ -179,6 +179,7 @@ export type ReconstructionLegResponse = {
   fromStopId: string;
   toStopId: string;
   routeSource: string;
+  isForked?: boolean;
   geometry?: Record<string, unknown> | null;
 };
 
@@ -227,6 +228,7 @@ export type ReconstructionRunResponse = {
 export type ReconstructionStopResponse = {
   id: string;
   position: number;
+  displayPosition?: string | null;
   title?: string | null;
   note?: string | null;
   startsAt: string;

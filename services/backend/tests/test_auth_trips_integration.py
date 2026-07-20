@@ -1563,6 +1563,120 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     )
 
 
+def test_group_route_displays_forked_stop_labels_and_trace_edges(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "fork-route-owner@example.com")
+    trip = create_trip(client, csrf_token, "Fork Route Trip")
+    trip_id = str(trip["id"])
+    with engine.begin() as connection:
+        owner_member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+        guest_member_id = str(
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO trip_members (trip_id, role, display_name)
+                    VALUES (CAST(:trip_id AS uuid), 'contributor', 'Guest')
+                    RETURNING id
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    media_rows = [
+        (
+            owner_member_id,
+            "owner-shared-start.jpg",
+            datetime(2026, 6, 8, 1, 0, tzinfo=UTC),
+            35.0,
+            127.0,
+            "1",
+        ),
+        (
+            guest_member_id,
+            "guest-shared-start.jpg",
+            datetime(2026, 6, 8, 1, 5, tzinfo=UTC),
+            35.0001,
+            127.0001,
+            "2",
+        ),
+        (
+            owner_member_id,
+            "owner-branch.jpg",
+            datetime(2026, 6, 8, 2, 0, tzinfo=UTC),
+            35.01,
+            127.01,
+            "3",
+        ),
+        (
+            guest_member_id,
+            "guest-branch.jpg",
+            datetime(2026, 6, 8, 2, 2, tzinfo=UTC),
+            35.02,
+            127.02,
+            "4",
+        ),
+        (
+            owner_member_id,
+            "owner-shared-end.jpg",
+            datetime(2026, 6, 8, 3, 0, tzinfo=UTC),
+            35.03,
+            127.03,
+            "5",
+        ),
+        (
+            guest_member_id,
+            "guest-shared-end.jpg",
+            datetime(2026, 6, 8, 3, 4, tzinfo=UTC),
+            35.0301,
+            127.0301,
+            "6",
+        ),
+    ]
+    for member_id, filename, captured_at, latitude, longitude, suffix in media_rows:
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=filename,
+            captured_at=captured_at,
+            latitude=latitude,
+            longitude=longitude,
+            sha256=suffix.zfill(64),
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+
+    assert reconstructed.status_code == 200, reconstructed.text
+    day = reconstructed.json()["days"][0]
+    stops = day["stops"]
+    assert [stop["displayPosition"] for stop in stops] == ["1", "2a", "2b", "3"]
+    assert [stop["contributorCount"] for stop in stops] == [2, 1, 1, 2]
+
+    edge_labels = {
+        (
+            next(stop["displayPosition"] for stop in stops if stop["id"] == leg["fromStopId"]),
+            next(stop["displayPosition"] for stop in stops if stop["id"] == leg["toStopId"]),
+        )
+        for leg in day["legs"]
+    }
+    assert edge_labels == {("1", "2a"), ("1", "2b"), ("2a", "3"), ("2b", "3")}
+    assert all(leg["isForked"] for leg in day["legs"])
+
+
 def test_split_stop_reorders_stops_and_rewires_trip_legs(
     client: TestClient, engine: Engine
 ) -> None:

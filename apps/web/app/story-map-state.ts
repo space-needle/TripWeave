@@ -39,6 +39,7 @@ export type StoryStopPoint = {
   dayId: string;
   label: string;
   position: number;
+  displayPosition: string;
   startsAt: string;
   endsAt: string;
   coordinates: [number, number] | null;
@@ -50,6 +51,7 @@ export type StoryLegLine = {
   fromStopId: string;
   toStopId: string;
   routeSource: string;
+  isForked: boolean;
   geometry: GeoJsonLineString | null;
 };
 
@@ -253,6 +255,7 @@ export function buildStoryModel(
         fromStopId: leg.fromStopId,
         toStopId: leg.toStopId,
         routeSource: leg.routeSource,
+        isForked: Boolean(leg.isForked),
         geometry: isLineString(leg.geometry) ? leg.geometry : null,
       });
     }
@@ -262,6 +265,7 @@ export function buildStoryModel(
         dayId: day.id,
         label: stop.title ?? stop.placeName ?? `Stop ${stop.position}`,
         position: stop.position,
+        displayPosition: stop.displayPosition ?? String(stop.position),
         startsAt: stop.startsAt,
         endsAt: stop.endsAt,
         coordinates:

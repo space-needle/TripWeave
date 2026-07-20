@@ -148,7 +148,7 @@ def reconstruct_trip(
     created = persist_clusters(db, run, trip.id, clusters, geocoder)
     review_count += assign_missing_gps(db, run, trip.id, usable, gps_points)
     moments = persist_moments(db, run, created, usable)
-    legs = persist_legs(db, run, created)
+    legs = persist_legs(db, run, created, usable)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
 
@@ -644,34 +644,19 @@ def rebuild_day_legs(db: Session, run: orm.ReconstructionRun, trip_day_id: UUID)
             orm.TripLeg.user_locked.is_(False),
         )
     )
-    stops = list(
-        db.scalars(
-            select(orm.Stop)
-            .where(orm.Stop.trip_day_id == trip_day_id)
-            .order_by(orm.Stop.position, orm.Stop.starts_at_utc)
-        )
-    )
     trip_day = db.get(orm.TripDay, trip_day_id)
     if trip_day is None:
         return
-    for previous, current in zip(stops, stops[1:], strict=False):
-        exists = db.execute(
-            select(orm.TripLeg).where(
-                orm.TripLeg.from_stop_id == previous.id,
-                orm.TripLeg.to_stop_id == current.id,
-            )
-        ).scalar_one_or_none()
-        if exists is not None:
-            exists.reconstruction_run_id = run.id
-            continue
+
+    for from_stop_id, to_stop_id in contributor_trace_edges_for_day(db, trip_day_id):
         db.add(
             orm.TripLeg(
                 trip_id=trip_day.trip_id,
                 trip_day_id=trip_day.id,
-                from_stop_id=previous.id,
-                to_stop_id=current.id,
+                from_stop_id=from_stop_id,
+                to_stop_id=to_stop_id,
                 route_source=RouteSource.PHOTO_INFERRED.value,
-                geometry=line_between_stops_wkt(db, previous.id, current.id),
+                geometry=line_between_stops_wkt(db, from_stop_id, to_stop_id),
                 **generated(run, 0.7),
             )
         )
@@ -1025,12 +1010,21 @@ def split_moments(media: list[MediaPoint]) -> list[list[MediaPoint]]:
 
 
 def persist_legs(
-    db: Session, run: orm.ReconstructionRun, created: dict[orm.TripDay, list[orm.Stop]]
+    db: Session,
+    run: orm.ReconstructionRun,
+    created: dict[orm.TripDay, list[orm.Stop]],
+    usable: list[MediaPoint],
 ) -> int:
     count = 0
     for trip_day, stops in created.items():
-        ordered = sorted(stops, key=lambda stop: stop.position)
-        for previous, current in zip(ordered, ordered[1:], strict=False):
+        stop_by_id = {stop.id: stop for stop in stops}
+        for from_stop_id, to_stop_id in contributor_trace_edges_for_points(
+            [point for point in usable if point.day == trip_day.day_date]
+        ):
+            previous = stop_by_id.get(from_stop_id)
+            current = stop_by_id.get(to_stop_id)
+            if previous is None or current is None:
+                continue
             db.add(
                 orm.TripLeg(
                     trip_id=trip_day.trip_id,
@@ -1044,6 +1038,88 @@ def persist_legs(
             )
             count += 1
     return count
+
+
+def contributor_trace_edges_for_points(points: list[MediaPoint]) -> list[tuple[UUID, UUID]]:
+    by_contributor: dict[UUID, list[MediaPoint]] = defaultdict(list)
+    for point in points:
+        if point.stop is not None and point.captured_at_utc is not None:
+            by_contributor[point.contributor_member_id].append(point)
+
+    edges: set[tuple[UUID, UUID]] = set()
+    ordered_edges: list[tuple[UUID, UUID]] = []
+    for contributor_points in by_contributor.values():
+        previous_stop_id: UUID | None = None
+        for point in sorted(
+            contributor_points, key=lambda item: (item.captured_at_utc or datetime.min, item.id)
+        ):
+            assert point.stop is not None
+            current_stop_id = point.stop.id
+            if previous_stop_id is not None and previous_stop_id != current_stop_id:
+                edge = (previous_stop_id, current_stop_id)
+                if edge not in edges:
+                    edges.add(edge)
+                    ordered_edges.append(edge)
+            previous_stop_id = current_stop_id
+    return ordered_edges
+
+
+def contributor_trace_edges_for_day(db: Session, trip_day_id: UUID) -> list[tuple[UUID, UUID]]:
+    rows = db.execute(
+        select(
+            orm.MediaItem.contributor_member_id,
+            orm.Moment.stop_id,
+            orm.MediaItem.effective_captured_at_utc,
+            orm.MediaItem.original_captured_at_utc,
+            orm.MediaItem.original_captured_at_local,
+            orm.MediaItem.created_at,
+            orm.MediaItem.id,
+        )
+        .join(orm.MomentMedia, orm.MomentMedia.media_item_id == orm.MediaItem.id)
+        .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+        .join(orm.Stop, orm.Stop.id == orm.Moment.stop_id)
+        .where(orm.Stop.trip_day_id == trip_day_id)
+        .order_by(
+            orm.MediaItem.contributor_member_id,
+            orm.MediaItem.effective_captured_at_utc,
+            orm.MediaItem.original_captured_at_utc,
+            orm.MediaItem.original_captured_at_local,
+            orm.MediaItem.created_at,
+            orm.MediaItem.id,
+        )
+    ).all()
+    by_contributor: dict[UUID, list[tuple[datetime | None, UUID, UUID]]] = defaultdict(list)
+    for (
+        contributor_id,
+        stop_id,
+        effective_captured_at,
+        original_captured_at,
+        original_local,
+        created_at,
+        media_id,
+    ) in rows:
+        captured_at = effective_captured_at or original_captured_at or original_local or created_at
+        by_contributor[contributor_id].append((captured_at, media_id, stop_id))
+
+    edges: set[tuple[UUID, UUID]] = set()
+    ordered_edges: list[tuple[UUID, UUID]] = []
+    for contributor_rows in by_contributor.values():
+        previous_stop_id: UUID | None = None
+        for _, _, stop_id in sorted(
+            contributor_rows,
+            key=lambda item: (datetime_sort_key(item[0]), item[1]),
+        ):
+            if previous_stop_id is not None and previous_stop_id != stop_id:
+                edge = (previous_stop_id, stop_id)
+                if edge not in edges:
+                    edges.add(edge)
+                    ordered_edges.append(edge)
+            previous_stop_id = stop_id
+    return ordered_edges
+
+
+def datetime_sort_key(value: datetime | None) -> str:
+    return value.isoformat() if value is not None else ""
 
 
 def find_place(

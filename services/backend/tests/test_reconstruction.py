@@ -10,6 +10,7 @@ from tripweave.adapters.nominatim_geocoder import NominatimGeocoder, geocode_res
 from tripweave.adapters.reconstruction import (
     MediaPoint,
     cluster_stops,
+    contributor_trace_edges_for_points,
     effective_day,
     media_capture_utc,
 )
@@ -93,6 +94,43 @@ def test_parallel_contributor_path_is_not_forced_into_same_stop() -> None:
     clusters_by_day = cluster_stops(points)
 
     assert [len(clusters) for clusters in clusters_by_day.values()] == [2]
+
+
+def test_contributor_trace_edges_preserve_fork_and_join_paths() -> None:
+    contributor_a = uuid4()
+    contributor_b = uuid4()
+    stop_one = orm.Stop(id=uuid4(), position=1)
+    stop_two_a = orm.Stop(id=uuid4(), position=2)
+    stop_two_b = orm.Stop(id=uuid4(), position=3)
+    stop_three = orm.Stop(id=uuid4(), position=4)
+    day = datetime(2026, 7, 2, 16, 0, tzinfo=UTC)
+    points = [
+        media_point(day, latitude=37.0, longitude=-122.0),
+        media_point(day.replace(minute=5), latitude=37.0, longitude=-122.0),
+        media_point(day.replace(hour=17), latitude=37.01, longitude=-122.01),
+        media_point(day.replace(hour=17, minute=2), latitude=37.02, longitude=-122.02),
+        media_point(day.replace(hour=18), latitude=37.03, longitude=-122.03),
+        media_point(day.replace(hour=18, minute=5), latitude=37.03, longitude=-122.03),
+    ]
+    for point, contributor_id, stop in [
+        (points[0], contributor_a, stop_one),
+        (points[1], contributor_b, stop_one),
+        (points[2], contributor_a, stop_two_a),
+        (points[3], contributor_b, stop_two_b),
+        (points[4], contributor_a, stop_three),
+        (points[5], contributor_b, stop_three),
+    ]:
+        point.contributor_member_id = contributor_id
+        point.stop = stop
+
+    edges = contributor_trace_edges_for_points(points)
+
+    assert edges == [
+        (stop_one.id, stop_two_a.id),
+        (stop_two_a.id, stop_three.id),
+        (stop_one.id, stop_two_b.id),
+        (stop_two_b.id, stop_three.id),
+    ]
 
 
 def test_manual_reverse_geocoder_returns_registered_place_name() -> None:
