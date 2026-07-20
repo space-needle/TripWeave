@@ -1,8 +1,12 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from tripweave.adapters import orm
 from tripweave.adapters.manual_geocoder import ManualGeocoder, ManualPlaceName
+from tripweave.adapters.nominatim_geocoder import NominatimGeocoder, geocode_result_from_nominatim
 from tripweave.adapters.reconstruction import (
     MediaPoint,
     cluster_stops,
@@ -120,3 +124,72 @@ def test_manual_reverse_geocoder_is_noop_without_nearby_place() -> None:
 
     assert result.name is None
     assert result.confidence is None
+
+
+def test_nominatim_result_prefers_poi_name_over_address() -> None:
+    result = geocode_result_from_nominatim(
+        {
+            "category": "amenity",
+            "type": "restaurant",
+            "name": "Veteran Kalguksu",
+            "importance": 0.64,
+            "address": {
+                "road": "Taejo-ro",
+                "neighbourhood": "Jeonju Hanok Village",
+                "city": "Jeonju",
+            },
+        }
+    )
+
+    assert result.name == "Veteran Kalguksu"
+    assert result.confidence == 0.64
+    assert result.source == "nominatim"
+
+
+def test_nominatim_result_falls_back_to_neighbourhood_not_full_address() -> None:
+    result = geocode_result_from_nominatim(
+        {
+            "category": "highway",
+            "type": "residential",
+            "display_name": "44, Taejo-ro, Wansan-gu, Jeonju, Jeollabuk-do, South Korea",
+            "address": {
+                "road": "Taejo-ro",
+                "neighbourhood": "Jeonju Hanok Village",
+                "city": "Jeonju",
+            },
+        }
+    )
+
+    assert result.name == "Jeonju Hanok Village"
+
+
+def test_nominatim_geocoder_serializes_requests_in_one_process() -> None:
+    active_requests = 0
+    max_active_requests = 0
+    lock = threading.Lock()
+
+    def opener(_request: object, _timeout_seconds: float) -> bytes:
+        nonlocal active_requests, max_active_requests
+        with lock:
+            active_requests += 1
+            max_active_requests = max(max_active_requests, active_requests)
+        time.sleep(0.01)
+        with lock:
+            active_requests -= 1
+        return b'{"category":"amenity","type":"cafe","name":"Hanok Cafe"}'
+
+    geocoder = NominatimGeocoder(min_interval_seconds=0, opener=opener)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                lambda index: geocoder.reverse_geocode(
+                    latitude=35.815 + index * 0.001,
+                    longitude=127.153,
+                ),
+                range(2),
+            )
+        )
+
+    assert [result.name for result in results] == ["Hanok Cafe", "Hanok Cafe"]
+    assert max_active_requests == 1

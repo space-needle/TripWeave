@@ -19,8 +19,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from tripweave.adapters import orm
 from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.database import check_database, create_database_engine
+from tripweave.adapters.geocoder_factory import create_geocoder
 from tripweave.adapters.local_blob_store import BlobNotFoundError
-from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.publication import PublicationError, publish_story_version
 from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.worker_heartbeat import write_heartbeat
@@ -43,6 +43,7 @@ from tripweave.domain.enums import (
 from tripweave.domain.storage import BlobRef
 from tripweave.logging import configure_logging
 from tripweave.ports.blob_store import BlobStore
+from tripweave.ports.geocoder import Geocoder
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ def run_worker(settings: Settings) -> None:
     check_database(engine)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
     blob_store = create_blob_store(settings)
+    geocoder = create_geocoder(settings)
     worker_id = f"worker-{uuid.uuid4()}"
 
     stop_event = threading.Event()
@@ -83,7 +85,7 @@ def run_worker(settings: Settings) -> None:
     threads = [
         threading.Thread(
             target=worker_loop,
-            args=(settings, session_factory, blob_store, worker_id, stop_event),
+            args=(settings, session_factory, blob_store, geocoder, worker_id, stop_event),
             daemon=True,
             name=f"tripweave-worker-{index}",
         )
@@ -114,6 +116,7 @@ def worker_loop(
     settings: Settings,
     session_factory: sessionmaker[Session],
     blob_store: BlobStore,
+    geocoder: Geocoder,
     worker_id: str,
     stop_event: threading.Event,
 ) -> None:
@@ -131,7 +134,7 @@ def worker_loop(
         if job is None:
             stop_event.wait(settings.worker_poll_seconds)
             continue
-        handle_job(settings, session_factory, blob_store, worker_id, job)
+        handle_job(settings, session_factory, blob_store, geocoder, worker_id, job)
 
 
 def claim_job(db: Session, settings: Settings, worker_id: str) -> ClaimedJob | None:
@@ -192,6 +195,7 @@ def handle_job(
     settings: Settings,
     session_factory: sessionmaker[Session],
     blob_store: BlobStore,
+    geocoder: Geocoder,
     worker_id: str,
     job: ClaimedJob,
 ) -> None:
@@ -212,7 +216,7 @@ def handle_job(
             and job.target_type == ProcessingTargetType.TRIP.value
         ):
             with session_factory() as db:
-                reconstruct_queued_trip(db, job.target_id)
+                reconstruct_queued_trip(db, job.target_id, geocoder)
                 complete_job(db, job.id)
         elif (
             job.job_type == ProcessingJobType.PUBLICATION.value
@@ -298,11 +302,11 @@ def ingest_media(
     db.commit()
 
 
-def reconstruct_queued_trip(db: Session, trip_id: UUID) -> None:
+def reconstruct_queued_trip(db: Session, trip_id: UUID, geocoder: Geocoder) -> None:
     trip = db.get(orm.Trip, trip_id)
     if trip is None:
         raise MediaProcessingError("trip_not_found", "Trip was not found")
-    reconstruct_trip(db=db, trip=trip, geocoder=ManualGeocoder())
+    reconstruct_trip(db=db, trip=trip, geocoder=geocoder)
 
 
 def apply_processed_media(

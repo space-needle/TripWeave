@@ -17,6 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from alembic import command
 from tripweave.adapters.blob_store_factory import create_blob_store
+from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.config import Settings, get_settings
 from tripweave.domain.storage import BlobRef
 from tripweave.entrypoints.api.main import create_app
@@ -286,6 +287,7 @@ def run_one_worker_job(client: TestClient, engine: Engine) -> None:
         app.state.settings,
         session_factory,
         app.state.blob_store,
+        app.state.geocoder,
         "test-worker",
         job,
     )
@@ -1050,7 +1052,7 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
     with session_factory() as db:
         job = claim_job(db, settings, "test-worker")
     assert job is not None
-    handle_job(settings, session_factory, blob_store, "test-worker", job)
+    handle_job(settings, session_factory, blob_store, ManualGeocoder(), "test-worker", job)
 
     with engine.connect() as connection:
         state = connection.execute(
@@ -1086,6 +1088,7 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
         settings,
         session_factory,
         blob_store,
+        ManualGeocoder(),
         "test-worker",
         ClaimedJob(
             id=job.id,

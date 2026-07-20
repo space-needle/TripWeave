@@ -21,12 +21,12 @@ from sqlalchemy.orm import Session as DbSession
 from tripweave.adapters import orm
 from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.database import check_database, create_database_engine, get_postgis_version
+from tripweave.adapters.geocoder_factory import create_geocoder
 from tripweave.adapters.local_blob_store import (
     BlobNotFoundError,
     BlobSizeExceededError,
     InvalidGrantError,
 )
-from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.publication import PublicationError, blob_ref_from_manifest, load_manifest
 from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.transactions import create_session_factory
@@ -173,7 +173,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         window_seconds=resolved_settings.action_rate_limit_window_seconds,
     )
     app.state.blob_store = create_blob_store(resolved_settings)
-    app.state.geocoder = ManualGeocoder()
+    app.state.geocoder = create_geocoder(resolved_settings)
 
     app.add_middleware(
         CORSMiddleware,

@@ -397,11 +397,9 @@ def create_incremental_stop(
     assert point.captured_at_utc is not None
     assert point.latitude is not None and point.longitude is not None
     trip_day = find_or_create_trip_day(db, run, trip_id, point)
+    geocode_result = geocoder.reverse_geocode(latitude=point.latitude, longitude=point.longitude)
     place = find_incremental_place(db, trip_id, point.latitude, point.longitude)
     if place is None:
-        geocode_result = geocoder.reverse_geocode(
-            latitude=point.latitude, longitude=point.longitude
-        )
         place = orm.Place(
             trip_id=trip_id,
             name=geocode_result.name,
@@ -415,11 +413,13 @@ def create_incremental_stop(
         )
         db.add(place)
         db.flush()
+    elif place.name is None and geocode_result.name is not None and not place.user_locked:
+        place.name = geocode_result.name
     stop = orm.Stop(
         trip_id=trip_id,
         trip_day_id=trip_day.id,
         place_id=place.id,
-        title=place.name,
+        title=geocode_result.name or place.name,
         position=next_stop_position(db, trip_day.id),
         starts_at_utc=point.captured_at_utc,
         ends_at_utc=point.captured_at_utc,
@@ -845,11 +845,11 @@ def persist_clusters(
         db.flush()
         stops: list[orm.Stop] = []
         for stop_position, cluster in enumerate(clusters, start=1):
+            geocode_result = geocoder.reverse_geocode(
+                latitude=cluster.latitude, longitude=cluster.longitude
+            )
             place = find_place(known_places, cluster.latitude, cluster.longitude)
             if place is None:
-                geocode_result = geocoder.reverse_geocode(
-                    latitude=cluster.latitude, longitude=cluster.longitude
-                )
                 name = geocode_result.name
                 place = orm.Place(
                     trip_id=trip_id,
@@ -865,11 +865,13 @@ def persist_clusters(
                 db.add(place)
                 db.flush()
                 known_places.append((place, cluster.latitude, cluster.longitude))
+            elif place.name is None and geocode_result.name is not None and not place.user_locked:
+                place.name = geocode_result.name
             stop = orm.Stop(
                 trip_id=trip_id,
                 trip_day_id=trip_day.id,
                 place_id=place.id,
-                title=place.name,
+                title=geocode_result.name or place.name,
                 position=stop_position,
                 starts_at_utc=cluster.start,
                 ends_at_utc=cluster.end,

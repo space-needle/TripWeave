@@ -17,6 +17,19 @@ from tripweave.adapters import orm
 from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.config import get_settings
+from tripweave.ports.geocoder import GeocodeResult
+
+
+class CountingGeocoder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, float]] = []
+
+    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+        self.calls.append((latitude, longitude))
+        return GeocodeResult(name=f"Place {len(self.calls)}", confidence=0.88, source="test")
+
+    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
+        return self.reverse_geocode(latitude=latitude, longitude=longitude)
 
 
 def get_test_database_url() -> str | None:
@@ -288,11 +301,13 @@ def test_reconstruction_creates_days_stops_moments_reviews_and_preserves_locked(
     with Session(migrated_database) as session:
         db_trip = session.get(orm.Trip, trip["id"])
         assert db_trip is not None
-        summary = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        geocoder = CountingGeocoder()
+        summary = reconstruct_trip(db=session, trip=db_trip, geocoder=geocoder)
         assert summary.days == 2
         assert summary.stops >= 4
         assert summary.moments >= 4
         assert summary.review_items == 2
+        assert len(geocoder.calls) == summary.stops
 
         shared_moments = session.execute(
             text(

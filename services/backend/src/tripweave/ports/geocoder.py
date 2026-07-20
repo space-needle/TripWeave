@@ -10,6 +10,8 @@ class GeocodeResult:
 
 
 class Geocoder(Protocol):
+    """Provider-neutral reverse geocoder for human-readable place names."""
+
     def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult: ...
 
     def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult: ...

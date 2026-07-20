@@ -82,6 +82,22 @@ class Settings(BaseSettings):
     storage_store_aliases: str = Field(
         default="media_private,story_published", alias="TRIPWEAVE_STORAGE_STORE_ALIASES"
     )
+    geocoder_adapter: str = Field(default="manual", alias="TRIPWEAVE_GEOCODER_ADAPTER")
+    nominatim_endpoint: str = Field(
+        default="https://nominatim.openstreetmap.org/reverse",
+        alias="TRIPWEAVE_NOMINATIM_ENDPOINT",
+    )
+    nominatim_user_agent: str = Field(
+        default="TripWeave local MVP (https://github.com/openai/tripweave)",
+        alias="TRIPWEAVE_NOMINATIM_USER_AGENT",
+    )
+    nominatim_accept_language: str = Field(default="en", alias="TRIPWEAVE_NOMINATIM_LANGUAGE")
+    nominatim_timeout_seconds: float = Field(
+        default=2.0, ge=0.1, alias="TRIPWEAVE_NOMINATIM_TIMEOUT_SECONDS"
+    )
+    nominatim_min_interval_seconds: float = Field(
+        default=1.0, ge=0.0, alias="TRIPWEAVE_NOMINATIM_MIN_INTERVAL_SECONDS"
+    )
     oci_auth_mode: str = Field(default="instance_principal", alias="TRIPWEAVE_OCI_AUTH_MODE")
     oci_region: str = Field(default="", alias="TRIPWEAVE_OCI_REGION")
     oci_namespace: str = Field(default="", alias="TRIPWEAVE_OCI_NAMESPACE")
