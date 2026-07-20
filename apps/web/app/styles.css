@@ -588,6 +588,28 @@ button.needs-update {
   gap: 10px;
 }
 
+.upload-status {
+  display: grid;
+  gap: 9px;
+}
+
+.upload-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.upload-summary strong {
+  font-size: 0.92rem;
+}
+
+.upload-summary small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 .upload-row {
   display: grid;
   gap: 9px;
@@ -1173,6 +1195,36 @@ button.needs-update {
 
 .segmented-control button.active {
   border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.visibility-toggle {
+  width: fit-content;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #f6f8f9;
+}
+
+.visibility-toggle button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.visibility-toggle button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.visibility-toggle button.active {
   background: var(--accent);
   color: #fff;
 }
@@ -2313,6 +2365,13 @@ button.thumb-frame:focus-visible {
 .media-state {
   color: var(--accent);
   font-weight: 700;
+}
+
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .media-details strong,

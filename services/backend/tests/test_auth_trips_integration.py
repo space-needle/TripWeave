@@ -533,12 +533,59 @@ def test_account_invitation_adds_trip_to_contributor_library(
     csrf_contributor = register(
         contributor_client, "library-contributor@example.com", "Library Contributor"
     )
-    accept_invitation(contributor_client, token, csrf_contributor)
+    accepted = accept_invitation(contributor_client, token, csrf_contributor)
 
     trips = contributor_client.get("/trips")
     assert trips.status_code == 200
     assert trips.json()["trips"][0]["id"] == trip["id"]
     assert trips.json()["trips"][0]["role"] == "contributor"
+    assert trips.json()["trips"][0]["memberId"] == accepted["id"]
+
+
+def test_same_account_reuses_member_across_new_invitations(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    csrf_owner = register(client, "reuse-owner@example.com")
+    trip = create_trip(client, csrf_owner)
+    first_invitation = create_invitation(client, csrf_owner, trip["id"])
+
+    contributor_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_contributor = register(
+        contributor_client, "reuse-contributor@example.com", "Reuse Contributor"
+    )
+    first_member = accept_invitation(
+        contributor_client,
+        token_from_invite_url(str(first_invitation["inviteUrl"])),
+        csrf_contributor,
+    )
+    media_item_id = upload_completed_jpeg(
+        contributor_client,
+        csrf_contributor,
+        trip["id"],
+        jpeg_bytes(),
+        filename="first-link.jpg",
+    )
+
+    second_invitation = create_invitation(client, csrf_owner, trip["id"])
+    second_member = accept_invitation(
+        contributor_client,
+        token_from_invite_url(str(second_invitation["inviteUrl"])),
+        csrf_contributor,
+    )
+
+    assert second_member["id"] == first_member["id"]
+    media_response = contributor_client.get(f"/trips/{trip['id']}/media")
+    assert media_response.status_code == 200
+    media_by_id = {item["id"]: item for item in media_response.json()["media"]}
+    assert media_by_id[media_item_id]["contributorMemberId"] == first_member["id"]
+    assert media_by_id[media_item_id]["canUpdateVisibility"] is True
 
 
 def test_account_contributor_can_view_shared_story_without_editing(
@@ -760,13 +807,21 @@ def test_contributor_cannot_access_other_trip_or_alter_other_contributor_media(
     media_one = upload_completed_jpeg(
         contributor_one, csrf_contributor_one, trip_one["id"], jpeg_bytes()
     )
-    upload_completed_jpeg(
+    media_two = upload_completed_jpeg(
         contributor_two,
         csrf_contributor_two,
         trip_one["id"],
         jpeg_bytes(),
         filename="two.jpg",
     )
+
+    listed = contributor_one.get(f"/trips/{trip_one['id']}/media")
+    assert listed.status_code == 200
+    can_update_by_media_id = {
+        item["id"]: item["canUpdateVisibility"] for item in listed.json()["media"]
+    }
+    assert can_update_by_media_id[media_one] is True
+    assert can_update_by_media_id[media_two] is False
 
     assert contributor_one.get(f"/trips/{trip_two['id']}/media").status_code == 404
     denied = contributor_two.patch(

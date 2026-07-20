@@ -108,6 +108,7 @@ export type MediaItemResponse = {
   originalDeletedAt?: string | null;
   visibility: string;
   includeInStory: boolean;
+  canUpdateVisibility: boolean;
   capturedAt?: string | null;
   gpsPresent: boolean;
   width?: number | null;
@@ -334,6 +335,7 @@ export type TripResponse = {
   status: string;
   visibility: string;
   role: string;
+  memberId: string;
   createdAt: string;
   updatedAt: string;
 };

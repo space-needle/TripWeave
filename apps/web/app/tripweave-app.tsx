@@ -293,13 +293,6 @@ function OwnerWorkspace() {
     [uploadSessions],
   );
 
-  const overallProgress = useMemo(() => {
-    const entries = Object.values(uploadProgress);
-    const loaded = entries.reduce((total, item) => total + item.loaded, 0);
-    const total = entries.reduce((sum, item) => sum + item.total, 0);
-    return total > 0 ? Math.round((loaded / total) * 100) : 0;
-  }, [uploadProgress]);
-
   const hasProcessingMedia = useMemo(
     () =>
       media.some((item) =>
@@ -1537,18 +1530,6 @@ function OwnerWorkspace() {
                   <p>JPEG and HEIC</p>
                 </div>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
-                {overallProgress > 0 ? (
-                  <div>
-                    <label htmlFor="overall-upload-progress">
-                      Overall progress
-                    </label>
-                    <progress
-                      id="overall-upload-progress"
-                      max={100}
-                      value={overallProgress}
-                    />
-                  </div>
-                ) : null}
                 <UploadFileList
                   files={selectedUploadFiles}
                   progress={uploadProgress}
@@ -1563,8 +1544,10 @@ function OwnerWorkspace() {
                 <MediaList
                   media={media}
                   onRetry={canOrganizeSelectedTrip ? retryMedia : undefined}
-                  onVisibilityChange={
-                    canOrganizeSelectedTrip ? updateMediaVisibility : undefined
+                  onVisibilityChange={updateMediaVisibility}
+                  canChangeVisibility={(item) =>
+                    Boolean(item.canUpdateVisibility) ||
+                    item.contributorMemberId === selectedTrip?.memberId
                   }
                   timezoneId={selectedTrip?.timezoneId}
                 />
@@ -2148,12 +2131,15 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
   }
 
   async function updateOwnMedia(item: MediaItemResponse, visibility: string) {
-    await api.updateMedia(item.id, { visibility });
+    await guestApi.updateMedia(item.id, {
+      visibility,
+      includeInStory: visibility === "story",
+    });
     await loadContribution();
   }
 
   async function deleteOwnMedia(item: MediaItemResponse) {
-    await api.updateMedia(item.id, { deleted: true });
+    await guestApi.updateMedia(item.id, { deleted: true });
     await loadContribution();
   }
 
@@ -2205,10 +2191,14 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
             <MediaList
               media={media}
               onRetry={async (item) => {
-                await api.retryMedia(item.id);
+                await guestApi.retryMedia(item.id);
                 await loadContribution();
               }}
               onVisibilityChange={updateOwnMedia}
+              canChangeVisibility={(item) =>
+                Boolean(item.canUpdateVisibility) ||
+                item.contributorMemberId === guest?.id
+              }
               onDelete={deleteOwnMedia}
             />
           </>
@@ -4902,65 +4892,120 @@ function UploadFileList({
   onCancel: (file: UploadFileResponse) => void;
   onRetry: (file: UploadFileResponse, selectedFile?: File) => void;
 }) {
-  if (files.length === 0) {
-    return <p>No uploads yet.</p>;
+  const visibleFiles = files
+    .map((file) => {
+      const itemProgress = progress[file.id];
+      const status = itemProgress?.status ?? file.state;
+      return { file, itemProgress, status };
+    })
+    .filter(({ file, itemProgress, status }) =>
+      shouldShowUploadStatus(file, itemProgress, status),
+    );
+
+  if (visibleFiles.length === 0) {
+    return null;
   }
+
+  const failedCount = visibleFiles.filter(
+    ({ file, itemProgress, status }) =>
+      status === "failed" || Boolean(itemProgress?.error || file.errorMessage),
+  ).length;
+  const activeCount = visibleFiles.length - failedCount;
+  const loaded = visibleFiles.reduce(
+    (total, { itemProgress }) => total + (itemProgress?.loaded ?? 0),
+    0,
+  );
+  const total = visibleFiles.reduce(
+    (sum, { file, itemProgress }) =>
+      sum + (itemProgress?.total ?? file.byteSize ?? 0),
+    0,
+  );
+  const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+
   return (
-    <div className="upload-list" role="list">
-      {files.map((file) => {
-        const itemProgress = progress[file.id];
-        const loaded = itemProgress?.loaded ?? 0;
-        const total = itemProgress?.total ?? file.byteSize ?? 0;
-        const status = itemProgress?.status ?? file.state;
-        const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
-        return (
-          <div className="upload-row" key={file.id} role="listitem">
-            <div>
-              <strong>{file.filename}</strong>
-              <small>
-                {status} · {file.mimeType ?? "unknown type"}
-              </small>
-            </div>
-            <progress
-              max={100}
-              value={percent}
-              aria-label={`${file.filename} progress`}
-            />
-            <div className="button-row">
-              {["uploading", "pending", "registered", "failed"].includes(
-                status,
-              ) ? (
-                <button type="button" onClick={() => onCancel(file)}>
-                  Cancel
-                </button>
+    <section className="upload-status" aria-label="Upload status">
+      <div className="upload-summary">
+        <strong>
+          {activeCount > 0
+            ? `Uploading ${activeCount}`
+            : "Uploads need attention"}
+        </strong>
+        <small>
+          {failedCount > 0 ? `Failed ${failedCount}` : `${percent}% complete`}
+        </small>
+      </div>
+      {activeCount > 0 ? (
+        <progress max={100} value={percent} aria-label="Upload progress" />
+      ) : null}
+      <div className="upload-list" role="list">
+        {visibleFiles.map(({ file, itemProgress, status }) => {
+          const loaded = itemProgress?.loaded ?? 0;
+          const total = itemProgress?.total ?? file.byteSize ?? 0;
+          const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          return (
+            <div className="upload-row" key={file.id} role="listitem">
+              <div>
+                <strong>{file.filename}</strong>
+                <small>
+                  {status} · {file.mimeType ?? "unknown type"}
+                </small>
+              </div>
+              <progress
+                max={100}
+                value={percent}
+                aria-label={`${file.filename} progress`}
+              />
+              <div className="button-row">
+                {["uploading", "pending", "registered", "failed"].includes(
+                  status,
+                ) ? (
+                  <button type="button" onClick={() => onCancel(file)}>
+                    Cancel
+                  </button>
+                ) : null}
+                {file.grant &&
+                (status === "failed" ||
+                  file.state === "registered" ||
+                  file.state === "transferring") ? (
+                  <label className="file-action">
+                    Retry
+                    <input
+                      accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
+                      type="file"
+                      onChange={(event) => {
+                        const selectedFile = event.target.files?.[0];
+                        if (selectedFile) {
+                          onRetry(file, selectedFile);
+                        }
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                ) : null}
+              </div>
+              {itemProgress?.error ? (
+                <p className="error">{itemProgress.error}</p>
+              ) : file.errorMessage ? (
+                <p className="error">{file.errorMessage}</p>
               ) : null}
-              {file.grant &&
-              (status === "failed" ||
-                file.state === "registered" ||
-                file.state === "transferring") ? (
-                <label className="file-action">
-                  Retry
-                  <input
-                    accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
-                    type="file"
-                    onChange={(event) => {
-                      const selectedFile = event.target.files?.[0];
-                      if (selectedFile) {
-                        onRetry(file, selectedFile);
-                      }
-                      event.target.value = "";
-                    }}
-                  />
-                </label>
-              ) : null}
             </div>
-            {itemProgress?.error ? (
-              <p className="error">{itemProgress.error}</p>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function shouldShowUploadStatus(
+  file: UploadFileResponse,
+  itemProgress: UploadProgress | undefined,
+  status: string,
+) {
+  return (
+    Boolean(itemProgress?.error || file.errorMessage) ||
+    ["pending", "uploading", "registered", "transferring", "failed"].includes(
+      status,
+    )
   );
 }
 
@@ -5484,12 +5529,14 @@ function MediaList({
   media,
   onRetry,
   onVisibilityChange,
+  canChangeVisibility,
   onDelete,
   timezoneId,
 }: {
   media: MediaItemResponse[];
   onRetry?: (item: MediaItemResponse) => void;
   onVisibilityChange?: (item: MediaItemResponse, visibility: string) => void;
+  canChangeVisibility?: (item: MediaItemResponse) => boolean;
   onDelete?: (item: MediaItemResponse) => void;
   timezoneId?: string;
 }) {
@@ -5502,8 +5549,8 @@ function MediaList({
     return <p>No processed media yet.</p>;
   }
   const visibilityLabels: Record<string, string> = {
-    trip: "Trip members",
-    story: "Publishable",
+    trip: "Member only",
+    story: "Public",
     private: "Private",
     excluded: "Excluded",
   };
@@ -5536,7 +5583,6 @@ function MediaList({
               </small>
               <small className="media-state">
                 {visibilityLabels[item.visibility] ?? item.visibility}
-                {item.includeInStory ? " · included in story" : ""}
               </small>
               <dl>
                 <div>
@@ -5564,46 +5610,37 @@ function MediaList({
                   Retry processing
                 </button>
               ) : null}
-              {onVisibilityChange ? (
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className={item.visibility === "trip" ? "active" : ""}
-                    aria-pressed={item.visibility === "trip"}
-                    onClick={() => onVisibilityChange(item, "trip")}
+              {onVisibilityChange &&
+              (canChangeVisibility ? canChangeVisibility(item) : true) ? (
+                <div className="media-actions">
+                  <div
+                    className="visibility-toggle"
+                    role="group"
+                    aria-label="Photo visibility"
                   >
-                    Trip members
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      item.visibility === "story" && item.includeInStory
-                        ? "active"
-                        : ""
-                    }
-                    aria-pressed={
-                      item.visibility === "story" && item.includeInStory
-                    }
-                    onClick={() => onVisibilityChange(item, "story")}
-                  >
-                    Publishable
-                  </button>
-                  <button
-                    type="button"
-                    className={item.visibility === "private" ? "active" : ""}
-                    aria-pressed={item.visibility === "private"}
-                    onClick={() => onVisibilityChange(item, "private")}
-                  >
-                    Private
-                  </button>
-                  <button
-                    type="button"
-                    className={item.visibility === "excluded" ? "active" : ""}
-                    aria-pressed={item.visibility === "excluded"}
-                    onClick={() => onVisibilityChange(item, "excluded")}
-                  >
-                    Exclude
-                  </button>
+                    <button
+                      type="button"
+                      className={item.visibility === "trip" ? "active" : ""}
+                      aria-pressed={item.visibility === "trip"}
+                      onClick={() => onVisibilityChange(item, "trip")}
+                    >
+                      Member only
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        item.visibility === "story" && item.includeInStory
+                          ? "active"
+                          : ""
+                      }
+                      aria-pressed={
+                        item.visibility === "story" && item.includeInStory
+                      }
+                      onClick={() => onVisibilityChange(item, "story")}
+                    >
+                      Public
+                    </button>
+                  </div>
                   {onDelete ? (
                     <button type="button" onClick={() => onDelete(item)}>
                       Delete

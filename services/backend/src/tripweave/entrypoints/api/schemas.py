@@ -142,6 +142,7 @@ class TripResponse(BaseModel):
     status: str
     visibility: str
     role: str
+    member_id: UUID = Field(alias="memberId")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -279,6 +280,7 @@ class MediaItemResponse(BaseModel):
     original_deleted_at: datetime | None = Field(default=None, alias="originalDeletedAt")
     visibility: str
     include_in_story: bool = Field(alias="includeInStory")
+    can_update_visibility: bool = Field(alias="canUpdateVisibility")
     captured_at: datetime | None = Field(default=None, alias="capturedAt")
     gps_present: bool = Field(alias="gpsPresent")
     width: int | None = None

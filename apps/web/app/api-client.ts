@@ -314,6 +314,24 @@ export const guestApi = {
       withGuestActor(),
     );
   },
+  updateMedia(
+    id: string,
+    payload: MediaUpdateRequest,
+  ): Promise<MediaItemResponse> {
+    return apiRequest<MediaItemResponse>(
+      `/media/${id}`,
+      withGuestActor({
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+  retryMedia(id: string): Promise<MediaItemResponse> {
+    return apiRequest<MediaItemResponse>(
+      `/media/${id}/retry`,
+      withGuestActor({ method: "POST" }),
+    );
+  },
   createUploadSession(
     tripId: string,
     payload: UploadSessionCreateRequest,

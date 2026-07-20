@@ -664,7 +664,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
         return member
 
-    def trip_response(trip: orm.Trip, role: str) -> TripResponse:
+    def trip_response(trip: orm.Trip, role: str, member_id: UUID) -> TripResponse:
         return TripResponse(
             id=trip.id,
             title=trip.title,
@@ -676,6 +676,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             status=trip.status,
             visibility=trip.visibility,
             role=role,
+            memberId=member_id,
             createdAt=trip.created_at,
             updatedAt=trip.updated_at,
         )
@@ -1133,7 +1134,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.add(member)
         db.flush()
         db.commit()
-        return trip_response(trip, member.role)
+        return trip_response(trip, member.role, member.id)
 
     @app.post(
         "/trips/{trip_id}/invitations",
@@ -1346,7 +1347,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> TripsListResponse:
         rows = db.execute(
-            select(orm.Trip, orm.TripMember.role)
+            select(orm.Trip, orm.TripMember.role, orm.TripMember.id)
             .join(orm.TripMember, orm.TripMember.trip_id == orm.Trip.id)
             .where(
                 orm.TripMember.user_id == auth.user.id,
@@ -1354,7 +1355,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             .order_by(orm.Trip.created_at.desc(), orm.Trip.id)
         ).all()
-        return TripsListResponse(trips=[trip_response(trip, role) for trip, role in rows])
+        return TripsListResponse(
+            trips=[trip_response(trip, role, member_id) for trip, role, member_id in rows]
+        )
 
     @app.get("/trips/{trip_id}", response_model=TripResponse)
     def get_trip(
@@ -1368,7 +1371,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         trip = db.get(orm.Trip, trip_id)
         if trip is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
-        return trip_response(trip, member.role)
+        return trip_response(trip, member.role, member.id)
 
     @app.patch("/trips/{trip_id}", response_model=TripResponse)
     def update_trip(
@@ -1393,7 +1396,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             setattr(trip, field_name, value)
         trip.updated_at = datetime.now(UTC)
         db.commit()
-        return trip_response(trip, member.role)
+        return trip_response(trip, member.role, member.id)
 
     @app.delete("/trips/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_trip(
@@ -1500,6 +1503,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         media_item: orm.MediaItem,
         contributor: orm.TripMember,
         group_summary: dict[str, object] | None = None,
+        *,
+        can_update_visibility: bool = False,
     ) -> MediaItemResponse:
         thumbnail = next(
             (asset for asset in media_item.assets if asset.asset_type == "thumbnail"),
@@ -1527,6 +1532,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             originalDeletedAt=media_item.original_deleted_at,
             visibility=media_item.visibility,
             includeInStory=media_item.include_in_story,
+            canUpdateVisibility=can_update_visibility,
             capturedAt=media_item.effective_captured_at_utc
             or media_item.original_captured_at_utc
             or media_item.original_captured_at_local,
@@ -1547,6 +1553,20 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             representativeMediaItemId=representative_id
             if isinstance(representative_id, UUID)
             else None,
+        )
+
+    def actor_can_update_media_visibility(
+        media_item: orm.MediaItem,
+        contributor: orm.TripMember,
+        member: orm.TripMember,
+        actor: AuthenticatedActor,
+    ) -> bool:
+        if media_item.contributor_member_id == member.id:
+            return True
+        return (
+            actor.user is not None
+            and contributor.user_id is not None
+            and contributor.user_id == actor.user.id
         )
 
     def similarity_summary_by_media(db: DbSession, trip_id: UUID) -> dict[UUID, dict[str, object]]:
@@ -3011,6 +3031,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     media_item,
                     contributor,
                     group_summary.get(media_item.id),
+                    can_update_visibility=actor_can_update_media_visibility(
+                        media_item, contributor, member, actor
+                    ),
                 )
                 for media_item, contributor in rows
             ]
@@ -3118,7 +3141,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         media_item.processing_state = ProcessingState.PENDING.value
         media_item.updated_at = now
         db.commit()
-        return media_item_response(db, media_item, member)
+        contributor = db.get(orm.TripMember, media_item.contributor_member_id)
+        if contributor is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        return media_item_response(
+            db,
+            media_item,
+            contributor,
+            can_update_visibility=media_item.contributor_member_id == member.id,
+        )
 
     @app.patch("/media/{media_item_id}", response_model=MediaItemResponse)
     def update_media(
@@ -3135,9 +3166,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         member = member_for_actor(db, media_item.trip_id, actor)
         if member is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        contributor = db.get(orm.TripMember, media_item.contributor_member_id)
+        if contributor is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
 
         is_owner_editor = member.role in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}
-        is_contributor_owner = media_item.contributor_member_id == member.id
+        is_contributor_owner = actor_can_update_media_visibility(
+            media_item, contributor, member, actor
+        )
         if not is_owner_editor and not is_contributor_owner:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
 
@@ -3172,10 +3208,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
         media_item.updated_at = datetime.now(UTC)
         db.commit()
-        contributor = db.get(orm.TripMember, media_item.contributor_member_id)
-        if contributor is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
-        return media_item_response(db, media_item, contributor)
+        return media_item_response(
+            db,
+            media_item,
+            contributor,
+            can_update_visibility=is_contributor_owner,
+        )
 
     def story_update_status(
         db: DbSession,
