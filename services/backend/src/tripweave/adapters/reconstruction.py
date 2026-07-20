@@ -648,7 +648,7 @@ def rebuild_day_legs(db: Session, run: orm.ReconstructionRun, trip_day_id: UUID)
     if trip_day is None:
         return
 
-    for from_stop_id, to_stop_id in contributor_trace_edges_for_day(db, trip_day_id):
+    for from_stop_id, to_stop_id in continuity_edges_for_day(db, trip_day_id):
         db.add(
             orm.TripLeg(
                 trip_id=trip_day.trip_id,
@@ -1018,8 +1018,9 @@ def persist_legs(
     count = 0
     for trip_day, stops in created.items():
         stop_by_id = {stop.id: stop for stop in stops}
-        for from_stop_id, to_stop_id in contributor_trace_edges_for_points(
-            [point for point in usable if point.day == trip_day.day_date]
+        for from_stop_id, to_stop_id in continuity_edges_for_points(
+            [point for point in usable if point.day == trip_day.day_date],
+            stops,
         ):
             previous = stop_by_id.get(from_stop_id)
             current = stop_by_id.get(to_stop_id)
@@ -1040,7 +1041,16 @@ def persist_legs(
     return count
 
 
-def contributor_trace_edges_for_points(points: list[MediaPoint]) -> list[tuple[UUID, UUID]]:
+def continuity_edges_for_points(
+    points: list[MediaPoint], stops: list[orm.Stop]
+) -> list[tuple[UUID, UUID]]:
+    return continuity_edges_for_stops(
+        stops=stops,
+        observed_edges=observed_contributor_edges_for_points(points),
+    )
+
+
+def observed_contributor_edges_for_points(points: list[MediaPoint]) -> list[tuple[UUID, UUID]]:
     by_contributor: dict[UUID, list[MediaPoint]] = defaultdict(list)
     for point in points:
         if point.stop is not None and point.captured_at_utc is not None:
@@ -1064,7 +1074,21 @@ def contributor_trace_edges_for_points(points: list[MediaPoint]) -> list[tuple[U
     return ordered_edges
 
 
-def contributor_trace_edges_for_day(db: Session, trip_day_id: UUID) -> list[tuple[UUID, UUID]]:
+def continuity_edges_for_day(db: Session, trip_day_id: UUID) -> list[tuple[UUID, UUID]]:
+    stops = list(
+        db.scalars(
+            select(orm.Stop)
+            .where(orm.Stop.trip_day_id == trip_day_id)
+            .order_by(orm.Stop.starts_at_utc, orm.Stop.ends_at_utc, orm.Stop.position, orm.Stop.id)
+        )
+    )
+    return continuity_edges_for_stops(
+        stops=stops,
+        observed_edges=observed_contributor_edges_for_day(db, trip_day_id),
+    )
+
+
+def observed_contributor_edges_for_day(db: Session, trip_day_id: UUID) -> list[tuple[UUID, UUID]]:
     rows = db.execute(
         select(
             orm.MediaItem.contributor_member_id,
@@ -1116,6 +1140,113 @@ def contributor_trace_edges_for_day(db: Session, trip_day_id: UUID) -> list[tupl
                     ordered_edges.append(edge)
             previous_stop_id = stop_id
     return ordered_edges
+
+
+def continuity_edges_for_stops(
+    *, stops: list[orm.Stop], observed_edges: list[tuple[UUID, UUID]]
+) -> list[tuple[UUID, UUID]]:
+    ordered_stops = sorted(
+        stops,
+        key=lambda stop: (
+            stop.starts_at_utc,
+            stop.ends_at_utc,
+            stop.position,
+            stop.id,
+        ),
+    )
+    if not ordered_stops:
+        return []
+
+    rank_by_stop_id = stop_ranks(ordered_stops, observed_edges)
+    stops_by_rank: dict[int, list[orm.Stop]] = defaultdict(list)
+    for stop in ordered_stops:
+        stops_by_rank[rank_by_stop_id.get(stop.id, stop.position)].append(stop)
+    for rank_stops in stops_by_rank.values():
+        rank_stops.sort(
+            key=lambda stop: (
+                stop.starts_at_utc,
+                stop.ends_at_utc,
+                stop.position,
+                stop.id,
+            )
+        )
+
+    edges: set[tuple[UUID, UUID]] = set()
+    ordered_edges: list[tuple[UUID, UUID]] = []
+
+    def add_edge(from_stop_id: UUID, to_stop_id: UUID) -> None:
+        if from_stop_id == to_stop_id:
+            return
+        edge = (from_stop_id, to_stop_id)
+        if edge not in edges:
+            edges.add(edge)
+            ordered_edges.append(edge)
+
+    for from_stop_id, to_stop_id in observed_edges:
+        from_rank = rank_by_stop_id.get(from_stop_id)
+        to_rank = rank_by_stop_id.get(to_stop_id)
+        if from_rank is None or to_rank is None or to_rank <= from_rank + 1:
+            add_edge(from_stop_id, to_stop_id)
+            continue
+        path = [from_stop_id]
+        for rank in range(from_rank + 1, to_rank):
+            next_stop = stops_by_rank.get(rank, [None])[0]
+            if next_stop is not None:
+                path.append(next_stop.id)
+        path.append(to_stop_id)
+        for previous_stop_id, current_stop_id in zip(path, path[1:], strict=False):
+            add_edge(previous_stop_id, current_stop_id)
+
+    outgoing_stop_ids = {from_stop_id for from_stop_id, _ in ordered_edges}
+    ranks = sorted(stops_by_rank)
+    rank_index_by_value = {rank: index for index, rank in enumerate(ranks)}
+    for stop in ordered_stops:
+        if stop.id in outgoing_stop_ids:
+            continue
+        rank = rank_by_stop_id.get(stop.id, stop.position)
+        next_rank_index = rank_index_by_value.get(rank, -1) + 1
+        if next_rank_index <= 0 or next_rank_index >= len(ranks):
+            continue
+        next_stop = stops_by_rank[ranks[next_rank_index]][0]
+        add_edge(stop.id, next_stop.id)
+
+    return ordered_edges
+
+
+def stop_ranks(stops: list[orm.Stop], edges: list[tuple[UUID, UUID]]) -> dict[UUID, int]:
+    if not edges:
+        return {stop.id: index for index, stop in enumerate(stops, start=1)}
+
+    stop_ids = {stop.id for stop in stops}
+    parent_ids: dict[UUID, set[UUID]] = {stop.id: set() for stop in stops}
+    for from_stop_id, to_stop_id in edges:
+        if from_stop_id in stop_ids and to_stop_id in stop_ids:
+            parent_ids[to_stop_id].add(from_stop_id)
+
+    rank_by_stop_id: dict[UUID, int] = {}
+    remaining = set(stop_ids)
+    while remaining:
+        progressed = False
+        for stop in stops:
+            if stop.id not in remaining:
+                continue
+            parents = parent_ids[stop.id]
+            if not parents:
+                rank_by_stop_id[stop.id] = 1
+            elif parents.issubset(rank_by_stop_id):
+                rank_by_stop_id[stop.id] = max(
+                    rank_by_stop_id[parent_id] for parent_id in parents
+                ) + 1
+            else:
+                continue
+            remaining.remove(stop.id)
+            progressed = True
+        if not progressed:
+            for stop in stops:
+                if stop.id in remaining:
+                    rank_by_stop_id[stop.id] = stop.position
+            break
+    return rank_by_stop_id
 
 
 def datetime_sort_key(value: datetime | None) -> str:

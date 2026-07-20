@@ -10,7 +10,7 @@ from tripweave.adapters.nominatim_geocoder import NominatimGeocoder, geocode_res
 from tripweave.adapters.reconstruction import (
     MediaPoint,
     cluster_stops,
-    contributor_trace_edges_for_points,
+    continuity_edges_for_points,
     effective_day,
     media_capture_utc,
 )
@@ -96,14 +96,23 @@ def test_parallel_contributor_path_is_not_forced_into_same_stop() -> None:
     assert [len(clusters) for clusters in clusters_by_day.values()] == [2]
 
 
-def test_contributor_trace_edges_preserve_fork_and_join_paths() -> None:
+def stop_at(position: int, captured_at: datetime) -> orm.Stop:
+    return orm.Stop(
+        id=uuid4(),
+        position=position,
+        starts_at_utc=captured_at,
+        ends_at_utc=captured_at,
+    )
+
+
+def test_continuity_edges_preserve_fork_and_join_paths() -> None:
     contributor_a = uuid4()
     contributor_b = uuid4()
-    stop_one = orm.Stop(id=uuid4(), position=1)
-    stop_two_a = orm.Stop(id=uuid4(), position=2)
-    stop_two_b = orm.Stop(id=uuid4(), position=3)
-    stop_three = orm.Stop(id=uuid4(), position=4)
     day = datetime(2026, 7, 2, 16, 0, tzinfo=UTC)
+    stop_one = stop_at(1, day)
+    stop_two_a = stop_at(2, day.replace(hour=17))
+    stop_two_b = stop_at(3, day.replace(hour=17, minute=2))
+    stop_three = stop_at(4, day.replace(hour=18))
     points = [
         media_point(day, latitude=37.0, longitude=-122.0),
         media_point(day.replace(minute=5), latitude=37.0, longitude=-122.0),
@@ -123,7 +132,7 @@ def test_contributor_trace_edges_preserve_fork_and_join_paths() -> None:
         point.contributor_member_id = contributor_id
         point.stop = stop
 
-    edges = contributor_trace_edges_for_points(points)
+    edges = continuity_edges_for_points(points, [stop_one, stop_two_a, stop_two_b, stop_three])
 
     assert edges == [
         (stop_one.id, stop_two_a.id),
@@ -131,6 +140,93 @@ def test_contributor_trace_edges_preserve_fork_and_join_paths() -> None:
         (stop_one.id, stop_two_b.id),
         (stop_two_b.id, stop_three.id),
     ]
+
+
+def test_continuity_edges_connect_dangling_branch_to_next_group_stop() -> None:
+    contributor_a = uuid4()
+    contributor_b = uuid4()
+    day = datetime(2026, 7, 2, 16, 0, tzinfo=UTC)
+    stop_one = stop_at(1, day)
+    stop_two_a = stop_at(2, day.replace(hour=17))
+    stop_two_b = stop_at(3, day.replace(hour=17, minute=2))
+    stop_three = stop_at(4, day.replace(hour=18))
+    stop_four = stop_at(5, day.replace(hour=19))
+    points = [
+        media_point(day),
+        media_point(day.replace(minute=5)),
+        media_point(day.replace(hour=17)),
+        media_point(day.replace(hour=17, minute=2)),
+        media_point(day.replace(hour=18)),
+        media_point(day.replace(hour=19)),
+    ]
+    for point, contributor_id, stop in [
+        (points[0], contributor_a, stop_one),
+        (points[1], contributor_b, stop_one),
+        (points[2], contributor_a, stop_two_a),
+        (points[3], contributor_b, stop_two_b),
+        (points[4], contributor_a, stop_three),
+        (points[5], contributor_a, stop_four),
+    ]:
+        point.contributor_member_id = contributor_id
+        point.stop = stop
+
+    edges = continuity_edges_for_points(
+        points,
+        [stop_one, stop_two_a, stop_two_b, stop_three, stop_four],
+    )
+
+    assert edges == [
+        (stop_one.id, stop_two_a.id),
+        (stop_two_a.id, stop_three.id),
+        (stop_three.id, stop_four.id),
+        (stop_one.id, stop_two_b.id),
+        (stop_two_b.id, stop_three.id),
+    ]
+
+
+def test_continuity_edges_route_skipped_observed_stop_through_group_path() -> None:
+    contributor_a = uuid4()
+    contributor_b = uuid4()
+    day = datetime(2026, 7, 2, 16, 0, tzinfo=UTC)
+    stop_one = stop_at(1, day)
+    stop_two_a = stop_at(2, day.replace(hour=17))
+    stop_two_b = stop_at(3, day.replace(hour=17, minute=2))
+    stop_three = stop_at(4, day.replace(hour=18))
+    stop_four = stop_at(5, day.replace(hour=19))
+    points = [
+        media_point(day),
+        media_point(day.replace(minute=5)),
+        media_point(day.replace(hour=17)),
+        media_point(day.replace(hour=17, minute=2)),
+        media_point(day.replace(hour=18)),
+        media_point(day.replace(hour=19)),
+        media_point(day.replace(hour=19, minute=5)),
+    ]
+    for point, contributor_id, stop in [
+        (points[0], contributor_a, stop_one),
+        (points[1], contributor_b, stop_one),
+        (points[2], contributor_a, stop_two_a),
+        (points[3], contributor_b, stop_two_b),
+        (points[4], contributor_a, stop_three),
+        (points[5], contributor_a, stop_four),
+        (points[6], contributor_b, stop_four),
+    ]:
+        point.contributor_member_id = contributor_id
+        point.stop = stop
+
+    edges = continuity_edges_for_points(
+        points,
+        [stop_one, stop_two_a, stop_two_b, stop_three, stop_four],
+    )
+
+    assert edges == [
+        (stop_one.id, stop_two_a.id),
+        (stop_two_a.id, stop_three.id),
+        (stop_three.id, stop_four.id),
+        (stop_one.id, stop_two_b.id),
+        (stop_two_b.id, stop_three.id),
+    ]
+    assert (stop_two_b.id, stop_four.id) not in edges
 
 
 def test_manual_reverse_geocoder_returns_registered_place_name() -> None:

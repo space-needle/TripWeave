@@ -55,7 +55,9 @@ Missing GPS is assigned only when the media is tightly bracketed in time by high
 
 ## Routes
 
-The algorithm creates legs from each contributor's camera-roll trace within the same day, then merges identical stop-to-stop edges. This lets the shared story represent fork-and-join paths without forcing the whole group into one linear route. For example, if two contributors share stop 1, split to separate stops, and meet again at stop 3, the inferred edges are `1 -> 2a -> 3` and `1 -> 2b -> 3` rather than `1 -> 2a -> 2b -> 3`.
+The algorithm starts from each contributor's camera-roll trace within the same day, then builds a continuity-adjusted route for the shared group story. Identical stop-to-stop edges are merged. A missing photo from a contributor is treated as unknown presence, not absence: if a contributor's branch ends or skips over a plausible later group stop, the route connects that branch back through the next group stop unless there is conflicting observed evidence.
+
+This lets the shared story represent fork-and-join paths without forcing the whole group into one linear route. For example, if two contributors share stop 1, split to separate stops, and meet again at stop 3, the inferred edges are `1 -> 2a -> 3` and `1 -> 2b -> 3` rather than `1 -> 2a -> 2b -> 3`. If one contributor has photos `1 -> 2b -> 4` while the group route has a plausible stop 3 between them, the map route is adjusted to `1 -> 2b -> 3 -> 4` instead of drawing a direct `2b -> 4` line.
 
 Initial geometry is straight-line geography and `route_source = photo_inferred`. No directions or external map provider is used.
 
