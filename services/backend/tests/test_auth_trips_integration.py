@@ -1514,6 +1514,15 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
         },
     )
     assert rename.status_code == 200, rename.text
+    rename_source = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "payload": {"stopId": stop_two["id"], "title": "Named source stop"},
+        },
+    )
+    assert rename_source.status_code == 200, rename_source.text
 
     merge = client.post(
         f"/trips/{trip_id}/edit-operations",
@@ -1529,7 +1538,7 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     assert refreshed.status_code == 200
     merged_stops = refreshed.json()["days"][0]["stops"]
     assert [stop["id"] for stop in merged_stops] == [stop_one["id"], stop_three["id"]]
-    assert merged_stops[0]["title"] == "Named target stop"
+    assert merged_stops[0]["title"] == "Named target stop, Named source stop"
 
     with engine.connect() as connection:
         leg_rows = connection.execute(
@@ -1598,6 +1607,15 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
     source_stop, next_stop = stops
     assert len(source_stop["moments"]) == 2
     split_after_moment_id = source_stop["moments"][0]["id"]
+    rename = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "payload": {"stopId": source_stop["id"], "title": "Named split stop"},
+        },
+    )
+    assert rename.status_code == 200, rename.text
 
     split = client.post(
         f"/trips/{trip_id}/edit-operations",
@@ -1615,6 +1633,10 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
     split_stops = refreshed.json()["days"][0]["stops"]
     assert [stop["position"] for stop in split_stops] == [1, 2, 3]
     assert [stop["id"] for stop in split_stops] == [source_stop["id"], new_stop_id, next_stop["id"]]
+    assert [stop["title"] for stop in split_stops[:2]] == [
+        "Named split stop 1",
+        "Named split stop 2",
+    ]
     assert split_stops[0]["mediaCount"] == 1
     assert split_stops[1]["mediaCount"] == 1
 

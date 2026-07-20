@@ -1913,6 +1913,25 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             stop.position = position
             lock_record(stop)
 
+    def normalized_title(value: str | None) -> str | None:
+        title = " ".join(value.split()) if value is not None else ""
+        return title or None
+
+    def combined_stop_title(first: orm.Stop, second: orm.Stop) -> str | None:
+        titles: list[str] = []
+        for title in (normalized_title(first.title), normalized_title(second.title)):
+            if title is not None and title not in titles:
+                titles.append(title)
+        if not titles:
+            return None
+        return ", ".join(titles)[:255]
+
+    def split_stop_titles(stop: orm.Stop) -> tuple[str | None, str | None]:
+        title = normalized_title(stop.title)
+        if title is None:
+            return None, None
+        return f"{title} 1"[:255], f"{title} 2"[:255]
+
     def edit_operation_response(operation: orm.EditOperation) -> EditOperationResponse:
         return EditOperationResponse(
             id=operation.id,
@@ -2063,9 +2082,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(source, payload.expected_updated_at)
             before = {"sourceStopId": str(source.id), "targetStopId": str(target.id)}
-            preserved_title = target.title
-            if source.user_locked and source.title and (not target.user_locked or not target.title):
-                preserved_title = source.title
+            if (source.starts_at_utc, source.position, source.id) < (
+                target.starts_at_utc,
+                target.position,
+                target.id,
+            ):
+                merged_title = combined_stop_title(source, target)
+            else:
+                merged_title = combined_stop_title(target, source)
             for moment in ordered_stop_moments(db, source.id):
                 moment.stop_id = target.id
                 lock_record(moment)
@@ -2073,7 +2097,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             renumber_stop_moments(db, target.id)
             target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
             target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
-            target.title = preserved_title
+            target.title = merged_title
             target.centroid = (
                 stop_centroid_for_moments(
                     db, [moment.id for moment in ordered_stop_moments(db, target.id)]
@@ -2128,10 +2152,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 following_stop.position += 1
                 lock_record(following_stop)
             moved_centroid = stop_centroid_for_moments(db, [moment.id for moment in moved_moments])
+            original_title, new_title = split_stop_titles(stop)
             new_stop = orm.Stop(
                 trip_id=trip_id,
                 trip_day_id=stop.trip_day_id,
                 place_id=stop.place_id,
+                title=new_title,
                 position=stop.position + 1,
                 starts_at_utc=moments[index + 1].starts_at_utc,
                 ends_at_utc=stop.ends_at_utc,
@@ -2153,6 +2179,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 moment.position = new_position
                 lock_record(moment)
             stop.ends_at_utc = moments[index].ends_at_utc
+            stop.title = original_title
             stop.centroid = (
                 stop_centroid_for_moments(db, [moment.id for moment in moments[: index + 1]])
                 or stop.centroid
