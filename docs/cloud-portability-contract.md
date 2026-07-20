@@ -4,7 +4,7 @@ TripWeave storage is provider-neutral. Local filesystem storage is the first imp
 
 ## BlobRef
 
-`BlobRef` is the persisted reference to stored content.
+`BlobRef` is the persisted reference to stored content. Product records may also keep a logical reference to an original whose bytes were intentionally deleted after processing, but such records must carry an explicit retention state so callers do not treat the original as downloadable storage.
 
 Fields:
 
@@ -119,7 +119,7 @@ The local MVP implements only `api_proxy`. Future adapters may add other transpo
 
 ## Local Filesystem Adapter
 
-The local adapter maps each logical store alias to a separate directory under the configured local blob root. For the MVP, `media_private` stores uploaded originals and `story_published` is reserved for sanitized published derivatives.
+The local adapter maps each logical store alias to a separate directory under the configured local blob root. For the MVP, `media_private` stores temporary uploaded originals and private display derivatives, while `story_published` is reserved for sanitized published derivatives.
 
 The adapter must:
 

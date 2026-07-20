@@ -273,6 +273,8 @@ class MediaItemResponse(BaseModel):
     filename: str | None
     processing_state: str = Field(alias="processingState")
     error_message: str | None = Field(default=None, alias="errorMessage")
+    original_retention_state: str = Field(alias="originalRetentionState")
+    original_deleted_at: datetime | None = Field(default=None, alias="originalDeletedAt")
     visibility: str
     include_in_story: bool = Field(alias="includeInStory")
     captured_at: datetime | None = Field(default=None, alias="capturedAt")

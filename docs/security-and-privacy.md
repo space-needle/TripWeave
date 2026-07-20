@@ -5,7 +5,8 @@ TripWeave handles personal travel photos, location histories, timestamps, and co
 ## Core Rules
 
 - Contributors retain ownership and deletion control over their media.
-- Original files are private and immutable.
+- Original files are private and immutable while retained.
+- Original uploads may be retained only temporarily by default to control storage cost and privacy risk.
 - Original metadata is private and immutable.
 - Published stories contain sanitized derivatives, never originals.
 - Persist logical `store_alias` and `object_key`, not signed URLs or permanent provider URLs.
@@ -20,7 +21,7 @@ Authorization must be enforced in backend application services, not only in the 
 
 ## Media Privacy
 
-Original media files are never published. Derivatives must be generated for product display and publication. Derivatives should strip sensitive metadata unless explicitly required for an authorized private workflow.
+Original media files are never published. For the cloud alpha, originals are processing inputs and are deleted after metadata and display derivatives are generated unless a later retention policy explicitly keeps them. Derivatives must be generated for product display and publication. Derivatives should strip sensitive metadata unless explicitly required for an authorized private workflow.
 
 Published map geometry must be sanitized to avoid exposing exact private movement traces when a less precise path or stop marker is sufficient.
 

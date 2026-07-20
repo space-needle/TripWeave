@@ -829,6 +829,23 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
     media_item_id = upload_completed_jpeg(client, csrf_token, trip["id"], jpeg_bytes())
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
     blob_store = create_blob_store(settings)
+    with engine.connect() as connection:
+        original_ref = connection.execute(
+            text(
+                """
+                SELECT original_store_alias, original_object_key
+                FROM media_items
+                WHERE id = :id
+                """
+            ),
+            {"id": media_item_id},
+        ).one()
+    assert blob_store.exists(
+        BlobRef(
+            store_alias=original_ref.original_store_alias,
+            object_key=original_ref.original_object_key,
+        )
+    )
 
     with session_factory() as db:
         job = claim_job(db, settings, "test-worker")
@@ -837,15 +854,33 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
 
     with engine.connect() as connection:
         state = connection.execute(
-            text("SELECT processing_state FROM media_items WHERE id = :id"),
+            text(
+                """
+                SELECT processing_state, original_retention_state, original_deleted_at
+                FROM media_items
+                WHERE id = :id
+                """
+            ),
             {"id": media_item_id},
-        ).scalar_one()
+        ).one()
         asset_count = connection.execute(text("SELECT count(*) FROM media_assets")).scalar_one()
         job_state = connection.execute(text("SELECT state FROM processing_jobs")).scalar_one()
 
-    assert state == "ready"
+    assert state.processing_state == "ready"
+    assert state.original_retention_state == "deleted"
+    assert state.original_deleted_at is not None
+    assert not blob_store.exists(
+        BlobRef(
+            store_alias=original_ref.original_store_alias,
+            object_key=original_ref.original_object_key,
+        )
+    )
     assert asset_count == 2
     assert job_state == "succeeded"
+
+    retry = client.post(f"/media/{media_item_id}/retry", headers={"x-csrf-token": csrf_token})
+    assert retry.status_code == 409
+    assert retry.json()["detail"] == "Original file is no longer retained"
 
     handle_job(
         settings,

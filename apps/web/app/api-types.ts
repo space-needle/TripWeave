@@ -104,6 +104,8 @@ export type MediaItemResponse = {
   filename: string | null;
   processingState: string;
   errorMessage?: string | null;
+  originalRetentionState: string;
+  originalDeletedAt?: string | null;
   visibility: string;
   includeInStory: boolean;
   capturedAt?: string | null;

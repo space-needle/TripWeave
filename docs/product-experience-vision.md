@@ -36,7 +36,7 @@ Current core capabilities include:
 - Guest contributors can accept an invite without creating an account.
 - Guest contributors can upload photos after joining with a display name.
 - Uploads are stored through provider-neutral blob references.
-- Original files and original metadata remain private and immutable.
+- Original files are private processing inputs, immutable while retained, and may be deleted after optimized story derivatives and metadata are created.
 - Media processing extracts thumbnails, previews, timestamps, location data, and
   processing state.
 - Trips can be reconstructed into days, stops, moments, routes, and review
@@ -142,7 +142,7 @@ non-owner trips in the user's library.
 
 TripWeave should use separate visibility layers:
 
-- Private originals: raw uploads and raw metadata, never public.
+- Retained originals: raw uploads and raw metadata, private while available and never public.
 - Member workspace: authenticated members can see authorized story context.
 - Contributor-private media: contributors can restrict or withdraw their own
   media according to policy.

@@ -4,7 +4,7 @@ TripWeave treats travel photos, locations, timestamps, contributors, and publica
 
 ## Private Originals
 
-Uploaded originals are immutable and stored in the `media_private` logical store. PostgreSQL stores logical blob refs, checksums, sizes, and metadata facts, never file bytes or durable signed URLs.
+Uploaded originals are immutable while retained and enter the `media_private` logical store as processing inputs. For the cloud alpha, originals are deleted after metadata and optimized derivatives are generated unless a later retention policy explicitly keeps them. PostgreSQL stores logical blob refs, checksums, sizes, retention state, and metadata facts, never file bytes or durable signed URLs.
 
 Raw EXIF and XMP metadata are used only for authenticated private workflows. Derivatives strip unnecessary metadata.
 

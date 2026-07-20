@@ -65,7 +65,7 @@ The drill writes a temporary dump, restores it into `tripweave_restore_drill`, r
 
 Local blobs live under the configured `TRIPWEAVE_BLOB_DIR`, split by logical store alias. Product records persist only `store_alias` and `object_key`.
 
-Use `/ops/local-mvp` while signed in to inspect local storage usage. A soft-limit warning appears when usage reaches the configured trip-byte limit. `media_private` contains originals and private derivatives; `story_published` contains sanitized published story assets.
+Use `/ops/local-mvp` while signed in to inspect local storage usage. A soft-limit warning appears when usage reaches the configured trip-byte limit. `media_private` contains temporary originals that have not finished processing plus private derivatives; `story_published` contains sanitized published story assets.
 
 If `storage.totalBytes` grows unexpectedly:
 

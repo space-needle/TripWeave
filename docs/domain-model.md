@@ -8,7 +8,7 @@ TripWeave turns multiple travelers' camera rolls into one shared trip story.
 
 `Contributor` is a person who adds media to a trip. Contributors retain ownership and deletion control over their uploaded media.
 
-`MediaAsset` is an uploaded original photo or video record. It references immutable content by logical `store_alias` and `object_key`.
+`MediaAsset` is an uploaded photo or video record and its generated derivatives. Original uploads are immutable while retained, but the product may delete original bytes after processing and keep the logical reference, checksum, extracted metadata, retention state, and optimized derivatives.
 
 `OriginalMetadata` is extracted metadata from the original file, such as capture timestamp, timezone clues, GPS coordinates, device identifiers, and file properties. It is immutable.
 
@@ -212,7 +212,7 @@ Review items use a fixed exception taxonomy: `unknown_time`, `unknown_location`,
 
 ## Invariants
 
-- Original files are immutable.
+- Original files are immutable while retained, and their retention state is recorded.
 - Original metadata is immutable.
 - Effective corrected values are stored separately.
 - User corrections outrank automation.
@@ -224,7 +224,7 @@ Review items use a fixed exception taxonomy: `unknown_time`, `unknown_location`,
 
 ## Ownership And Deletion
 
-Each original media asset has an owning contributor. A contributor can delete or withdraw their media according to product policy and authorization rules. Deletion must remove or disable future use of original content and regenerate affected derivatives and publication versions when necessary.
+Each media item has an owning contributor. A contributor can delete or withdraw their media according to product policy and authorization rules. Deletion must remove or disable future use of retained originals, derivatives, metadata visibility, grouping membership, and publication versions when necessary.
 
 Published story versions must be able to show that removed contributor media is no longer available in newly published versions. If takedown semantics require modifying already published content, that behavior must be explicit and tested.
 

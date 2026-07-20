@@ -47,6 +47,7 @@ from tripweave.domain.enums import (
     MediaAssetType,
     MediaType,
     MediaVisibility,
+    OriginalRetentionState,
     ProcessingJobState,
     ProcessingJobType,
     ProcessingState,
@@ -1534,6 +1535,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             filename=media_item.original_filename,
             processingState=media_item.processing_state,
             errorMessage=media_error_for(db, media_item.id),
+            originalRetentionState=media_item.original_retention_state,
+            originalDeletedAt=media_item.original_deleted_at,
             visibility=media_item.visibility,
             includeInStory=media_item.include_in_story,
             capturedAt=media_item.effective_captured_at_utc
@@ -2930,6 +2933,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             byte_size=metadata.size_bytes,
             original_store_alias=upload_file.store_alias,
             original_object_key=upload_file.object_key,
+            original_retention_state=OriginalRetentionState.TEMPORARY.value,
             sha256=metadata.checksum,
             visibility=MediaVisibility.STORY.value,
             include_in_story=True,
@@ -3094,6 +3098,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             media_item.contributor_member_id != member.id
         ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        if media_item.original_retention_state == OriginalRetentionState.DELETED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Original file is no longer retained",
+            )
 
         job = db.execute(
             select(orm.ProcessingJob).where(

@@ -32,6 +32,7 @@ from tripweave.domain.enums import (
     MediaAssetType,
     MediaType,
     MediaVisibility,
+    OriginalRetentionState,
     ProcessingJobState,
     ProcessingJobType,
     ProcessingState,
@@ -343,6 +344,10 @@ class MediaItem(Base, TimestampMixin):
             f"processing_state IN ({enum_values(ProcessingState)})", name="processing_state"
         ),
         CheckConstraint(f"visibility IN ({enum_values(MediaVisibility)})", name="visibility"),
+        CheckConstraint(
+            f"original_retention_state IN ({enum_values(OriginalRetentionState)})",
+            name="original_retention_state",
+        ),
         CheckConstraint("byte_size IS NULL OR byte_size >= 0", name="byte_size"),
         CheckConstraint(
             "time_confidence IS NULL OR (time_confidence >= 0 AND time_confidence <= 1)",
@@ -378,6 +383,10 @@ class MediaItem(Base, TimestampMixin):
     byte_size: Mapped[int | None] = mapped_column(BigInteger)
     original_store_alias: Mapped[str] = mapped_column(String(100), nullable=False)
     original_object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    original_retention_state: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default=text("'retained'")
+    )
+    original_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     original_captured_at_local: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
     original_captured_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     original_utc_offset_minutes: Mapped[int | None] = mapped_column(Integer)

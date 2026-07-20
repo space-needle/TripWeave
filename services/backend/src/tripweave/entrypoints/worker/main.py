@@ -33,6 +33,7 @@ from tripweave.config import Settings, get_settings
 from tripweave.domain.enums import (
     LocationSource,
     MediaAssetType,
+    OriginalRetentionState,
     ProcessingJobState,
     ProcessingJobType,
     ProcessingState,
@@ -293,6 +294,7 @@ def ingest_media(
         preview_max_px=settings.media_preview_max_px,
     )
     apply_processed_media(db, blob_store, media_item, processed)
+    discard_temporary_original(blob_store, media_item)
     db.commit()
 
 
@@ -384,6 +386,20 @@ def apply_processed_media(
         asset.byte_size = metadata.size_bytes
         asset.checksum = metadata.checksum
         asset.metadata_stripped = derivative.metadata_stripped
+
+
+def discard_temporary_original(blob_store: BlobStore, media_item: orm.MediaItem) -> None:
+    if media_item.original_retention_state != OriginalRetentionState.TEMPORARY.value:
+        return
+    blob_store.delete(
+        BlobRef(
+            store_alias=media_item.original_store_alias,
+            object_key=media_item.original_object_key,
+        )
+    )
+    media_item.original_retention_state = OriginalRetentionState.DELETED.value
+    media_item.original_deleted_at = datetime.now(UTC)
+    media_item.updated_at = media_item.original_deleted_at
 
 
 def capture_device_for_media(

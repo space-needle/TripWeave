@@ -57,7 +57,7 @@ The local filesystem is the first storage adapter. It implements the same storag
 
 1. A trip owner creates a trip and invites contributors.
 2. Contributors upload media through provider-neutral `UploadGrant` contracts.
-3. The system records immutable originals with logical `store_alias` and `object_key`.
+3. The system receives originals through logical `store_alias` and `object_key` references, processes them immutably, and may discard the original bytes after derivatives and metadata are created according to the retention policy.
 4. Metadata extraction stores original metadata separately from corrections.
 5. Worker jobs align timestamps and locations, group media into days, stops, and moments, and emit automated results with source, confidence, and algorithm version.
 6. Review screens surface exceptions and low-confidence results.
@@ -74,6 +74,12 @@ Storage references use:
 - checksum and size metadata for integrity
 
 TripWeave does not persist signed URLs or permanent provider URLs. Access is granted through `UploadGrant` and `DownloadGrant`, which are provider-neutral contracts.
+
+Original uploads are not assumed to be permanent product storage. For the cloud
+alpha, originals are temporary processing inputs by default; TripWeave records
+their retention state and keeps optimized derivatives for story display. Future
+paid or archival plans may retain originals without changing the storage
+contract.
 
 ## Database And Jobs
 

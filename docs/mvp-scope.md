@@ -62,7 +62,7 @@ Enable contributor upload into local storage through `UploadGrant` semantics and
 
 ### Stage 5: Metadata Extraction
 
-Extract original metadata without mutating originals. Store extraction source, confidence where applicable, and algorithm version for automated results.
+Extract original metadata without mutating originals while they are retained. Store extraction source, confidence where applicable, retention state, and algorithm version for automated results.
 
 ### Stage 6: Processing Queue
 
@@ -70,7 +70,7 @@ Implement the durable PostgreSQL `processing_jobs` worker loop with retries, ide
 
 ### Stage 7: Time And Location Alignment
 
-Align timestamps, timezone clues, and GPS data. Preserve originals and store effective values separately.
+Align timestamps, timezone clues, and GPS data. Preserve original metadata facts and store effective values separately; original bytes may be discarded according to the retention policy.
 
 ### Stage 8: Grouping
 

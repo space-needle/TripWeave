@@ -51,7 +51,7 @@ Domain and application modules must not import cloud provider SDKs or expose pro
 
 TripWeave stores logical `store_alias` and `object_key` values, never signed URLs or permanent provider URLs. Upload and download access is represented by provider-neutral `UploadGrant` and `DownloadGrant` contracts.
 
-Original files and original metadata are immutable. Effective corrected values are stored separately, user corrections outrank automation, and published stories contain sanitized derivatives rather than originals.
+Original files, while retained for processing, are immutable. The cloud-alpha direction keeps originals only temporarily by default, records their retention state, and stores optimized derivatives for product display. Original metadata is immutable. Effective corrected values are stored separately, user corrections outrank automation, and published stories contain sanitized derivatives rather than originals.
 
 ## Local Development
 

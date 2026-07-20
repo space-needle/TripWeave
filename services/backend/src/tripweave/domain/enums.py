@@ -73,6 +73,12 @@ class MediaVisibility(StrEnum):
     EXCLUDED = "excluded"
 
 
+class OriginalRetentionState(StrEnum):
+    TEMPORARY = "temporary"
+    RETAINED = "retained"
+    DELETED = "deleted"
+
+
 class MediaAssetType(StrEnum):
     ORIGINAL = "original"
     THUMBNAIL = "thumbnail"
