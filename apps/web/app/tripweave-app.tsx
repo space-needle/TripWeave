@@ -2724,9 +2724,7 @@ function TripStoryExplorer({
       setMergePickerStopId(null);
       setEditToolsStopId(null);
     } catch (error) {
-      setMergeStopError(
-        `Could not merge stops. ${messageFrom(error)}`,
-      );
+      setMergeStopError(`Could not merge stops. ${messageFrom(error)}`);
     } finally {
       setMergingStopKey(null);
     }

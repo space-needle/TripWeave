@@ -1234,9 +1234,9 @@ def stop_ranks(stops: list[orm.Stop], edges: list[tuple[UUID, UUID]]) -> dict[UU
             if not parents:
                 rank_by_stop_id[stop.id] = 1
             elif parents.issubset(rank_by_stop_id):
-                rank_by_stop_id[stop.id] = max(
-                    rank_by_stop_id[parent_id] for parent_id in parents
-                ) + 1
+                rank_by_stop_id[stop.id] = (
+                    max(rank_by_stop_id[parent_id] for parent_id in parents) + 1
+                )
             else:
                 continue
             remaining.remove(stop.id)

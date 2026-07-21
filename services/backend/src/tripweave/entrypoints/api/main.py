@@ -3570,8 +3570,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 incoming_counts[leg.to_stop_id] += 1
             for leg, geometry in raw_legs:
                 is_forked = (
-                    outgoing_counts[leg.from_stop_id] > 1
-                    or incoming_counts[leg.to_stop_id] > 1
+                    outgoing_counts[leg.from_stop_id] > 1 or incoming_counts[leg.to_stop_id] > 1
                 )
                 legs_by_day.setdefault(trip_day_id, []).append(
                     ReconstructionLegResponse(
