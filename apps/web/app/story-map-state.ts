@@ -23,6 +23,7 @@ export type StoryMapState = {
 export type StoryMediaPoint = {
   id: string;
   dayId: string;
+  dayDate: string | null;
   stopId: string;
   momentId: string;
   contributorMemberId: string;
@@ -37,6 +38,7 @@ export type StoryMediaPoint = {
 export type StoryStopPoint = {
   id: string;
   dayId: string;
+  dayDate: string | null;
   label: string;
   position: number;
   displayPosition: string;
@@ -62,6 +64,7 @@ export type StoryPhotoStack = {
 };
 
 export type StoryModel = {
+  days: Array<{ id: string; date: string | null; position: number }>;
   contributors: Array<{ id: string; name: string }>;
   stops: StoryStopPoint[];
   media: StoryMediaPoint[];
@@ -243,11 +246,17 @@ export function buildStoryModel(
   reconstruction: ReconstructionResponse | null,
 ): StoryModel {
   const contributors = new Map<string, string>();
+  const days: Array<{ id: string; date: string | null; position: number }> = [];
   const stops: StoryStopPoint[] = [];
   const media: StoryMediaPoint[] = [];
   const legs: StoryLegLine[] = [];
 
   for (const day of reconstruction?.days ?? []) {
+    days.push({
+      id: day.id,
+      date: day.date ?? null,
+      position: day.position,
+    });
     for (const leg of day.legs ?? []) {
       legs.push({
         id: leg.id,
@@ -263,6 +272,7 @@ export function buildStoryModel(
       stops.push({
         id: stop.id,
         dayId: day.id,
+        dayDate: day.date ?? null,
         label: stop.title ?? stop.placeName ?? `Stop ${stop.position}`,
         position: stop.position,
         displayPosition: stop.displayPosition ?? String(stop.position),
@@ -280,6 +290,7 @@ export function buildStoryModel(
           media.push({
             id: item.id,
             dayId: day.id,
+            dayDate: day.date ?? null,
             stopId: stop.id,
             momentId: moment.id,
             contributorMemberId: item.contributorMemberId,
@@ -300,6 +311,7 @@ export function buildStoryModel(
   }
 
   return {
+    days,
     contributors: Array.from(contributors, ([id, name]) => ({ id, name })).sort(
       (a, b) => a.name.localeCompare(b.name),
     ),

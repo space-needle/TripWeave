@@ -333,13 +333,76 @@ def test_reconstruction_creates_days_stops_moments_reviews_and_preserves_locked(
         )
 
         locked_stop = (
-            session.execute(text("SELECT id, place_id FROM stops ORDER BY starts_at_utc LIMIT 1"))
+            session.execute(
+                text("SELECT id, trip_day_id, place_id FROM stops ORDER BY starts_at_utc LIMIT 1")
+            )
             .mappings()
             .one()
         )
         session.execute(
             text("UPDATE stops SET user_locked = true WHERE id = :id"),
             {"id": locked_stop["id"]},
+        )
+        session.execute(
+            text("UPDATE trip_days SET user_locked = true WHERE id = :id"),
+            {"id": locked_stop["trip_day_id"]},
+        )
+        session.execute(
+            text(
+                """
+                WITH duplicate_run AS (
+                    INSERT INTO reconstruction_runs (
+                        trip_id,
+                        state,
+                        source,
+                        confidence,
+                        algorithm_version,
+                        algorithm_config,
+                        user_locked,
+                        finished_at
+                    )
+                    VALUES (
+                        :trip_id,
+                        'failed',
+                        'automation',
+                        1.0,
+                        'test_duplicate',
+                        '{}'::jsonb,
+                        false,
+                        now()
+                    )
+                    RETURNING id
+                )
+                INSERT INTO trip_days (
+                    trip_id,
+                    day_date,
+                    title,
+                    position,
+                    starts_at_utc,
+                    ends_at_utc,
+                    source,
+                    confidence,
+                    algorithm_version,
+                    reconstruction_run_id,
+                    user_locked
+                )
+                SELECT
+                    day.trip_id,
+                    day.day_date,
+                    'Duplicate day',
+                    day.position,
+                    day.starts_at_utc,
+                    day.ends_at_utc,
+                    'user_correction',
+                    1.0,
+                    'test_duplicate',
+                    duplicate_run.id,
+                    true
+                FROM trip_days day, duplicate_run
+                WHERE day.id = :day_id
+                """
+            ),
+            {"trip_id": trip["id"], "day_id": locked_stop["trip_day_id"]},
         )
         session.commit()
 
@@ -356,6 +419,35 @@ def test_reconstruction_creates_days_stops_moments_reviews_and_preserves_locked(
         ).scalar_one()
         assert preserved_stop == 1
         assert preserved_place == 1
+        latest_run_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM reconstruction_runs
+                WHERE trip_id = :trip_id
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        duplicate_visible_dates = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM (
+                    SELECT day_date
+                    FROM trip_days
+                    WHERE trip_id = :trip_id
+                        AND (reconstruction_run_id = :run_id OR user_locked = true)
+                    GROUP BY day_date
+                    HAVING COUNT(*) > 1
+                ) duplicate_dates
+                """
+            ),
+            {"trip_id": trip["id"], "run_id": latest_run_id},
+        ).scalar_one()
+        assert duplicate_visible_dates == 0
 
 
 def test_incremental_reconstruction_adds_new_media_without_replacing_story(

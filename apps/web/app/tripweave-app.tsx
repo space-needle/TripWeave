@@ -2878,7 +2878,7 @@ function TripStoryExplorer({
               {selectedStopTitle
                 ? selectedStopTitle
                 : activeDay
-                  ? (activeDay.title ?? `Day ${activeDay.position}`)
+                  ? storyDayLabel(activeDay)
                   : "No stop selected"}
             </strong>
             <p>{selectedStopSummary}</p>
@@ -2929,7 +2929,7 @@ function TripStoryExplorer({
         <div className="story-panel-header">
           <div>
             <p className="eyebrow">
-              {activeDay ? `Day ${activeDay.position}` : "Timeline"}
+              {activeDay ? storyDayDateLabel(activeDay) : "Timeline"}
             </p>
             <h3>{activeDay?.title ?? activeDay?.date ?? selectedLabel}</h3>
             <p>Follow the route through days, stops, and photo moments.</p>
@@ -2993,7 +2993,7 @@ function TripStoryExplorer({
                 type="button"
                 onClick={() => onStateChange(selectStoryDay(state, day.id))}
               >
-                Day {day.position}
+                {storyDayDateLabel(day)}
               </button>
             ))}
           </div>
@@ -3038,7 +3038,7 @@ function TripStoryExplorer({
             <div>
               <strong>
                 {activeDay
-                  ? `${activeDay.title ?? `Day ${activeDay.position}`} photos`
+                  ? `${storyDayLabel(activeDay)} photos`
                   : "Trip photos"}
               </strong>
               <span>{photoRollPhotoCount} photos grouped by stop</span>
@@ -3070,7 +3070,7 @@ function TripStoryExplorer({
                   className="timeline-day-button"
                   onClick={() => onStateChange(selectStoryDay(state, day.id))}
                 >
-                  <span>{day.title ?? `Day ${day.position}`}</span>
+                  <span>{storyDayLabel(day)}</span>
                   <small>{day.date}</small>
                 </button>
                 {onSetDayNote ? (
@@ -3572,7 +3572,7 @@ function TripStoryExplorer({
                 <p className="eyebrow">Photos</p>
                 <h3>
                   {activeDay
-                    ? `${activeDay.title ?? `Day ${activeDay.position}`} photos`
+                    ? `${storyDayLabel(activeDay)} photos`
                     : "Trip photos"}
                 </h3>
                 <span>{photoRollPhotoCount} photos grouped by stop</span>
@@ -3592,7 +3592,7 @@ function TripStoryExplorer({
                 <div className="story-photo-roll-day" key={day.id}>
                   {!activeDay ? (
                     <strong className="story-photo-roll-day-title">
-                      {day.title ?? `Day ${day.position}`}
+                      {storyDayLabel(day)}
                     </strong>
                   ) : null}
                   {stops.map(({ stop, photos }) => {
@@ -4056,7 +4056,7 @@ function StoryMapCanvas({
   const dayMarkerData = useMemo(
     () =>
       Array.from(new Set(model.stops.map((stop) => stop.dayId)))
-        .map((dayId, index) => {
+        .map((dayId) => {
           const dayStops = model.stops.filter((stop) => stop.dayId === dayId);
           const dayMedia = model.media.filter((item) => item.dayId === dayId);
           const coordinates = centerOfCoordinates([
@@ -4070,9 +4070,10 @@ function StoryMapCanvas({
           const featuredMedia =
             dayMedia.find((item) => item.thumbnailUrl) ?? dayMedia[0] ?? null;
           const firstStop = dayStops[0] ?? null;
+          const day = model.days.find((item) => item.id === dayId) ?? null;
           return {
             dayId,
-            label: firstStop ? `Day ${index + 1}` : "Day",
+            label: firstStop ? storyDayDateLabel(day) : "Day",
             coordinates,
             featuredMedia,
             count: dayStops.length,
@@ -4080,7 +4081,7 @@ function StoryMapCanvas({
           };
         })
         .filter((item) => item.coordinates),
-    [dayColorMap, model.media, model.stops, stopDisplayCoordinates],
+    [dayColorMap, model.days, model.media, model.stops, stopDisplayCoordinates],
   );
   const stopMarkerData = useMemo(
     () =>
@@ -5659,6 +5660,42 @@ function MediaList({
       />
     </>
   );
+}
+
+type StoryDayLabelSource = {
+  date?: string | null;
+  position?: number;
+  title?: string | null;
+};
+
+function storyDayLabel(day: StoryDayLabelSource | null | undefined): string {
+  if (!day) {
+    return "Day";
+  }
+  return day.title?.trim() || storyDayDateLabel(day);
+}
+
+function storyDayDateLabel(
+  day: StoryDayLabelSource | null | undefined,
+): string {
+  if (!day) {
+    return "Day";
+  }
+  const dateLabel = formatShortCalendarDate(day.date ?? null);
+  return dateLabel || `Day ${day.position ?? ""}`.trim();
+}
+
+function formatShortCalendarDate(value: string | null): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+  if (!match) {
+    return "";
+  }
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return new Intl.DateTimeFormat(undefined, {
+    month: "numeric",
+    day: "numeric",
+  }).format(date);
 }
 
 function formatDate(value: string | null, timezoneId?: string): string {

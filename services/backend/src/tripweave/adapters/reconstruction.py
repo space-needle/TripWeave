@@ -149,6 +149,8 @@ def reconstruct_trip(
     review_count += assign_missing_gps(db, run, trip.id, usable, gps_points)
     moments = persist_moments(db, run, created, usable)
     legs = persist_legs(db, run, created, usable)
+    merge_visible_trip_days_by_date(db, trip.id, run)
+    merge_empty_locked_stops_with_generated_media(db, trip.id, run)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
 
@@ -284,6 +286,8 @@ def increment_story(
         renumber_day_stops(db, day_id)
         rebuild_day_legs(db, run, day_id)
 
+    merge_visible_trip_days_by_date(db, trip.id, run)
+    merge_empty_locked_stops_with_generated_media(db, trip.id, run)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
     days = count_visible(db, orm.TripDay, trip.id, run.id)
@@ -431,49 +435,84 @@ def create_incremental_stop(
     return stop
 
 
-def find_or_create_trip_day(
-    db: Session, run: orm.ReconstructionRun, trip_id: UUID, point: MediaPoint
+def find_or_create_trip_day_for_date(
+    db: Session,
+    run: orm.ReconstructionRun,
+    trip_id: UUID,
+    day: date,
+    starts_at_utc: datetime | None,
+    ends_at_utc: datetime | None,
 ) -> orm.TripDay:
-    assert point.day is not None
     existing = db.execute(
         select(orm.TripDay)
-        .where(orm.TripDay.trip_id == trip_id, orm.TripDay.day_date == point.day)
+        .where(
+            orm.TripDay.trip_id == trip_id,
+            orm.TripDay.day_date == day,
+            or_(
+                orm.TripDay.reconstruction_run_id == run.id,
+                orm.TripDay.user_locked.is_(True),
+            ),
+        )
         .order_by(orm.TripDay.user_locked.desc(), orm.TripDay.created_at)
         .limit(1)
     ).scalar_one_or_none()
     if existing is not None:
-        existing.reconstruction_run_id = run.id
-        if point.captured_at_utc is not None:
+        if not existing.user_locked:
+            existing.reconstruction_run_id = run.id
+        if starts_at_utc is not None:
             existing.starts_at_utc = (
-                min(existing.starts_at_utc, point.captured_at_utc)
+                min(existing.starts_at_utc, starts_at_utc)
                 if existing.starts_at_utc is not None
-                else point.captured_at_utc
+                else starts_at_utc
             )
+        if ends_at_utc is not None:
             existing.ends_at_utc = (
-                max(existing.ends_at_utc, point.captured_at_utc)
+                max(existing.ends_at_utc, ends_at_utc)
                 if existing.ends_at_utc is not None
-                else point.captured_at_utc
+                else ends_at_utc
             )
         return existing
 
     position = (
         db.scalar(
-            select(func.count()).select_from(orm.TripDay).where(orm.TripDay.trip_id == trip_id)
+            select(func.count())
+            .select_from(orm.TripDay)
+            .where(
+                orm.TripDay.trip_id == trip_id,
+                or_(
+                    orm.TripDay.reconstruction_run_id == run.id,
+                    orm.TripDay.user_locked.is_(True),
+                ),
+            )
         )
         or 0
     ) + 1
     trip_day = orm.TripDay(
         trip_id=trip_id,
-        day_date=point.day,
+        day_date=day,
         position=position,
-        starts_at_utc=point.captured_at_utc,
-        ends_at_utc=point.captured_at_utc,
+        starts_at_utc=starts_at_utc,
+        ends_at_utc=ends_at_utc,
         **generated(run, 0.85),
     )
     db.add(trip_day)
     db.flush()
-    renumber_trip_days(db, trip_id)
+    renumber_visible_trip_days(db, trip_id, run.id)
     return trip_day
+
+
+def find_or_create_trip_day(
+    db: Session, run: orm.ReconstructionRun, trip_id: UUID, point: MediaPoint
+) -> orm.TripDay:
+    assert point.day is not None
+    return find_or_create_trip_day_for_date(
+        db,
+        run,
+        trip_id,
+        point.day,
+        point.captured_at_utc,
+        point.captured_at_utc,
+    )
 
 
 def find_incremental_place(
@@ -598,16 +637,243 @@ def add_media_to_moment(
         db.flush()
 
 
-def renumber_trip_days(db: Session, trip_id: UUID) -> None:
+def renumber_visible_trip_days(db: Session, trip_id: UUID, run_id: UUID) -> None:
     days = list(
         db.scalars(
             select(orm.TripDay)
-            .where(orm.TripDay.trip_id == trip_id)
-            .order_by(orm.TripDay.day_date, orm.TripDay.position)
+            .where(
+                orm.TripDay.trip_id == trip_id,
+                or_(
+                    orm.TripDay.reconstruction_run_id == run_id,
+                    orm.TripDay.user_locked.is_(True),
+                ),
+            )
+            .order_by(orm.TripDay.day_date, orm.TripDay.starts_at_utc, orm.TripDay.position)
         )
     )
     for position, day in enumerate(days, start=1):
         day.position = position
+
+
+def merge_visible_trip_days_by_date(db: Session, trip_id: UUID, run: orm.ReconstructionRun) -> None:
+    days = list(
+        db.scalars(
+            select(orm.TripDay)
+            .where(
+                orm.TripDay.trip_id == trip_id,
+                or_(
+                    orm.TripDay.reconstruction_run_id == run.id,
+                    orm.TripDay.user_locked.is_(True),
+                ),
+            )
+            .order_by(
+                orm.TripDay.day_date,
+                orm.TripDay.user_locked.desc(),
+                orm.TripDay.starts_at_utc,
+                orm.TripDay.created_at,
+            )
+        )
+    )
+    days_by_date: dict[date, list[orm.TripDay]] = defaultdict(list)
+    for day in days:
+        days_by_date[day.day_date].append(day)
+
+    changed_day_ids: set[UUID] = set()
+    for duplicate_days in days_by_date.values():
+        if len(duplicate_days) < 2:
+            continue
+        canonical = duplicate_days[0]
+        changed_day_ids.add(canonical.id)
+        for duplicate in duplicate_days[1:]:
+            canonical_stops = list(
+                db.scalars(
+                    select(orm.Stop)
+                    .where(orm.Stop.trip_day_id == canonical.id)
+                    .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+                )
+            )
+            duplicate_stops = list(
+                db.scalars(
+                    select(orm.Stop)
+                    .where(orm.Stop.trip_day_id == duplicate.id)
+                    .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+                )
+            )
+            for stop in duplicate_stops:
+                target_stop = next(
+                    (
+                        candidate
+                        for candidate in canonical_stops
+                        if candidate.position == stop.position
+                    ),
+                    None,
+                )
+                if target_stop is None:
+                    stop.trip_day_id = canonical.id
+                    canonical_stops.append(stop)
+                    continue
+                if not target_stop.title and stop.title:
+                    target_stop.title = stop.title
+                if not target_stop.note and stop.note:
+                    target_stop.note = stop.note
+                target_stop.starts_at_utc = min(target_stop.starts_at_utc, stop.starts_at_utc)
+                target_stop.ends_at_utc = max(target_stop.ends_at_utc, stop.ends_at_utc)
+                moments = list(db.scalars(select(orm.Moment).where(orm.Moment.stop_id == stop.id)))
+                for moment in moments:
+                    moment.stop_id = target_stop.id
+                db.delete(stop)
+            duplicate_legs = list(
+                db.scalars(select(orm.TripLeg).where(orm.TripLeg.trip_day_id == duplicate.id))
+            )
+            for leg in duplicate_legs:
+                db.delete(leg)
+            if not canonical.title and duplicate.title:
+                canonical.title = duplicate.title
+            if not canonical.note and duplicate.note:
+                canonical.note = duplicate.note
+            if duplicate.starts_at_utc is not None:
+                canonical.starts_at_utc = (
+                    min(canonical.starts_at_utc, duplicate.starts_at_utc)
+                    if canonical.starts_at_utc is not None
+                    else duplicate.starts_at_utc
+                )
+            if duplicate.ends_at_utc is not None:
+                canonical.ends_at_utc = (
+                    max(canonical.ends_at_utc, duplicate.ends_at_utc)
+                    if canonical.ends_at_utc is not None
+                    else duplicate.ends_at_utc
+                )
+            db.delete(duplicate)
+        db.flush()
+
+    for day_id in changed_day_ids:
+        renumber_day_stops(db, day_id)
+        for stop in db.scalars(select(orm.Stop).where(orm.Stop.trip_day_id == day_id)):
+            renumber_stop_moments(db, stop.id)
+        rebuild_day_legs(db, run, day_id)
+    renumber_visible_trip_days(db, trip_id, run.id)
+
+
+def merge_empty_locked_stops_with_generated_media(
+    db: Session, trip_id: UUID, run: orm.ReconstructionRun
+) -> None:
+    days = list(
+        db.scalars(
+            select(orm.TripDay)
+            .where(
+                orm.TripDay.trip_id == trip_id,
+                or_(
+                    orm.TripDay.reconstruction_run_id == run.id,
+                    orm.TripDay.user_locked.is_(True),
+                ),
+            )
+            .order_by(orm.TripDay.day_date, orm.TripDay.position)
+        )
+    )
+    changed_day_ids: set[UUID] = set()
+    for day in days:
+        stops = list(
+            db.scalars(
+                select(orm.Stop)
+                .where(orm.Stop.trip_day_id == day.id)
+                .order_by(orm.Stop.starts_at_utc, orm.Stop.position, orm.Stop.id)
+            )
+        )
+        locked_targets = [
+            stop for stop in stops if stop.user_locked and stop_media_count(db, stop.id) == 0
+        ]
+        generated_sources = [
+            stop
+            for stop in stops
+            if not stop.user_locked
+            and stop.reconstruction_run_id == run.id
+            and stop_media_count(db, stop.id) > 0
+        ]
+        for source in generated_sources:
+            target = best_empty_locked_stop_target(db, locked_targets, source)
+            if target is None:
+                continue
+            merge_stop_into_target(db, source, target)
+            changed_day_ids.add(day.id)
+
+    for day_id in changed_day_ids:
+        renumber_day_stops(db, day_id)
+        for stop in db.scalars(select(orm.Stop).where(orm.Stop.trip_day_id == day_id)):
+            renumber_stop_moments(db, stop.id)
+        rebuild_day_legs(db, run, day_id)
+
+
+def best_empty_locked_stop_target(
+    db: Session, targets: list[orm.Stop], source: orm.Stop
+) -> orm.Stop | None:
+    source_latitude, source_longitude = stop_coordinates(db, source.id)
+    if source_latitude is None or source_longitude is None:
+        return None
+    best: tuple[float, orm.Stop] | None = None
+    for target in targets:
+        if not stop_time_ranges_touch(target, source):
+            continue
+        target_latitude, target_longitude = stop_coordinates(db, target.id)
+        if target_latitude is None or target_longitude is None:
+            continue
+        distance = haversine_meters(
+            target_latitude,
+            target_longitude,
+            source_latitude,
+            source_longitude,
+        )
+        if distance > STOP_RADIUS_METERS:
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, target)
+    return best[1] if best is not None else None
+
+
+def merge_stop_into_target(db: Session, source: orm.Stop, target: orm.Stop) -> None:
+    if not target.title and source.title:
+        target.title = source.title
+    if not target.note and source.note:
+        target.note = source.note
+    target.starts_at_utc = min(target.starts_at_utc, source.starts_at_utc)
+    target.ends_at_utc = max(target.ends_at_utc, source.ends_at_utc)
+    moments = list(db.scalars(select(orm.Moment).where(orm.Moment.stop_id == source.id)))
+    for moment in moments:
+        moment.stop_id = target.id
+    db.execute(delete(orm.TripLeg).where(orm.TripLeg.from_stop_id == source.id))
+    db.execute(delete(orm.TripLeg).where(orm.TripLeg.to_stop_id == source.id))
+    db.delete(source)
+    db.flush()
+
+
+def stop_media_count(db: Session, stop_id: UUID) -> int:
+    return (
+        db.scalar(
+            select(func.count(orm.MomentMedia.id))
+            .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+            .where(orm.Moment.stop_id == stop_id)
+        )
+        or 0
+    )
+
+
+def stop_coordinates(db: Session, stop_id: UUID) -> tuple[float | None, float | None]:
+    latitude: Any = literal_column("ST_Y(stops.centroid::geometry)").label("latitude")
+    longitude: Any = literal_column("ST_X(stops.centroid::geometry)").label("longitude")
+    row = db.execute(
+        select(latitude, longitude).select_from(orm.Stop).where(orm.Stop.id == stop_id)
+    ).one_or_none()
+    if row is None:
+        return None, None
+    return (
+        float(row.latitude) if row.latitude is not None else None,
+        float(row.longitude) if row.longitude is not None else None,
+    )
+
+
+def stop_time_ranges_touch(target: orm.Stop, source: orm.Stop) -> bool:
+    return source.starts_at_utc <= target.ends_at_utc + timedelta(
+        minutes=MOMENT_GAP_MINUTES
+    ) and source.ends_at_utc >= target.starts_at_utc - timedelta(minutes=MOMENT_GAP_MINUTES)
 
 
 def renumber_day_stops(db: Session, trip_day_id: UUID) -> None:
@@ -831,18 +1097,16 @@ def persist_clusters(
 ) -> dict[orm.TripDay, list[orm.Stop]]:
     created: dict[orm.TripDay, list[orm.Stop]] = {}
     known_places: list[tuple[orm.Place, float, float]] = []
-    for day_position, day in enumerate(sorted(clusters_by_day), start=1):
+    for day in sorted(clusters_by_day):
         clusters = clusters_by_day[day]
-        trip_day = orm.TripDay(
-            trip_id=trip_id,
-            day_date=day,
-            position=day_position,
-            starts_at_utc=min(cluster.start for cluster in clusters) if clusters else None,
-            ends_at_utc=max(cluster.end for cluster in clusters) if clusters else None,
-            **generated(run, 0.95),
+        trip_day = find_or_create_trip_day_for_date(
+            db,
+            run,
+            trip_id,
+            day,
+            min(cluster.start for cluster in clusters) if clusters else None,
+            max(cluster.end for cluster in clusters) if clusters else None,
         )
-        db.add(trip_day)
-        db.flush()
         stops: list[orm.Stop] = []
         for stop_position, cluster in enumerate(clusters, start=1):
             geocode_result = geocoder.reverse_geocode(

@@ -3411,7 +3411,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         orm.TripDay.user_locked.is_(True),
                     ),
                 )
-                .order_by(orm.TripDay.position)
+                .order_by(
+                    orm.TripDay.day_date,
+                    orm.TripDay.starts_at_utc,
+                    orm.TripDay.position,
+                    orm.TripDay.id,
+                )
             ).scalars()
         )
         stops = list(
@@ -3657,13 +3662,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 ReconstructionDayResponse(
                     id=day.id,
                     date=day.day_date,
-                    position=day.position,
+                    position=position,
                     title=day.title,
                     note=day.note,
                     stops=stops_by_day.get(day.id, []),
                     legs=legs_by_day.get(day.id, []),
                 )
-                for day in days
+                for position, day in enumerate(days, start=1)
             ],
             reviewItems=[
                 ReviewItemResponse(
