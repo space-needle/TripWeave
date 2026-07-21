@@ -4,6 +4,7 @@ import pytest
 from PIL import Image
 from PIL.TiffImagePlugin import IFDRational
 
+from tripweave.application import media_processing
 from tripweave.application.media_processing import (
     MediaProcessingError,
     ProcessedMedia,
@@ -69,6 +70,22 @@ def test_no_exif_still_creates_derivatives() -> None:
     assert len(result.perceptual_hash) == 16
     assert result.quality_signals["resolution"] == 32 * 24
     assert result.raw_metadata["perceptual_hash_algorithm"] == "average_hash_8x8.v1"
+
+
+def test_jpeg_signature_with_mpo_container_is_processed(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_open = media_processing.Image.open
+
+    def open_as_mpo(payload: BytesIO) -> Image.Image:
+        image = original_open(payload)
+        image.format = "MPO"
+        return image
+
+    monkeypatch.setattr(media_processing.Image, "open", open_as_mpo)
+
+    result = process(jpeg_bytes())
+
+    assert result.detected_mime_type == "image/jpeg"
+    assert result.width == 32
 
 
 def test_invalid_image_renamed_as_jpeg_is_rejected() -> None:

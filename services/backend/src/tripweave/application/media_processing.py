@@ -23,6 +23,7 @@ JPEG_SIGNATURE = b"\xff\xd8\xff"
 HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"}
 XMP_RE = re.compile(rb"<x:xmpmeta[\s\S]{0,65536}</x:xmpmeta>")
 ALGORITHM_VERSION = "media-ingest.v1"
+SUPPORTED_PIL_FORMATS = {"HEIF", "JPEG", "MPO"}
 
 
 class MediaProcessingError(Exception):
@@ -75,7 +76,7 @@ def process_image_bytes(
 
     try:
         with Image.open(BytesIO(payload)) as image:
-            if image.format not in {"JPEG", "HEIF"}:
+            if image.format not in SUPPORTED_PIL_FORMATS:
                 raise MediaProcessingError("unsupported_image_type", "Unsupported image type")
             width, height = image.size
             enforce_pixel_limits(width, height, max_pixels, max_decoded_bytes)
