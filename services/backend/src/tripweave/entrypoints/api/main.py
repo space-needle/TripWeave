@@ -1918,15 +1918,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         title = " ".join(value.split()) if value is not None else ""
         return title or None
 
-    def combined_stop_title(first: orm.Stop, second: orm.Stop) -> str | None:
-        titles: list[str] = []
-        for title in (normalized_title(first.title), normalized_title(second.title)):
-            if title is not None and title not in titles:
-                titles.append(title)
-        if not titles:
-            return None
-        return ", ".join(titles)[:255]
-
     def split_stop_titles(stop: orm.Stop) -> tuple[str | None, str | None]:
         title = normalized_title(stop.title)
         if title is None:
@@ -2083,14 +2074,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(source, payload.expected_updated_at)
             before = {"sourceStopId": str(source.id), "targetStopId": str(target.id)}
-            if (source.starts_at_utc, source.position, source.id) < (
-                target.starts_at_utc,
-                target.position,
-                target.id,
-            ):
-                merged_title = combined_stop_title(source, target)
-            else:
-                merged_title = combined_stop_title(target, source)
+            merged_title = normalized_title(target.title)
             for moment in ordered_stop_moments(db, source.id):
                 moment.stop_id = target.id
                 lock_record(moment)

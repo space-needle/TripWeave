@@ -2573,6 +2573,15 @@ function TripStoryExplorer({
     stopId: string,
     dayId: string,
   ) {
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
+    ) {
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       if (canSelectTimelineStop()) {
@@ -3167,7 +3176,9 @@ function TripStoryExplorer({
                             <span className="timeline-stop-number">
                               {stop.displayPosition}
                             </span>
-                            {displayStopTitle(stop)}
+                            <span className="timeline-stop-title">
+                              {displayStopTitle(stop)}
+                            </span>
                           </span>
                           <small>
                             {stop.mediaCount} photos · {stop.contributorCount}{" "}
@@ -3261,6 +3272,7 @@ function TripStoryExplorer({
                                   onChange={(event) =>
                                     setStopTitleDraft(event.target.value)
                                   }
+                                  onKeyDown={(event) => event.stopPropagation()}
                                   maxLength={255}
                                   required
                                 />

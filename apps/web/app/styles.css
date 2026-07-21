@@ -1710,6 +1710,11 @@ button.needs-update {
   min-width: 0;
 }
 
+.timeline-stop-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .timeline-stop-number {
   min-width: 30px;
   min-height: 24px;
@@ -1732,6 +1737,7 @@ button.needs-update {
 
 .timeline-stop-button {
   min-height: 0;
+  min-width: 0;
   border: 0;
   border-radius: 0;
   background: transparent;

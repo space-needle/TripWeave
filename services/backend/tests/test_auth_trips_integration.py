@@ -1538,7 +1538,7 @@ def test_merge_adjacent_stops_rewires_trip_legs(client: TestClient, engine: Engi
     assert refreshed.status_code == 200
     merged_stops = refreshed.json()["days"][0]["stops"]
     assert [stop["id"] for stop in merged_stops] == [stop_one["id"], stop_three["id"]]
-    assert merged_stops[0]["title"] == "Named target stop, Named source stop"
+    assert merged_stops[0]["title"] == "Named target stop"
 
     with engine.connect() as connection:
         leg_rows = connection.execute(
