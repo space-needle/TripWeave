@@ -1,10 +1,9 @@
 from io import BytesIO
 
 import pytest
-from PIL import Image
+from PIL import Image as PilImage
 from PIL.TiffImagePlugin import IFDRational
 
-from tripweave.application import media_processing
 from tripweave.application.media_processing import (
     MediaProcessingError,
     ProcessedMedia,
@@ -15,8 +14,8 @@ from tripweave.application.media_processing import (
 )
 
 
-def jpeg_bytes(*, exif: Image.Exif | None = None, size: tuple[int, int] = (32, 24)) -> bytes:
-    image = Image.new("RGB", size, "navy")
+def jpeg_bytes(*, exif: PilImage.Exif | None = None, size: tuple[int, int] = (32, 24)) -> bytes:
+    image = PilImage.new("RGB", size, "navy")
     output = BytesIO()
     if exif is None:
         image.save(output, format="JPEG")
@@ -36,7 +35,7 @@ def process(payload: bytes) -> ProcessedMedia:
 
 
 def test_jpeg_with_exif_extracts_capture_time_and_camera() -> None:
-    exif = Image.Exif()
+    exif = PilImage.Exif()
     exif[36867] = "2024:05:06 07:08:09"
     exif[36881] = "+09:00"
     exif[271] = "TripWeave Camera"
@@ -53,7 +52,7 @@ def test_jpeg_with_exif_extracts_capture_time_and_camera() -> None:
 
 
 def test_rotated_image_normalizes_derivative_orientation() -> None:
-    exif = Image.Exif()
+    exif = PilImage.Exif()
     exif[274] = 6
 
     result = process(jpeg_bytes(exif=exif, size=(20, 40)))
@@ -73,14 +72,14 @@ def test_no_exif_still_creates_derivatives() -> None:
 
 
 def test_jpeg_signature_with_mpo_container_is_processed(monkeypatch: pytest.MonkeyPatch) -> None:
-    original_open = media_processing.Image.open
+    original_open = PilImage.open
 
-    def open_as_mpo(payload: BytesIO) -> Image.Image:
+    def open_as_mpo(payload: BytesIO) -> PilImage.Image:
         image = original_open(payload)
         image.format = "MPO"
         return image
 
-    monkeypatch.setattr(media_processing.Image, "open", open_as_mpo)
+    monkeypatch.setattr(PilImage, "open", open_as_mpo)
 
     result = process(jpeg_bytes())
 
@@ -109,13 +108,13 @@ def test_oversized_dimensions_are_rejected() -> None:
 
 
 def test_derivative_metadata_is_stripped() -> None:
-    exif = Image.Exif()
+    exif = PilImage.Exif()
     exif[36867] = "2024:05:06 07:08:09"
 
     result = process(jpeg_bytes(exif=exif))
 
     for derivative in result.derivatives:
-        with Image.open(BytesIO(derivative.payload)) as image:
+        with PilImage.open(BytesIO(derivative.payload)) as image:
             assert image.getexif() == {}
 
 
@@ -142,7 +141,7 @@ def test_gps_timestamp_extracts_utc_time() -> None:
 
 def test_heic_decodes_where_supported() -> None:
     pytest.importorskip("pillow_heif")
-    image = Image.new("RGB", (18, 12), "green")
+    image = PilImage.new("RGB", (18, 12), "green")
     output = BytesIO()
     try:
         image.save(output, format="HEIF")
