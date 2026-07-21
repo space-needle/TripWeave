@@ -196,6 +196,24 @@ function stringHeaders(
   );
 }
 
+function uploadMimeType(file: File): string {
+  const explicitType = file.type.trim().toLowerCase();
+  if (explicitType && explicitType !== "application/octet-stream") {
+    return explicitType;
+  }
+  const filename = file.name.toLowerCase();
+  if (filename.endsWith(".heic")) {
+    return "image/heic";
+  }
+  if (filename.endsWith(".heif")) {
+    return "image/heif";
+  }
+  if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  return explicitType || "application/octet-stream";
+}
+
 export default function TripWeaveApp() {
   const [path] = useState(() =>
     typeof window === "undefined" ? "/" : window.location.pathname,
@@ -719,7 +737,7 @@ function OwnerWorkspace() {
         files: files.map((file) => ({
           filename: file.name,
           byteSize: file.size,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: uploadMimeType(file),
         })),
       });
       setUploadSessions((current) => [session, ...current]);
@@ -2079,7 +2097,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
         files: files.map((file) => ({
           filename: file.name,
           byteSize: file.size,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: uploadMimeType(file),
         })),
       });
       setUploadSessions((current) => [session, ...current]);

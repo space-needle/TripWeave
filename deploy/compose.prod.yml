@@ -87,6 +87,7 @@ services:
         condition: service_healthy
     networks:
       - internal
+      - edge
     command: ["tripweave-worker"]
     logging: *json-logs
 
@@ -149,6 +150,7 @@ services:
       TRIPWEAVE_OCI_STORE_ALIAS_BUCKETS: ${OCI_STORE_ALIAS_BUCKETS:?set OCI_STORE_ALIAS_BUCKETS}
     networks:
       - internal
+      - edge
     command: ["tripweave-backup", "--help"]
     logging: *json-logs
 
