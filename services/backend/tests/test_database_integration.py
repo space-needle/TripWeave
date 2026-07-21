@@ -332,21 +332,30 @@ def test_reconstruction_creates_days_stops_moments_reviews_and_preserves_locked(
             >= 1
         )
 
-        locked_place_id = session.execute(text("SELECT id FROM places LIMIT 1")).scalar_one()
+        locked_stop = (
+            session.execute(text("SELECT id, place_id FROM stops ORDER BY starts_at_utc LIMIT 1"))
+            .mappings()
+            .one()
+        )
         session.execute(
-            text("UPDATE places SET user_locked = true WHERE id = :id"),
-            {"id": locked_place_id},
+            text("UPDATE stops SET user_locked = true WHERE id = :id"),
+            {"id": locked_stop["id"]},
         )
         session.commit()
 
         second = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
         assert second.days == summary.days
         assert second.review_items == summary.review_items
-        preserved = session.execute(
-            text("SELECT COUNT(*) FROM places WHERE id = :id AND user_locked = true"),
-            {"id": locked_place_id},
+        preserved_stop = session.execute(
+            text("SELECT COUNT(*) FROM stops WHERE id = :id AND user_locked = true"),
+            {"id": locked_stop["id"]},
         ).scalar_one()
-        assert preserved == 1
+        preserved_place = session.execute(
+            text("SELECT COUNT(*) FROM places WHERE id = :id"),
+            {"id": locked_stop["place_id"]},
+        ).scalar_one()
+        assert preserved_stop == 1
+        assert preserved_place == 1
 
 
 def test_incremental_reconstruction_adds_new_media_without_replacing_story(

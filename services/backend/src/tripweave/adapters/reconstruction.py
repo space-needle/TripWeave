@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import ColumnElement, delete, func, literal_column, or_, select, text
+from sqlalchemy import ColumnElement, delete, exists, func, literal_column, or_, select, text
 from sqlalchemy.orm import Session
 
 from tripweave.adapters import orm
@@ -686,10 +686,23 @@ def delete_unlocked_outputs(db: Session, trip_id: UUID) -> None:
         orm.MomentMedia,
         orm.Moment,
         orm.Stop,
-        orm.Place,
-        orm.TripDay,
     ):
         db.execute(delete(model).where(model.trip_id == trip_id, model.user_locked.is_(False)))
+    db.execute(
+        delete(orm.Place).where(
+            orm.Place.trip_id == trip_id,
+            orm.Place.user_locked.is_(False),
+            ~exists().where(orm.Stop.place_id == orm.Place.id),
+        )
+    )
+    db.execute(
+        delete(orm.TripDay).where(
+            orm.TripDay.trip_id == trip_id,
+            orm.TripDay.user_locked.is_(False),
+            ~exists().where(orm.Stop.trip_day_id == orm.TripDay.id),
+            ~exists().where(orm.TripLeg.trip_day_id == orm.TripDay.id),
+        )
+    )
 
 
 def load_media_points(db: Session, trip: orm.Trip) -> list[MediaPoint]:
