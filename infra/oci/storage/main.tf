@@ -20,6 +20,9 @@ resource "oci_objectstorage_bucket" "stores" {
 resource "oci_objectstorage_object_lifecycle_policy" "temporary_incoming_cleanup" {
   namespace = data.oci_objectstorage_namespace.current.namespace
   bucket    = oci_objectstorage_bucket.stores["media_private"].name
+  depends_on = [
+    oci_identity_policy.object_lifecycle_service,
+  ]
 
   rules {
     name       = "cleanup-temporary-incoming"
@@ -36,6 +39,9 @@ resource "oci_objectstorage_object_lifecycle_policy" "temporary_incoming_cleanup
 resource "oci_objectstorage_object_lifecycle_policy" "backup_retention" {
   namespace = data.oci_objectstorage_namespace.current.namespace
   bucket    = oci_objectstorage_bucket.stores["db_backups"].name
+  depends_on = [
+    oci_identity_policy.object_lifecycle_service,
+  ]
 
   rules {
     name       = "delete-expired-db-backups"
@@ -60,7 +66,17 @@ resource "oci_identity_policy" "tripweave_storage_runtime" {
 
   statements = [
     "Allow dynamic-group ${var.runtime_dynamic_group_name} to read buckets in compartment id ${var.compartment_id}",
-    "Allow dynamic-group ${var.runtime_dynamic_group_name} to manage objects in compartment id ${var.compartment_id} where any {target.bucket.name='${local.stores.media_private}', target.bucket.name='${local.stores.story_published}'}",
-    "Allow dynamic-group ${var.runtime_dynamic_group_name} to manage preauthrequests in compartment id ${var.compartment_id} where any {target.bucket.name='${local.stores.media_private}', target.bucket.name='${local.stores.story_published}'}",
+    "Allow dynamic-group ${var.runtime_dynamic_group_name} to manage objects in compartment id ${var.compartment_id} where any {target.bucket.name='${local.stores.media_private}', target.bucket.name='${local.stores.story_published}', target.bucket.name='${local.stores.db_backups}'}",
+    "Allow dynamic-group ${var.runtime_dynamic_group_name} to manage buckets in compartment id ${var.compartment_id} where all {request.permission='PAR_MANAGE', any {target.bucket.name='${local.stores.media_private}', target.bucket.name='${local.stores.story_published}'}}",
+  ]
+}
+
+resource "oci_identity_policy" "object_lifecycle_service" {
+  compartment_id = var.compartment_id
+  name           = "${var.bucket_prefix}-object-lifecycle-service"
+  description    = "Allow regional Object Storage lifecycle management to delete TripWeave temporary and backup objects."
+
+  statements = [
+    "Allow service objectstorage-${var.region} to manage object-family in compartment id ${var.compartment_id} where any {target.bucket.name='${local.stores.media_private}', target.bucket.name='${local.stores.db_backups}'}",
   ]
 }

@@ -148,6 +148,7 @@ module "storage" {
   source                     = "../storage"
   compartment_id             = var.compartment_id
   bucket_prefix              = var.bucket_prefix
+  region                     = var.region
   runtime_dynamic_group_name = oci_identity_dynamic_group.tripweave_instance.name
   backup_retention_days      = var.backup_retention_days
 }

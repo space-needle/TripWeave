@@ -9,6 +9,11 @@ variable "bucket_prefix" {
   default     = "tripweave"
 }
 
+variable "region" {
+  description = "OCI region identifier for regional Object Storage service policies."
+  type        = string
+}
+
 variable "runtime_dynamic_group_name" {
   description = "Dynamic group name for the deployed API/worker instance principals."
   type        = string
