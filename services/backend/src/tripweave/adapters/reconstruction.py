@@ -579,6 +579,7 @@ def add_media_to_moment(
                 **generated(run, 0.8),
             )
         )
+        db.flush()
     participant = db.execute(
         select(orm.MomentParticipant).where(
             orm.MomentParticipant.moment_id == moment.id,
@@ -594,6 +595,7 @@ def add_media_to_moment(
                 **generated(run, 0.8),
             )
         )
+        db.flush()
 
 
 def renumber_trip_days(db: Session, trip_id: UUID) -> None:

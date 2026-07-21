@@ -463,6 +463,16 @@ def test_incremental_reconstruction_adds_new_media_without_replacing_story(
             longitude=-122.0300,
             sha256="7" * 64,
         )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="new-third-stop-same-moment.jpg",
+            captured_at="2026-07-02T20:02:00+00:00",
+            latitude=37.0301,
+            longitude=-122.0301,
+            sha256="8" * 64,
+        )
 
     with Session(migrated_database) as session:
         db_trip = session.get(orm.Trip, trip["id"])
@@ -511,4 +521,22 @@ def test_incremental_reconstruction_adds_new_media_without_replacing_story(
             {"trip_id": trip["id"]},
         ).scalar_one()
         assert latest_summary["mode"] == "incremental"
-        assert latest_summary["assignedMedia"] == 2
+        assert latest_summary["assignedMedia"] == 3
+        assert (
+            session.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM moment_participants mp
+                    JOIN moments mo ON mo.id = mp.moment_id
+                    JOIN moment_media mm ON mm.moment_id = mo.id
+                    JOIN media_items mi ON mi.id = mm.media_item_id
+                    WHERE mi.original_filename IN (
+                        'new-third-stop.jpg',
+                        'new-third-stop-same-moment.jpg'
+                    )
+                    """
+                )
+            ).scalar_one()
+            == 1
+        )
