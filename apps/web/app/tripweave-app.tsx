@@ -3961,7 +3961,13 @@ function StoryMapCanvas({
     () => ({
       type: "FeatureCollection" as const,
       features: model.legs
-        .filter((leg) => leg.geometry)
+        .filter(
+          (leg) =>
+            leg.geometry &&
+            (state.viewMode !== "STOP" ||
+              !state.selectedDayId ||
+              leg.dayId === state.selectedDayId),
+        )
         .map((leg) => ({
           type: "Feature" as const,
           id: leg.id,
@@ -3975,7 +3981,7 @@ function StoryMapCanvas({
           geometry: leg.geometry,
         })),
     }),
-    [dayColorMap, model.legs],
+    [dayColorMap, model.legs, state.selectedDayId, state.viewMode],
   );
   const stopDisplayCoordinates = useMemo(
     () => stopDisplayCoordinateMap(model),
@@ -4076,7 +4082,6 @@ function StoryMapCanvas({
             label: firstStop ? storyDayDateLabel(day) : "Day",
             coordinates,
             featuredMedia,
-            count: dayStops.length,
             color: dayColorMap.get(dayId) ?? storyDayColors[0],
           };
         })
@@ -4361,7 +4366,6 @@ function StoryMapCanvas({
         label,
         coordinates,
         featuredMedia,
-        count,
         color,
       } of orderedDayMarkerData) {
         if (!coordinates) {
@@ -4389,11 +4393,6 @@ function StoryMapCanvas({
         const title = document.createElement("strong");
         title.textContent = label;
         element.appendChild(title);
-        if (count > 1) {
-          const badge = document.createElement("small");
-          badge.textContent = `${count} stops`;
-          element.appendChild(badge);
-        }
         element.addEventListener("click", (event) => {
           event.stopPropagation();
           onDayMarkerClick(dayId);
