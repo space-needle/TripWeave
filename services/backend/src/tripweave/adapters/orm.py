@@ -984,6 +984,66 @@ class StoryDraftProjection(Base, TimestampMixin):
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
+class StoryDayPhotoProjection(Base, TimestampMixin):
+    __tablename__ = "story_day_photo_projections"
+    __table_args__ = (UniqueConstraint("trip_id", "trip_day_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_day_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_days.id", ondelete="CASCADE"), nullable=False
+    )
+    source_reconstruction_run_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("reconstruction_runs.id", ondelete="CASCADE")
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class StoryStopPhotoProjection(Base, TimestampMixin):
+    __tablename__ = "story_stop_photo_projections"
+    __table_args__ = (UniqueConstraint("trip_id", "stop_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_day_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_days.id", ondelete="CASCADE"), nullable=False
+    )
+    stop_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
+    )
+    source_reconstruction_run_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("reconstruction_runs.id", ondelete="CASCADE")
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class AssetDownloadGrant(Base, TimestampMixin):
+    __tablename__ = "asset_download_grants"
+    __table_args__ = (UniqueConstraint("asset_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    asset_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("media_assets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    asset_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    download_url: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ShareLink(Base, TimestampMixin):
     __tablename__ = "share_links"
     __table_args__ = (
@@ -1085,5 +1145,16 @@ Index(
     StoryDraftProjection.trip_id,
     StoryDraftProjection.source_reconstruction_run_id,
 )
+Index(
+    "ix_story_day_photo_projections_trip_run",
+    StoryDayPhotoProjection.trip_id,
+    StoryDayPhotoProjection.source_reconstruction_run_id,
+)
+Index(
+    "ix_story_stop_photo_projections_trip_run",
+    StoryStopPhotoProjection.trip_id,
+    StoryStopPhotoProjection.source_reconstruction_run_id,
+)
+Index("ix_asset_download_grants_expires_at", AssetDownloadGrant.expires_at)
 Index("ix_share_links_trip_id", ShareLink.trip_id)
 Index("ix_share_links_story_version_id", ShareLink.story_version_id)

@@ -216,6 +216,40 @@ export type ReconstructionResponse = {
   storyUpdate: StoryUpdateStatusResponse;
 };
 
+export type StoryPhotoProjectionPhotoResponse = {
+  id: string;
+  filename?: string | null;
+  capturedAt?: string | null;
+  capturedAtLocal?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  contributorMemberId: string;
+  contributor: string;
+  thumbnailAssetId?: string | null;
+  previewAssetId?: string | null;
+  thumbnailUrl?: string | null;
+  previewUrl?: string | null;
+};
+
+export type StoryPhotoProjectionStopResponse = {
+  id: string;
+  dayId: string;
+  position: number;
+  displayPosition?: string | null;
+  title?: string | null;
+  placeName?: string | null;
+  photos: StoryPhotoProjectionPhotoResponse[];
+};
+
+export type StoryPhotoProjectionResponse = {
+  tripId: string;
+  dayId?: string | null;
+  stopId?: string | null;
+  sourceReconstructionRunId: string;
+  schemaVersion: number;
+  stops: StoryPhotoProjectionStopResponse[];
+};
+
 export type ReconstructionRunResponse = {
   id: string;
   state: string;

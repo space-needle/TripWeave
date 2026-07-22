@@ -29,6 +29,8 @@ import type {
   PublicStoryResponse,
   ReconstructionResponse,
   SimilarityGroupResponse,
+  StoryPhotoProjectionResponse,
+  StoryPhotoProjectionPhotoResponse,
   TripResponse,
   UploadFileResponse,
   UploadSessionResponse,
@@ -959,6 +961,10 @@ function OwnerWorkspace() {
     }
   }
 
+  function openOwnerStoryPhotos() {
+    setOwnerStoryPhotosOpen(true);
+  }
+
   function loadReviewDetails() {
     if (!selectedTrip || reconstruction) {
       return;
@@ -1446,7 +1452,7 @@ function OwnerWorkspace() {
                       type="button"
                       aria-label="Browse selected day photos"
                       title="Browse selected day photos"
-                      onClick={() => setOwnerStoryPhotosOpen(true)}
+                      onClick={() => void openOwnerStoryPhotos()}
                       disabled={!storyForExplorer?.latestRun}
                     >
                       <StoryHeaderIcon action="photos" />
@@ -1492,6 +1498,7 @@ function OwnerWorkspace() {
               {selectedTrip ? (
                 <TripStoryExplorer
                   reconstruction={storyForExplorer}
+                  tripId={selectedTrip.id}
                   state={storyState}
                   onStateChange={setStoryState}
                   onMergeStops={
@@ -1515,7 +1522,11 @@ function OwnerWorkspace() {
                         : "map"
                   }
                   onMobilePaneChange={(pane) => {
-                    setOwnerStoryPhotosOpen(pane === "photos");
+                    if (pane === "photos") {
+                      openOwnerStoryPhotos();
+                    } else {
+                      setOwnerStoryPhotosOpen(false);
+                    }
                     if (pane === "map") {
                       setMobileTab("story");
                     } else if (pane === "timeline") {
@@ -2334,6 +2345,7 @@ function hasConfiguredMapStyle(): boolean {
 
 function TripStoryExplorer({
   reconstruction,
+  tripId,
   state,
   onStateChange,
   onMergeStops,
@@ -2346,6 +2358,7 @@ function TripStoryExplorer({
   timezoneId,
 }: {
   reconstruction: ReconstructionResponse | null;
+  tripId?: string;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
@@ -2379,6 +2392,9 @@ function TripStoryExplorer({
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
+  const [galleryScopedPhotos, setGalleryScopedPhotos] = useState<
+    GalleryPhoto[] | null
+  >(null);
   const [editToolsStopId, setEditToolsStopId] = useState<string | null>(null);
   const [editingStopId, setEditingStopId] = useState<string | null>(null);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
@@ -2398,6 +2414,13 @@ function TripStoryExplorer({
   const [splitStopError, setSplitStopError] = useState("");
   const [splittingStopKey, setSplittingStopKey] = useState<string | null>(null);
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
+  const [photoProjectionCache, setPhotoProjectionCache] = useState<
+    Record<string, StoryPhotoProjectionResponse>
+  >({});
+  const [photoProjectionError, setPhotoProjectionError] = useState("");
+  const [loadingPhotoProjectionKey, setLoadingPhotoProjectionKey] = useState<
+    string | null
+  >(null);
   const displayMobilePane = mobilePane === "photos" ? "map" : mobilePane;
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
@@ -2411,32 +2434,72 @@ function TripStoryExplorer({
     [filteredModel.media, stopLabelById],
   );
   const browserPhotos = useMemo(() => {
+    if (galleryScopedPhotos) {
+      return galleryScopedPhotos;
+    }
     if (!galleryPhotoIds) {
       return galleryPhotos;
     }
     const scopedIds = new Set(galleryPhotoIds);
     return galleryPhotos.filter((photo) => scopedIds.has(photo.id));
-  }, [galleryPhotoIds, galleryPhotos]);
-  const photoRollDays = useMemo(
-    () =>
-      reconstruction?.days
-        .filter((day) => !state.selectedDayId || day.id === state.selectedDayId)
-        .map((day) => ({
-          day,
-          stops: day.stops
-            .map((stop) => ({
-              stop,
-              photos: filteredModel.media
-                .filter((item) => item.stopId === stop.id && item.thumbnailUrl)
-                .map((item) =>
-                  galleryPhotoFromStoryMedia(item, displayStopTitle(stop)),
-                ),
-            }))
-            .filter((section) => section.photos.length > 0),
-        }))
-        .filter((day) => day.stops.length > 0) ?? [],
-    [filteredModel.media, reconstruction?.days, state.selectedDayId],
-  );
+  }, [galleryPhotoIds, galleryPhotos, galleryScopedPhotos]);
+  const activePhotoDayId =
+    state.selectedDayId ?? reconstruction?.days[0]?.id ?? null;
+  const photoProjectionScope = `${tripId ?? "public"}:${
+    reconstruction?.latestRun?.id ?? "none"
+  }`;
+  const activeDayPhotoProjection = activePhotoDayId
+    ? photoProjectionCache[`${photoProjectionScope}:day:${activePhotoDayId}`]
+    : undefined;
+  const photoRollDays = useMemo(() => {
+    if (!activeDayPhotoProjection || !activePhotoDayId) {
+      if (tripId) {
+        return [];
+      }
+      return (
+        reconstruction?.days
+          .filter((day) => !state.selectedDayId || day.id === state.selectedDayId)
+          .map((day) => ({
+            day,
+            stops: day.stops
+              .map((stop) => ({
+                stop,
+                photos: filteredModel.media
+                  .filter((item) => item.stopId === stop.id && item.thumbnailUrl)
+                  .map((item) =>
+                    galleryPhotoFromStoryMedia(item, displayStopTitle(stop)),
+                  ),
+              }))
+              .filter((section) => section.photos.length > 0),
+          }))
+          .filter((day) => day.stops.length > 0) ?? []
+      );
+    }
+    const day = reconstruction?.days.find((item) => item.id === activePhotoDayId);
+    if (!day) {
+      return [];
+    }
+    return [
+      {
+        day,
+        stops: activeDayPhotoProjection.stops
+          .map((stop) => ({
+            stop,
+            photos: stop.photos.map((photo) =>
+              galleryPhotoFromStoryPhoto(photo, stop.title ?? stop.placeName),
+            ),
+          }))
+          .filter((section) => section.photos.length > 0),
+      },
+    ];
+  }, [
+    activeDayPhotoProjection,
+    activePhotoDayId,
+    filteredModel.media,
+    reconstruction?.days,
+    state.selectedDayId,
+    tripId,
+  ]);
   const photoRollPhotoCount = useMemo(
     () =>
       photoRollDays.reduce(
@@ -2458,6 +2521,68 @@ function TripStoryExplorer({
       onMobilePaneChange?.("map");
     }
   }, [mobilePane, onMobilePaneChange]);
+
+  const loadDayPhotoProjection = useCallback(
+    async (dayId: string) => {
+      if (!tripId) {
+        return null;
+      }
+      const cacheKey = `${photoProjectionScope}:day:${dayId}`;
+      if (photoProjectionCache[cacheKey] || loadingPhotoProjectionKey === cacheKey) {
+        return photoProjectionCache[cacheKey];
+      }
+      setPhotoProjectionError("");
+      setLoadingPhotoProjectionKey(cacheKey);
+      try {
+        const projection = await api.storyDayPhotos(tripId, dayId);
+        setPhotoProjectionCache((current) => ({
+          ...current,
+          [cacheKey]: projection,
+        }));
+        return projection;
+      } catch (error) {
+        setPhotoProjectionError(messageFrom(error));
+        return null;
+      } finally {
+        setLoadingPhotoProjectionKey(null);
+      }
+    },
+    [loadingPhotoProjectionKey, photoProjectionCache, photoProjectionScope, tripId],
+  );
+
+  const loadStopPhotoProjection = useCallback(
+    async (stopId: string) => {
+      if (!tripId) {
+        return null;
+      }
+      const cacheKey = `${photoProjectionScope}:stop:${stopId}`;
+      if (photoProjectionCache[cacheKey] || loadingPhotoProjectionKey === cacheKey) {
+        return photoProjectionCache[cacheKey];
+      }
+      setPhotoProjectionError("");
+      setLoadingPhotoProjectionKey(cacheKey);
+      try {
+        const projection = await api.storyStopPhotos(tripId, stopId);
+        setPhotoProjectionCache((current) => ({
+          ...current,
+          [cacheKey]: projection,
+        }));
+        return projection;
+      } catch (error) {
+        setPhotoProjectionError(messageFrom(error));
+        return null;
+      } finally {
+        setLoadingPhotoProjectionKey(null);
+      }
+    },
+    [loadingPhotoProjectionKey, photoProjectionCache, photoProjectionScope, tripId],
+  );
+
+  useEffect(() => {
+    if (isPhotoRollVisible && activePhotoDayId) {
+      void Promise.resolve().then(() => loadDayPhotoProjection(activePhotoDayId));
+    }
+  }, [activePhotoDayId, isPhotoRollVisible, loadDayPhotoProjection]);
 
   useEffect(() => {
     latestStateRef.current = state;
@@ -2626,30 +2751,54 @@ function TripStoryExplorer({
     onMobilePaneChange?.("map");
   }
 
-  function openStopPhotos(stopId: string, dayId: string) {
-    const stopMedia = filteredModel.media.filter(
-      (item) => item.stopId === stopId,
-    );
-    const featuredMedia =
-      stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
-    if (!featuredMedia) {
+  async function openStopPhotos(stopId: string, dayId: string) {
+    if (!tripId) {
+      const stopMedia = filteredModel.media.filter(
+        (item) => item.stopId === stopId,
+      );
+      const featuredMedia =
+        stopMedia.find((item) => item.thumbnailUrl) ?? stopMedia[0];
+      if (!featuredMedia) {
+        onStateChange(selectStoryStop(state, stopId, dayId));
+        return;
+      }
+      onStateChange(
+        selectStoryMedia(
+          state,
+          featuredMedia.id,
+          featuredMedia.momentId,
+          stopId,
+          dayId,
+        ),
+      );
+      const photos = stopMedia.map((item) =>
+        galleryPhotoFromStoryMedia(item, stopLabelById.get(stopId)),
+      );
+      setGalleryScopedPhotos(photos);
+      setGalleryPhotoIds(photos.map((item) => item.id));
+      setGalleryMediaId(featuredMedia.id);
+      return;
+    }
+    const projection = await loadStopPhotoProjection(stopId);
+    const photos =
+      projection?.stops.flatMap((stop) =>
+        stop.photos.map((photo) =>
+          galleryPhotoFromStoryPhoto(photo, stop.title ?? stop.placeName),
+        ),
+      ) ?? [];
+    const featuredPhoto =
+      photos.find((item) => item.thumbnailUrl ?? item.imageUrl) ?? photos[0];
+    if (!featuredPhoto) {
       onStateChange(selectStoryStop(state, stopId, dayId));
       return;
     }
-    onStateChange(
-      selectStoryMedia(
-        state,
-        featuredMedia.id,
-        featuredMedia.momentId,
-        stopId,
-        dayId,
-      ),
-    );
-    setGalleryPhotoIds(stopMedia.map((item) => item.id));
-    setGalleryMediaId(featuredMedia.id);
+    onStateChange(selectStoryStop(state, stopId, dayId));
+    setGalleryScopedPhotos(photos);
+    setGalleryPhotoIds(photos.map((item) => item.id));
+    setGalleryMediaId(featuredPhoto.id);
   }
 
-  function openPhotoRollPhoto(photoId: string, photoIds: string[]) {
+  function openPhotoRollPhoto(photoId: string, photos: GalleryPhoto[]) {
     const next = filteredModel.media.find((item) => item.id === photoId);
     if (next) {
       onStateChange(
@@ -2662,7 +2811,8 @@ function TripStoryExplorer({
         ),
       );
     }
-    setGalleryPhotoIds(photoIds);
+    setGalleryScopedPhotos(photos);
+    setGalleryPhotoIds(photos.map((photo) => photo.id));
     setGalleryMediaId(photoId);
     closePhotoRoll();
   }
@@ -2681,7 +2831,10 @@ function TripStoryExplorer({
   }
 
   function displayStopTitle(
-    stop: ReconstructionResponse["days"][number]["stops"][number],
+    stop: Pick<
+      ReconstructionResponse["days"][number]["stops"][number],
+      "placeName" | "position" | "title"
+    >,
   ): string {
     return stop.title ?? stop.placeName ?? `Stop ${stop.position}`;
   }
@@ -2985,6 +3138,7 @@ function TripStoryExplorer({
               <button
                 type="button"
                 onClick={() => {
+                  setGalleryScopedPhotos(null);
                   setGalleryPhotoIds(null);
                   setGalleryMediaId(
                     state.selectedMediaId ?? galleryPhotos[0]?.id ?? null,
@@ -3064,7 +3218,8 @@ function TripStoryExplorer({
             </select>
           </label>
         </div>
-        {photoRollDays.length > 0 ? (
+        {(photoRollDays.length > 0 ||
+          (activeDay?.stops.some((stop) => stop.mediaCount > 0) ?? false)) ? (
           <div className="story-photo-roll-launch">
             <div>
               <strong>
@@ -3072,12 +3227,31 @@ function TripStoryExplorer({
                   ? `${storyDayLabel(activeDay)} photos`
                   : "Trip photos"}
               </strong>
-              <span>{photoRollPhotoCount} photos grouped by stop</span>
+              <span>
+                {photoRollPhotoCount ||
+                  activeDay?.stops.reduce(
+                    (total, stop) => total + stop.mediaCount,
+                    0,
+                  ) ||
+                  0}{" "}
+                photos grouped by stop
+              </span>
             </div>
-            <button type="button" onClick={() => setIsPhotoRollOpen(true)}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsPhotoRollOpen(true);
+                if (activePhotoDayId) {
+                  void loadDayPhotoProjection(activePhotoDayId);
+                }
+              }}
+            >
               Browse day photos
             </button>
           </div>
+        ) : null}
+        {photoProjectionError ? (
+          <p className="error">{photoProjectionError}</p>
         ) : null}
         <section
           className="story-timeline"
@@ -3627,9 +3801,7 @@ function TripStoryExplorer({
                     </strong>
                   ) : null}
                   {stops.map(({ stop, photos }) => {
-                    const dayPhotoIds = stops.flatMap((section) =>
-                      section.photos.map((photo) => photo.id),
-                    );
+                    const dayPhotos = stops.flatMap((section) => section.photos);
                     return (
                       <section className="story-photo-stop-grid" key={stop.id}>
                         <div className="story-photo-stop-heading">
@@ -3643,7 +3815,7 @@ function TripStoryExplorer({
                               key={photo.id}
                               aria-label={`Open photo from ${displayStopTitle(stop)}`}
                               onClick={() =>
-                                openPhotoRollPhoto(photo.id, dayPhotoIds)
+                                openPhotoRollPhoto(photo.id, dayPhotos)
                               }
                             >
                               {(photo.thumbnailUrl ?? photo.imageUrl) ? (
@@ -3676,6 +3848,7 @@ function TripStoryExplorer({
         onClose={() => {
           setGalleryMediaId(null);
           setGalleryPhotoIds(null);
+          setGalleryScopedPhotos(null);
         }}
         onSelect={(photoId) => {
           const next = filteredModel.media.find((item) => item.id === photoId);
@@ -3708,6 +3881,21 @@ function galleryPhotoFromStoryMedia(
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt,
+    contextLabel,
+  };
+}
+
+function galleryPhotoFromStoryPhoto(
+  item: StoryPhotoProjectionPhotoResponse,
+  contextLabel?: string | null,
+): GalleryPhoto {
+  return {
+    id: item.id,
+    imageUrl: item.previewUrl ?? item.thumbnailUrl ?? null,
+    thumbnailUrl: item.thumbnailUrl ?? null,
+    filename: item.filename ?? null,
+    contributor: item.contributor,
+    capturedAt: item.capturedAt ?? null,
     contextLabel,
   };
 }

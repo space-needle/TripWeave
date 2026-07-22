@@ -677,6 +677,15 @@ def test_account_contributor_can_view_shared_story_without_editing(
     assert projection.status_code == 200
     assert projection.json()["latestRun"]["id"] == story.json()["latestRun"]["id"]
     assert projection.json()["reviewItems"] == []
+    day_id = story.json()["days"][0]["id"]
+    stop_id = story.json()["days"][0]["stops"][0]["id"]
+    day_photos = contributor_client.get(f"/trips/{trip['id']}/story-day-photos/{day_id}")
+    assert day_photos.status_code == 200
+    assert len(day_photos.json()["stops"][0]["photos"]) == 2
+    assert day_photos.json()["stops"][0]["photos"][0]["previewUrl"]
+    stop_photos = contributor_client.get(f"/trips/{trip['id']}/story-stop-photos/{stop_id}")
+    assert stop_photos.status_code == 200
+    assert len(stop_photos.json()["stops"][0]["photos"]) == 2
     with engine.connect() as connection:
         projection_count = connection.execute(
             text(
@@ -688,7 +697,33 @@ def test_account_contributor_can_view_shared_story_without_editing(
             ),
             {"trip_id": trip["id"]},
         ).scalar_one()
+        day_projection_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM story_day_photo_projections
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        stop_projection_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM story_stop_photo_projections
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        grant_cache_count = connection.execute(
+            text("SELECT count(*) FROM asset_download_grants")
+        ).scalar_one()
     assert projection_count == 1
+    assert day_projection_count == 1
+    assert stop_projection_count == 1
+    assert grant_cache_count >= 2
 
     other_client = TestClient(
         create_app(
@@ -699,6 +734,8 @@ def test_account_contributor_can_view_shared_story_without_editing(
     register(other_client, "story-outsider@example.com", "Outsider")
     denied_projection = other_client.get(f"/trips/{trip['id']}/story-draft-projection")
     assert denied_projection.status_code == 404
+    denied_day_photos = other_client.get(f"/trips/{trip['id']}/story-day-photos/{day_id}")
+    assert denied_day_photos.status_code == 404
 
     cannot_reconstruct = contributor_client.post(
         f"/trips/{trip['id']}/reconstruction-runs",

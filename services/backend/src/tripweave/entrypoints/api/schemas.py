@@ -442,6 +442,40 @@ class ReconstructionResponse(BaseModel):
     story_update: StoryUpdateStatusResponse = Field(alias="storyUpdate")
 
 
+class StoryPhotoProjectionPhotoResponse(BaseModel):
+    id: UUID
+    filename: str | None = None
+    captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    captured_at_local: datetime | None = Field(default=None, alias="capturedAtLocal")
+    latitude: float | None = None
+    longitude: float | None = None
+    contributor_member_id: UUID = Field(alias="contributorMemberId")
+    contributor: str
+    thumbnail_asset_id: UUID | None = Field(default=None, alias="thumbnailAssetId")
+    preview_asset_id: UUID | None = Field(default=None, alias="previewAssetId")
+    thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
+    preview_url: str | None = Field(default=None, alias="previewUrl")
+
+
+class StoryPhotoProjectionStopResponse(BaseModel):
+    id: UUID
+    day_id: UUID = Field(alias="dayId")
+    position: int
+    display_position: str | None = Field(default=None, alias="displayPosition")
+    title: str | None = None
+    place_name: str | None = Field(default=None, alias="placeName")
+    photos: list[StoryPhotoProjectionPhotoResponse]
+
+
+class StoryPhotoProjectionResponse(BaseModel):
+    trip_id: UUID = Field(alias="tripId")
+    day_id: UUID | None = Field(default=None, alias="dayId")
+    stop_id: UUID | None = Field(default=None, alias="stopId")
+    source_reconstruction_run_id: UUID = Field(alias="sourceReconstructionRunId")
+    schema_version: int = Field(alias="schemaVersion")
+    stops: list[StoryPhotoProjectionStopResponse]
+
+
 class EditOperationRequest(BaseModel):
     operation_type: str = Field(alias="operationType")
     payload: dict[str, object] = Field(default_factory=dict)

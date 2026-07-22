@@ -106,6 +106,7 @@ from tripweave.entrypoints.api.schemas import (
     SimilarityGroupResponse,
     SimilarityGroupsResponse,
     SimilarityMemberResponse,
+    StoryPhotoProjectionResponse,
     StoryUpdateStatusResponse,
     StoryVersionResponse,
     TripCreateRequest,
@@ -2528,6 +2529,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         invalidate_story_draft_projection(db, trip_id)
         db.commit()
+        rebuild_story_projections(db, trip_id)
         db.refresh(operation)
         return operation
 
@@ -2645,6 +2647,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         invalidate_story_draft_projection(db, trip_id)
         db.commit()
+        rebuild_story_projections(db, trip_id)
         db.refresh(undo)
         return undo
 
@@ -3225,6 +3228,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         media_item.updated_at = datetime.now(UTC)
         invalidate_story_draft_projection(db, media_item.trip_id)
         db.commit()
+        rebuild_story_projections(db, media_item.trip_id)
         return media_item_response(
             db,
             media_item,
@@ -3697,9 +3701,22 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             storyUpdate=story_update,
         )
 
+    STORY_PHOTO_PROJECTION_SCHEMA_VERSION = 1
+    DOWNLOAD_GRANT_REFRESH_WINDOW = timedelta(seconds=60)
+
     def invalidate_story_draft_projection(db: DbSession, trip_id: UUID) -> None:
         db.execute(
             delete(orm.StoryDraftProjection).where(orm.StoryDraftProjection.trip_id == trip_id)
+        )
+        db.execute(
+            delete(orm.StoryDayPhotoProjection).where(
+                orm.StoryDayPhotoProjection.trip_id == trip_id
+            )
+        )
+        db.execute(
+            delete(orm.StoryStopPhotoProjection).where(
+                orm.StoryStopPhotoProjection.trip_id == trip_id
+            )
         )
 
     def asset_ids_for_reconstruction(
@@ -3828,6 +3845,226 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         db.commit()
 
+    def photo_from_reconstruction_media(
+        media: ReconstructionMediaResponse,
+        asset_ids_by_media: dict[UUID, dict[str, UUID]],
+    ) -> dict[str, object]:
+        payload = media.model_dump(mode="json", by_alias=True)
+        payload["thumbnailUrl"] = None
+        payload["previewUrl"] = None
+        asset_ids = asset_ids_by_media.get(media.id, {})
+        thumbnail_id = asset_ids.get(MediaAssetType.THUMBNAIL.value)
+        preview_id = asset_ids.get(MediaAssetType.DISPLAY.value)
+        if thumbnail_id is not None:
+            payload["thumbnailAssetId"] = str(thumbnail_id)
+        if preview_id is not None:
+            payload["previewAssetId"] = str(preview_id)
+        return payload
+
+    def story_photo_projection_payloads(
+        db: DbSession,
+        response: ReconstructionResponse,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        if response.latest_run is None:
+            return [], []
+        asset_ids_by_media = asset_ids_for_reconstruction(db, response)
+        day_payloads: list[dict[str, object]] = []
+        stop_payloads: list[dict[str, object]] = []
+        for day in response.days:
+            day_stops: list[dict[str, object]] = []
+            for stop in day.stops:
+                photos = [
+                    photo_from_reconstruction_media(media, asset_ids_by_media)
+                    for moment in stop.moments
+                    for media in moment.media
+                ]
+                if not photos:
+                    continue
+                stop_payload = {
+                    "id": str(stop.id),
+                    "dayId": str(day.id),
+                    "position": stop.position,
+                    "displayPosition": stop.display_position,
+                    "title": stop.title,
+                    "placeName": stop.place_name,
+                    "photos": photos,
+                }
+                day_stops.append(stop_payload)
+                stop_payloads.append(
+                    {
+                        "dayId": str(day.id),
+                        "stopId": str(stop.id),
+                        "sourceReconstructionRunId": str(response.latest_run.id),
+                        "schemaVersion": STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                        "stops": [stop_payload],
+                    }
+                )
+            day_payloads.append(
+                {
+                    "dayId": str(day.id),
+                    "sourceReconstructionRunId": str(response.latest_run.id),
+                    "schemaVersion": STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                    "stops": day_stops,
+                }
+            )
+        return day_payloads, stop_payloads
+
+    def save_story_photo_projections(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        source_reconstruction_run_id: UUID,
+        response: ReconstructionResponse,
+    ) -> None:
+        now = datetime.now(UTC)
+        db.execute(
+            delete(orm.StoryDayPhotoProjection).where(
+                orm.StoryDayPhotoProjection.trip_id == trip_id
+            )
+        )
+        db.execute(
+            delete(orm.StoryStopPhotoProjection).where(
+                orm.StoryStopPhotoProjection.trip_id == trip_id
+            )
+        )
+        day_payloads, stop_payloads = story_photo_projection_payloads(db, response)
+        for payload in day_payloads:
+            day_id = UUID(str(payload["dayId"]))
+            payload["tripId"] = str(trip_id)
+            db.add(
+                orm.StoryDayPhotoProjection(
+                    trip_id=trip_id,
+                    trip_day_id=day_id,
+                    source_reconstruction_run_id=source_reconstruction_run_id,
+                    schema_version=STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                    payload=payload,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        for payload in stop_payloads:
+            payload["tripId"] = str(trip_id)
+            db.add(
+                orm.StoryStopPhotoProjection(
+                    trip_id=trip_id,
+                    trip_day_id=UUID(str(payload["dayId"])),
+                    stop_id=UUID(str(payload["stopId"])),
+                    source_reconstruction_run_id=source_reconstruction_run_id,
+                    schema_version=STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                    payload=payload,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        db.commit()
+
+    def rebuild_story_projections(db: DbSession, trip_id: UUID) -> None:
+        response = reconstruction_response(db, trip_id)
+        if response.latest_run is None:
+            return
+        save_story_draft_projection(
+            db,
+            trip_id=trip_id,
+            source_reconstruction_run_id=response.latest_run.id,
+            payload=story_draft_projection_payload(db, response),
+        )
+        save_story_photo_projections(
+            db,
+            trip_id=trip_id,
+            source_reconstruction_run_id=response.latest_run.id,
+            response=response,
+        )
+
+    def cached_download_urls_for_assets(
+        db: DbSession, asset_ids: set[UUID]
+    ) -> dict[UUID, str | None]:
+        if not asset_ids:
+            return {}
+        now = datetime.now(UTC)
+        refresh_after = now + DOWNLOAD_GRANT_REFRESH_WINDOW
+        grants = {
+            grant.asset_id: grant
+            for grant in db.execute(
+                select(orm.AssetDownloadGrant).where(
+                    orm.AssetDownloadGrant.asset_id.in_(asset_ids),
+                    orm.AssetDownloadGrant.expires_at > refresh_after,
+                )
+            ).scalars()
+        }
+        urls: dict[UUID, str | None] = {
+            asset_id: grants[asset_id].download_url for asset_id in asset_ids if asset_id in grants
+        }
+        missing_ids = asset_ids - set(urls)
+        if not missing_ids:
+            return urls
+        assets = list(
+            db.execute(select(orm.MediaAsset).where(orm.MediaAsset.id.in_(missing_ids))).scalars()
+        )
+        db.execute(
+            delete(orm.AssetDownloadGrant).where(orm.AssetDownloadGrant.asset_id.in_(missing_ids))
+        )
+        for asset in assets:
+            try:
+                grant = app.state.blob_store.create_download_grant(
+                    DownloadGrantRequest(
+                        blob_ref=BlobRef(store_alias=asset.store_alias, object_key=asset.object_key)
+                    )
+                )
+            except BlobNotFoundError:
+                urls[asset.id] = None
+                continue
+            urls[asset.id] = grant.url
+            db.add(
+                orm.AssetDownloadGrant(
+                    asset_id=asset.id,
+                    asset_type=asset.asset_type,
+                    download_url=grant.url,
+                    expires_at=grant.expires_at,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        db.commit()
+        return urls
+
+    def hydrate_story_photo_projection(
+        db: DbSession, payload: dict[str, object]
+    ) -> StoryPhotoProjectionResponse:
+        hydrated = json.loads(json.dumps(payload))
+        asset_ids: set[UUID] = set()
+        media_refs: list[tuple[dict[str, object], str, UUID]] = []
+        for stop in hydrated.get("stops", []):
+            if not isinstance(stop, dict):
+                continue
+            for photo in stop.get("photos", []):
+                if not isinstance(photo, dict):
+                    continue
+                for asset_key, url_key in (
+                    ("thumbnailAssetId", "thumbnailUrl"),
+                    ("previewAssetId", "previewUrl"),
+                ):
+                    asset_id = photo.get(asset_key)
+                    if asset_id is None:
+                        continue
+                    try:
+                        asset_uuid = UUID(str(asset_id))
+                    except ValueError:
+                        continue
+                    asset_ids.add(asset_uuid)
+                    media_refs.append((photo, url_key, asset_uuid))
+        urls = cached_download_urls_for_assets(db, asset_ids)
+        for photo, url_key, asset_id in media_refs:
+            photo[url_key] = urls.get(asset_id)
+        return StoryPhotoProjectionResponse.model_validate(hydrated)
+
+    def latest_run_for_trip_or_none(db: DbSession, trip_id: UUID) -> orm.ReconstructionRun | None:
+        return db.execute(
+            select(orm.ReconstructionRun)
+            .where(orm.ReconstructionRun.trip_id == trip_id)
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
     def story_draft_projection_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
         latest_run = db.execute(
             select(orm.ReconstructionRun)
@@ -3881,6 +4118,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 source_reconstruction_run_id=response.latest_run.id,
                 payload=story_draft_projection_payload(db, response),
             )
+            save_story_photo_projections(
+                db,
+                trip_id=trip_id,
+                source_reconstruction_run_id=response.latest_run.id,
+                response=response,
+            )
         return response
 
     @app.get("/trips/{trip_id}/reconstruction", response_model=ReconstructionResponse)
@@ -3900,6 +4143,95 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> ReconstructionResponse:
         require_member_for_actor(db, trip_id, actor)
         return story_draft_projection_response(db, trip_id)
+
+    @app.get(
+        "/trips/{trip_id}/story-day-photos/{day_id}",
+        response_model=StoryPhotoProjectionResponse,
+    )
+    def get_story_day_photos(
+        trip_id: UUID,
+        day_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> StoryPhotoProjectionResponse:
+        require_member_for_actor(db, trip_id, actor)
+        latest_run = latest_run_for_trip_or_none(db, trip_id)
+        if latest_run is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
+        projection = db.execute(
+            select(orm.StoryDayPhotoProjection).where(
+                orm.StoryDayPhotoProjection.trip_id == trip_id,
+                orm.StoryDayPhotoProjection.trip_day_id == day_id,
+                orm.StoryDayPhotoProjection.source_reconstruction_run_id == latest_run.id,
+                orm.StoryDayPhotoProjection.schema_version == STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+            )
+        ).scalar_one_or_none()
+        if projection is None:
+            response = story_draft_projection_response(db, trip_id)
+            save_story_photo_projections(
+                db,
+                trip_id=trip_id,
+                source_reconstruction_run_id=latest_run.id,
+                response=response,
+            )
+            projection = db.execute(
+                select(orm.StoryDayPhotoProjection).where(
+                    orm.StoryDayPhotoProjection.trip_id == trip_id,
+                    orm.StoryDayPhotoProjection.trip_day_id == day_id,
+                    orm.StoryDayPhotoProjection.source_reconstruction_run_id == latest_run.id,
+                    orm.StoryDayPhotoProjection.schema_version
+                    == STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                )
+            ).scalar_one_or_none()
+        if projection is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story day not found")
+        return hydrate_story_photo_projection(db, projection.payload)
+
+    @app.get(
+        "/trips/{trip_id}/story-stop-photos/{stop_id}",
+        response_model=StoryPhotoProjectionResponse,
+    )
+    def get_story_stop_photos(
+        trip_id: UUID,
+        stop_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> StoryPhotoProjectionResponse:
+        require_member_for_actor(db, trip_id, actor)
+        latest_run = latest_run_for_trip_or_none(db, trip_id)
+        if latest_run is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
+        projection = db.execute(
+            select(orm.StoryStopPhotoProjection).where(
+                orm.StoryStopPhotoProjection.trip_id == trip_id,
+                orm.StoryStopPhotoProjection.stop_id == stop_id,
+                orm.StoryStopPhotoProjection.source_reconstruction_run_id == latest_run.id,
+                orm.StoryStopPhotoProjection.schema_version
+                == STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+            )
+        ).scalar_one_or_none()
+        if projection is None:
+            response = story_draft_projection_response(db, trip_id)
+            save_story_photo_projections(
+                db,
+                trip_id=trip_id,
+                source_reconstruction_run_id=latest_run.id,
+                response=response,
+            )
+            projection = db.execute(
+                select(orm.StoryStopPhotoProjection).where(
+                    orm.StoryStopPhotoProjection.trip_id == trip_id,
+                    orm.StoryStopPhotoProjection.stop_id == stop_id,
+                    orm.StoryStopPhotoProjection.source_reconstruction_run_id == latest_run.id,
+                    orm.StoryStopPhotoProjection.schema_version
+                    == STORY_PHOTO_PROJECTION_SCHEMA_VERSION,
+                )
+            ).scalar_one_or_none()
+        if projection is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Story stop not found"
+            )
+        return hydrate_story_photo_projection(db, projection.payload)
 
     @app.post("/trips/{trip_id}/publications", response_model=PublicationResponse)
     def create_publication(

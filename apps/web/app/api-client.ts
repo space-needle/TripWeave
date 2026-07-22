@@ -18,6 +18,7 @@ import type {
   ReconstructionResponse,
   RegisterRequest,
   SimilarityGroupsResponse,
+  StoryPhotoProjectionResponse,
   TripCreateRequest,
   TripResponse,
   TripsListResponse,
@@ -220,6 +221,22 @@ export const api = {
   storyDraftProjection(tripId: string): Promise<ReconstructionResponse> {
     return apiRequest<ReconstructionResponse>(
       `/trips/${tripId}/story-draft-projection`,
+    );
+  },
+  storyDayPhotos(
+    tripId: string,
+    dayId: string,
+  ): Promise<StoryPhotoProjectionResponse> {
+    return apiRequest<StoryPhotoProjectionResponse>(
+      `/trips/${tripId}/story-day-photos/${dayId}`,
+    );
+  },
+  storyStopPhotos(
+    tripId: string,
+    stopId: string,
+  ): Promise<StoryPhotoProjectionResponse> {
+    return apiRequest<StoryPhotoProjectionResponse>(
+      `/trips/${tripId}/story-stop-photos/${stopId}`,
     );
   },
   startReconstruction(tripId: string): Promise<ReconstructionResponse> {
