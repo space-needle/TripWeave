@@ -121,6 +121,8 @@ from tripweave.entrypoints.api.schemas import (
 )
 from tripweave.logging import configure_logging
 
+STORY_DRAFT_PROJECTION_SCHEMA_VERSION = 1
+
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
@@ -2524,6 +2526,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             target_id=target_id,
             review_item_id=review_item.id if review_item is not None else payload.review_item_id,
         )
+        invalidate_story_draft_projection(db, trip_id)
         db.commit()
         db.refresh(operation)
         return operation
@@ -2640,6 +2643,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             review_item_id=operation.review_item_id,
             undo_of_operation_id=operation.id,
         )
+        invalidate_story_draft_projection(db, trip_id)
         db.commit()
         db.refresh(undo)
         return undo
@@ -3219,6 +3223,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 media_item.include_in_story = payload.include_in_story
 
         media_item.updated_at = datetime.now(UTC)
+        invalidate_story_draft_projection(db, media_item.trip_id)
         db.commit()
         return media_item_response(
             db,
@@ -3692,6 +3697,166 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             storyUpdate=story_update,
         )
 
+    def invalidate_story_draft_projection(db: DbSession, trip_id: UUID) -> None:
+        db.execute(
+            delete(orm.StoryDraftProjection).where(orm.StoryDraftProjection.trip_id == trip_id)
+        )
+
+    def asset_ids_for_reconstruction(
+        db: DbSession, response: ReconstructionResponse
+    ) -> dict[UUID, dict[str, UUID]]:
+        media_ids: list[UUID] = [
+            media.id
+            for day in response.days
+            for stop in day.stops
+            for moment in stop.moments
+            for media in moment.media
+        ]
+        if not media_ids:
+            return {}
+        rows = db.execute(
+            select(
+                orm.MediaAsset.media_item_id,
+                orm.MediaAsset.asset_type,
+                orm.MediaAsset.id,
+            ).where(
+                orm.MediaAsset.media_item_id.in_(media_ids),
+                orm.MediaAsset.asset_type.in_(
+                    [MediaAssetType.THUMBNAIL.value, MediaAssetType.DISPLAY.value]
+                ),
+            )
+        ).all()
+        assets: dict[UUID, dict[str, UUID]] = {}
+        for media_item_id, asset_type, asset_id in rows:
+            assets.setdefault(media_item_id, {})[asset_type] = asset_id
+        return assets
+
+    def story_draft_projection_payload(
+        db: DbSession, response: ReconstructionResponse
+    ) -> dict[str, object]:
+        payload = response.model_dump(mode="json", by_alias=True)
+        payload["reviewItems"] = []
+        asset_ids_by_media = asset_ids_for_reconstruction(db, response)
+        for day in payload.get("days", []):
+            if not isinstance(day, dict):
+                continue
+            for stop in day.get("stops", []):
+                if not isinstance(stop, dict):
+                    continue
+                for moment in stop.get("moments", []):
+                    if not isinstance(moment, dict):
+                        continue
+                    for media in moment.get("media", []):
+                        if not isinstance(media, dict):
+                            continue
+                        media_id = media.get("id")
+                        try:
+                            media_uuid = UUID(str(media_id))
+                        except (TypeError, ValueError):
+                            continue
+                        asset_ids = asset_ids_by_media.get(media_uuid, {})
+                        thumbnail_id = asset_ids.get(MediaAssetType.THUMBNAIL.value)
+                        preview_id = asset_ids.get(MediaAssetType.DISPLAY.value)
+                        media["thumbnailUrl"] = None
+                        media["previewUrl"] = None
+                        if thumbnail_id is not None:
+                            media["thumbnailAssetId"] = str(thumbnail_id)
+                        if preview_id is not None:
+                            media["previewAssetId"] = str(preview_id)
+        return payload
+
+    def hydrate_story_draft_projection(
+        db: DbSession, payload: dict[str, object]
+    ) -> ReconstructionResponse:
+        hydrated = json.loads(json.dumps(payload))
+        representative_asset_ids: set[UUID] = set()
+        media_by_asset_id: dict[UUID, dict[str, object]] = {}
+        for day in hydrated.get("days", []):
+            if not isinstance(day, dict):
+                continue
+            for stop in day.get("stops", []):
+                if not isinstance(stop, dict):
+                    continue
+                first_stop_thumbnail_id: UUID | None = None
+                for moment in stop.get("moments", []):
+                    if not isinstance(moment, dict):
+                        continue
+                    for media in moment.get("media", []):
+                        if not isinstance(media, dict):
+                            continue
+                        asset_id = media.get("thumbnailAssetId")
+                        if asset_id is None:
+                            continue
+                        try:
+                            asset_uuid = UUID(str(asset_id))
+                        except ValueError:
+                            continue
+                        media_by_asset_id[asset_uuid] = media
+                        first_stop_thumbnail_id = first_stop_thumbnail_id or asset_uuid
+                if first_stop_thumbnail_id is not None:
+                    representative_asset_ids.add(first_stop_thumbnail_id)
+        if representative_asset_ids:
+            assets = db.execute(
+                select(orm.MediaAsset).where(orm.MediaAsset.id.in_(representative_asset_ids))
+            ).scalars()
+            for asset in assets:
+                media = media_by_asset_id.get(asset.id)
+                if media is not None:
+                    media["thumbnailUrl"] = media_asset_response(asset).download_url
+        return ReconstructionResponse.model_validate(hydrated)
+
+    def save_story_draft_projection(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        source_reconstruction_run_id: UUID,
+        payload: dict[str, object],
+    ) -> None:
+        now = datetime.now(UTC)
+        db.execute(
+            delete(orm.StoryDraftProjection).where(orm.StoryDraftProjection.trip_id == trip_id)
+        )
+        db.add(
+            orm.StoryDraftProjection(
+                trip_id=trip_id,
+                source_reconstruction_run_id=source_reconstruction_run_id,
+                schema_version=STORY_DRAFT_PROJECTION_SCHEMA_VERSION,
+                payload=payload,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+
+    def story_draft_projection_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
+        latest_run = db.execute(
+            select(orm.ReconstructionRun)
+            .where(orm.ReconstructionRun.trip_id == trip_id)
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest_run is None:
+            return reconstruction_response(db, trip_id)
+        projection = db.execute(
+            select(orm.StoryDraftProjection).where(
+                orm.StoryDraftProjection.trip_id == trip_id,
+                orm.StoryDraftProjection.source_reconstruction_run_id == latest_run.id,
+                orm.StoryDraftProjection.schema_version == STORY_DRAFT_PROJECTION_SCHEMA_VERSION,
+            )
+        ).scalar_one_or_none()
+        if projection is not None:
+            return hydrate_story_draft_projection(db, projection.payload)
+
+        response = reconstruction_response(db, trip_id)
+        payload = story_draft_projection_payload(db, response)
+        save_story_draft_projection(
+            db,
+            trip_id=trip_id,
+            source_reconstruction_run_id=latest_run.id,
+            payload=payload,
+        )
+        return hydrate_story_draft_projection(db, payload)
+
     @app.post("/trips/{trip_id}/reconstruction-runs", response_model=ReconstructionResponse)
     def start_reconstruction(
         trip_id: UUID,
@@ -3706,8 +3871,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         member = require_member_for_actor(db, trip_id, actor)
         if member.role not in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        invalidate_story_draft_projection(db, trip_id)
         reconstruct_trip(db=db, trip=trip, geocoder=app.state.geocoder)
-        return reconstruction_response(db, trip_id)
+        response = reconstruction_response(db, trip_id)
+        if response.latest_run is not None:
+            save_story_draft_projection(
+                db,
+                trip_id=trip_id,
+                source_reconstruction_run_id=response.latest_run.id,
+                payload=story_draft_projection_payload(db, response),
+            )
+        return response
 
     @app.get("/trips/{trip_id}/reconstruction", response_model=ReconstructionResponse)
     def get_reconstruction(
@@ -3717,6 +3891,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> ReconstructionResponse:
         require_member_for_actor(db, trip_id, actor)
         return reconstruction_response(db, trip_id)
+
+    @app.get("/trips/{trip_id}/story-draft-projection", response_model=ReconstructionResponse)
+    def get_story_draft_projection(
+        trip_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> ReconstructionResponse:
+        require_member_for_actor(db, trip_id, actor)
+        return story_draft_projection_response(db, trip_id)
 
     @app.post("/trips/{trip_id}/publications", response_model=PublicationResponse)
     def create_publication(

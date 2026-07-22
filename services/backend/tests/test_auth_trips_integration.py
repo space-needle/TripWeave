@@ -673,6 +673,33 @@ def test_account_contributor_can_view_shared_story_without_editing(
     }
     assert contributors == {"Owner", "Story Contributor"}
 
+    projection = contributor_client.get(f"/trips/{trip['id']}/story-draft-projection")
+    assert projection.status_code == 200
+    assert projection.json()["latestRun"]["id"] == story.json()["latestRun"]["id"]
+    assert projection.json()["reviewItems"] == []
+    with engine.connect() as connection:
+        projection_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM story_draft_projections
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+    assert projection_count == 1
+
+    other_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    register(other_client, "story-outsider@example.com", "Outsider")
+    denied_projection = other_client.get(f"/trips/{trip['id']}/story-draft-projection")
+    assert denied_projection.status_code == 404
+
     cannot_reconstruct = contributor_client.post(
         f"/trips/{trip['id']}/reconstruction-runs",
         headers={"x-csrf-token": csrf_contributor},

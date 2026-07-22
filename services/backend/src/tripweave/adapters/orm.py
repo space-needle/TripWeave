@@ -967,6 +967,23 @@ class StoryVersion(Base, TimestampMixin):
     )
 
 
+class StoryDraftProjection(Base, TimestampMixin):
+    __tablename__ = "story_draft_projections"
+    __table_args__ = (UniqueConstraint("trip_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    source_reconstruction_run_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("reconstruction_runs.id", ondelete="CASCADE")
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
 class ShareLink(Base, TimestampMixin):
     __tablename__ = "share_links"
     __table_args__ = (
@@ -1063,5 +1080,10 @@ Index("ix_edit_operations_trip_created", EditOperation.trip_id, EditOperation.cr
 Index("ix_edit_operations_review_item_id", EditOperation.review_item_id)
 Index("ix_story_versions_trip_version", StoryVersion.trip_id, StoryVersion.version_number)
 Index("ix_story_versions_trip_state", StoryVersion.trip_id, StoryVersion.state)
+Index(
+    "ix_story_draft_projections_trip_run",
+    StoryDraftProjection.trip_id,
+    StoryDraftProjection.source_reconstruction_run_id,
+)
 Index("ix_share_links_trip_id", ShareLink.trip_id)
 Index("ix_share_links_story_version_id", ShareLink.story_version_id)

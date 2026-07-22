@@ -67,6 +67,7 @@ def test_schema_has_expected_domain_tables() -> None:
         "similarity_groups",
         "share_links",
         "stops",
+        "story_draft_projections",
         "story_versions",
         "trip_days",
         "trip_invitations",

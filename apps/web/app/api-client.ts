@@ -217,6 +217,11 @@ export const api = {
       `/trips/${tripId}/reconstruction`,
     );
   },
+  storyDraftProjection(tripId: string): Promise<ReconstructionResponse> {
+    return apiRequest<ReconstructionResponse>(
+      `/trips/${tripId}/story-draft-projection`,
+    );
+  },
   startReconstruction(tripId: string): Promise<ReconstructionResponse> {
     return apiRequest<ReconstructionResponse>(
       `/trips/${tripId}/reconstruction-runs`,

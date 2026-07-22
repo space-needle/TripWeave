@@ -267,6 +267,8 @@ function OwnerWorkspace() {
   const [mediaError, setMediaError] = useState("");
   const [reconstruction, setReconstruction] =
     useState<ReconstructionResponse | null>(null);
+  const [storyProjection, setStoryProjection] =
+    useState<ReconstructionResponse | null>(null);
   const [reconstructionError, setReconstructionError] = useState("");
   const [reviewIndex, setReviewIndex] = useState(0);
   const [storyState, setStoryState] = useState<StoryMapState>(() =>
@@ -297,6 +299,7 @@ function OwnerWorkspace() {
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
   const storyUpdate = reconstruction?.storyUpdate ?? null;
+  const storyForExplorer = reconstruction ?? storyProjection;
   const storyUpdateNeeded = Boolean(storyUpdate?.needsUpdate);
   const storyUpdateLabel = storyUpdate
     ? storyUpdate.unassignedReadyMediaCount > 0
@@ -375,6 +378,16 @@ function OwnerWorkspace() {
     }
     const result = await api.reconstruction(tripId);
     setReconstruction(result);
+    setStoryProjection(result);
+  }, []);
+
+  const loadStoryProjection = useCallback(async (tripId: string | null) => {
+    if (!tripId) {
+      setStoryProjection(null);
+      return;
+    }
+    const result = await api.storyDraftProjection(tripId);
+    setStoryProjection(result);
   }, []);
 
   const loadCollaboration = useCallback(async (tripId: string | null) => {
@@ -402,8 +415,11 @@ function OwnerWorkspace() {
   function selectTrip(trip: TripResponse) {
     setSelectedTripId(trip.id);
     setSettingsForm(fromTrip(trip));
+    setReconstruction(null);
+    setStoryProjection(null);
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
+    void loadStoryProjection(trip.id);
     void loadReconstruction(trip.id);
     if (trip.role === "owner") {
       void loadCollaboration(trip.id);
@@ -429,6 +445,7 @@ function OwnerWorkspace() {
       setMedia([]);
       setSimilarityGroups([]);
       setReconstruction(null);
+      setStoryProjection(null);
       setInvitations([]);
       setMembers([]);
       setPublications(null);
@@ -497,6 +514,16 @@ function OwnerWorkspace() {
       );
     }
   }, [loadReconstruction, selectedTrip?.id]);
+
+  useEffect(() => {
+    if (selectedTrip?.id) {
+      void Promise.resolve().then(() =>
+        loadStoryProjection(selectedTrip.id).catch((error) =>
+          setReconstructionError(messageFrom(error)),
+        ),
+      );
+    }
+  }, [loadStoryProjection, selectedTrip?.id]);
 
   useEffect(() => {
     if (selectedTrip?.id && selectedTrip.role === "owner") {
@@ -934,6 +961,7 @@ function OwnerWorkspace() {
     try {
       const result = await api.startReconstruction(selectedTrip.id);
       setReconstruction(result);
+      setStoryProjection(result);
       await loadMedia(selectedTrip.id);
     } catch (error) {
       setReconstructionError(messageFrom(error));
@@ -1465,7 +1493,7 @@ function OwnerWorkspace() {
               ) : null}
               {selectedTrip ? (
                 <TripStoryExplorer
-                  reconstruction={reconstruction}
+                  reconstruction={storyForExplorer}
                   state={storyState}
                   onStateChange={setStoryState}
                   onMergeStops={
