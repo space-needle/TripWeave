@@ -298,8 +298,8 @@ function OwnerWorkspace() {
   );
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
-  const storyUpdate = reconstruction?.storyUpdate ?? null;
   const storyForExplorer = reconstruction ?? storyProjection;
+  const storyUpdate = storyForExplorer?.storyUpdate ?? null;
   const storyUpdateNeeded = Boolean(storyUpdate?.needsUpdate);
   const storyUpdateLabel = storyUpdate
     ? storyUpdate.unassignedReadyMediaCount > 0
@@ -420,7 +420,6 @@ function OwnerWorkspace() {
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
     void loadStoryProjection(trip.id);
-    void loadReconstruction(trip.id);
     if (trip.role === "owner") {
       void loadCollaboration(trip.id);
     } else {
@@ -508,16 +507,6 @@ function OwnerWorkspace() {
   useEffect(() => {
     if (selectedTrip?.id) {
       void Promise.resolve().then(() =>
-        loadReconstruction(selectedTrip.id).catch((error) =>
-          setReconstructionError(messageFrom(error)),
-        ),
-      );
-    }
-  }, [loadReconstruction, selectedTrip?.id]);
-
-  useEffect(() => {
-    if (selectedTrip?.id) {
-      void Promise.resolve().then(() =>
         loadStoryProjection(selectedTrip.id).catch((error) =>
           setReconstructionError(messageFrom(error)),
         ),
@@ -593,7 +582,7 @@ function OwnerWorkspace() {
           timeout = setTimeout(poll, delay);
           delay = Math.min(delay * 1.6, 10000);
         } else if (hasProcessingMedia) {
-          await loadReconstruction(tripId);
+          await loadStoryProjection(tripId);
         }
       } catch (error) {
         if (!cancelled) {
@@ -610,7 +599,7 @@ function OwnerWorkspace() {
         clearTimeout(timeout);
       }
     };
-  }, [hasProcessingMedia, loadReconstruction, selectedTrip?.id]);
+  }, [hasProcessingMedia, loadStoryProjection, selectedTrip?.id]);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -799,7 +788,7 @@ function OwnerWorkspace() {
       await Promise.all(workers);
       await loadUploadSessions(selectedTrip.id);
       await loadMedia(selectedTrip.id);
-      await loadReconstruction(selectedTrip.id);
+      await loadStoryProjection(selectedTrip.id);
     } catch (error) {
       setUploadError(messageFrom(error));
     }
@@ -858,7 +847,7 @@ function OwnerWorkspace() {
       await api.retryMedia(item.id);
       if (selectedTrip) {
         await loadMedia(selectedTrip.id);
-        await loadReconstruction(selectedTrip.id);
+        await loadStoryProjection(selectedTrip.id);
       }
     } catch (error) {
       setMediaError(messageFrom(error));
@@ -890,7 +879,7 @@ function OwnerWorkspace() {
         includeInStory: visibility === "story",
       });
       await loadMedia(selectedTrip.id);
-      await loadReconstruction(selectedTrip.id);
+      await loadStoryProjection(selectedTrip.id);
     } catch (error) {
       setMediaError(messageFrom(error));
       await loadMedia(selectedTrip.id);
@@ -968,6 +957,15 @@ function OwnerWorkspace() {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  function loadReviewDetails() {
+    if (!selectedTrip || reconstruction) {
+      return;
+    }
+    void loadReconstruction(selectedTrip.id).catch((error) =>
+      setReconstructionError(messageFrom(error)),
+    );
   }
 
   async function changeSimilarityRepresentative(
@@ -1449,7 +1447,7 @@ function OwnerWorkspace() {
                       aria-label="Browse selected day photos"
                       title="Browse selected day photos"
                       onClick={() => setOwnerStoryPhotosOpen(true)}
-                      disabled={!reconstruction?.latestRun}
+                      disabled={!storyForExplorer?.latestRun}
                     >
                       <StoryHeaderIcon action="photos" />
                     </button>
@@ -1674,6 +1672,11 @@ function OwnerWorkspace() {
               id="review-panel"
               open={isMobileWorkspace ? mobileTab === "more" : undefined}
               data-mobile-tab-panel="more"
+              onToggle={(event) => {
+                if (event.currentTarget.open) {
+                  loadReviewDetails();
+                }
+              }}
             >
               <summary>
                 <span>Review</span>
