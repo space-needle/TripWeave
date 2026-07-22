@@ -448,17 +448,18 @@ def find_or_create_trip_day_for_date(
         .where(
             orm.TripDay.trip_id == trip_id,
             orm.TripDay.day_date == day,
-            or_(
-                orm.TripDay.reconstruction_run_id == run.id,
-                orm.TripDay.user_locked.is_(True),
-            ),
         )
-        .order_by(orm.TripDay.user_locked.desc(), orm.TripDay.created_at)
+        .order_by(
+            (orm.TripDay.reconstruction_run_id == run.id).desc(),
+            orm.TripDay.user_locked.desc(),
+            orm.TripDay.created_at,
+        )
         .limit(1)
     ).scalar_one_or_none()
     if existing is not None:
         if not existing.user_locked:
             existing.reconstruction_run_id = run.id
+            existing.algorithm_version = ALGORITHM_VERSION
         if starts_at_utc is not None:
             existing.starts_at_utc = (
                 min(existing.starts_at_utc, starts_at_utc)
