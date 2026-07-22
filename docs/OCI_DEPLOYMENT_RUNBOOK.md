@@ -156,6 +156,68 @@ TRIPWEAVE_HEALTH_BASE_URL=https://example.com deploy/scripts/deploy.sh
 The deployment script builds images, starts PostgreSQL, runs Alembic migrations before replacing
 the app containers, then waits for readiness.
 
+## Update An Existing VM From Local Changes
+
+Use this when code was changed locally and needs to be applied to the existing single-VM
+deployment.
+
+Recommended path after committing and pushing:
+
+```sh
+# Local machine
+make format
+make lint
+make typecheck
+make test
+make build
+git status --short
+git add <changed-files>
+git commit -m "<message>"
+git push
+
+# VM
+ssh -i ~/.ssh/tripweave_oci ubuntu@<instance_public_ip>
+cd /opt/tripweave/current
+git fetch --all
+git checkout <commit-sha-or-branch>
+sudo TRIPWEAVE_HEALTH_BASE_URL=https://<domain> deploy/scripts/deploy.sh
+curl -fsS https://<domain>/api/health/ready
+```
+
+Current production values:
+
+```sh
+ssh -i ~/.ssh/tripweave_oci ubuntu@40.233.113.214
+cd /opt/tripweave/current
+sudo TRIPWEAVE_HEALTH_BASE_URL=https://tripweave.chronotrailai.com deploy/scripts/deploy.sh
+curl -fsS https://tripweave.chronotrailai.com/api/health/ready
+```
+
+Hotfix path before pushing, for a small known file set:
+
+```sh
+# Local machine
+scp -i ~/.ssh/tripweave_oci <local-file> ubuntu@<instance_public_ip>:/tmp/<file>
+ssh -i ~/.ssh/tripweave_oci ubuntu@<instance_public_ip> \
+  sudo install -m 0644 /tmp/<file> /opt/tripweave/current/<local-file>
+
+# VM or remote ssh command
+cd /opt/tripweave/current
+sudo TRIPWEAVE_HEALTH_BASE_URL=https://<domain> deploy/scripts/deploy.sh
+curl -fsS https://<domain>/api/health/ready
+```
+
+If the change affects existing story reconstruction data, run the affected trip through the
+deployed backend after the deploy:
+
+```sh
+cd /opt/tripweave/current
+sudo docker compose --env-file /etc/tripweave/tripweave.env -f deploy/compose.prod.yml exec -T api \
+  .venv/bin/python -c "from uuid import UUID; from sqlalchemy.orm import Session; from tripweave.config import Settings; from tripweave.adapters.database import create_database_engine; from tripweave.adapters.geocoder_factory import create_geocoder; from tripweave.adapters import orm; from tripweave.adapters.reconstruction import reconstruct_trip; settings=Settings(); engine=create_database_engine(settings); geocoder=create_geocoder(settings); db=Session(engine); trip=db.get(orm.Trip, UUID('<trip-id>')); assert trip is not None; print(reconstruct_trip(db=db, trip=trip, geocoder=geocoder)); db.close()"
+```
+
+Do not copy `.env`, `terraform.tfvars`, private keys, API tokens, or other secrets into the repo.
+
 ## Rollback
 
 ```sh
