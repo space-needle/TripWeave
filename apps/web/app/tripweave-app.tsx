@@ -2513,8 +2513,7 @@ function TripStoryExplorer({
       ),
     [photoRollDays],
   );
-  const isPhotoRollVisible =
-    isPhotoRollOpen || (mobilePane === "photos" && photoRollDays.length > 0);
+  const isPhotoRollVisible = isPhotoRollOpen || mobilePane === "photos";
   const closePhotoRoll = useCallback(() => {
     setIsPhotoRollOpen(false);
     if (mobilePane === "photos") {
@@ -3793,6 +3792,11 @@ function TripStoryExplorer({
               </button>
             </div>
             <div className="story-photo-roll" aria-label="Photos by stop">
+              {photoRollDays.length === 0 ? (
+                <p>
+                  {loadingPhotoProjectionKey ? "Loading photos..." : "No photos found."}
+                </p>
+              ) : null}
               {photoRollDays.map(({ day, stops }) => (
                 <div className="story-photo-roll-day" key={day.id}>
                   {!activeDay ? (
