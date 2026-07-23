@@ -89,6 +89,30 @@ type UploadProgress = {
   error?: string;
 };
 
+function renameStopInReconstruction(
+  reconstruction: ReconstructionResponse | null,
+  stopId: string,
+  title: string,
+): ReconstructionResponse | null {
+  if (!reconstruction) {
+    return reconstruction;
+  }
+  let renamed = false;
+  const days = reconstruction.days.map((day) => {
+    let renamedInDay = false;
+    const stops = day.stops.map((stop) => {
+      if (stop.id !== stopId) {
+        return stop;
+      }
+      renamed = true;
+      renamedInDay = true;
+      return { ...stop, title };
+    });
+    return renamedInDay ? { ...day, stops } : day;
+  });
+  return renamed ? { ...reconstruction, days } : reconstruction;
+}
+
 type IntlWithTimeZones = typeof Intl & {
   supportedValuesOf?: (key: "timeZone") => string[];
 };
@@ -1087,7 +1111,15 @@ function OwnerWorkspace() {
     if (!selectedTrip) {
       return;
     }
+    const previousReconstruction = reconstruction;
+    const previousStoryProjection = storyProjection;
     setReconstructionError("");
+    setReconstruction((current) =>
+      renameStopInReconstruction(current, stopId, title),
+    );
+    setStoryProjection((current) =>
+      renameStopInReconstruction(current, stopId, title),
+    );
     try {
       await api.createEditOperation(selectedTrip.id, {
         operationType: "rename_stop",
@@ -1095,6 +1127,8 @@ function OwnerWorkspace() {
       });
       await loadReconstruction(selectedTrip.id);
     } catch (error) {
+      setReconstruction(previousReconstruction);
+      setStoryProjection(previousStoryProjection);
       setReconstructionError(messageFrom(error));
       throw error;
     }
