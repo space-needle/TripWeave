@@ -184,7 +184,15 @@ class OciBlobStore:
         )
 
     def create_download_grant(self, request: DownloadGrantRequest) -> DownloadGrant:
-        metadata = self.stat(request.blob_ref)
+        metadata = None
+        if request.blob_ref.size_bytes is None or request.blob_ref.content_type is None:
+            metadata = self.stat(request.blob_ref)
+        content_type = request.blob_ref.content_type
+        if content_type is None and metadata is not None:
+            content_type = metadata.content_type
+        size_bytes = request.blob_ref.size_bytes
+        if size_bytes is None and metadata is not None:
+            size_bytes = metadata.size_bytes
         expires_at = request.expires_at or datetime.now(UTC) + timedelta(
             seconds=self._grant_lifetime_seconds
         )
@@ -215,8 +223,8 @@ class OciBlobStore:
             url=url,
             headers={},
             expires_at=expires_at,
-            content_type=metadata.content_type,
-            size_bytes=metadata.size_bytes,
+            content_type=content_type,
+            size_bytes=size_bytes,
         )
 
     def verify_upload_token(self, token: str) -> tuple[BlobRef, int, str | None]:

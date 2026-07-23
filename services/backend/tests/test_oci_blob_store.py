@@ -5,7 +5,12 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from tripweave.adapters.storage.oci.blob_store import OciBlobStore
-from tripweave.domain.storage import BlobRef, UploadGrantRequest, UploadTransport
+from tripweave.domain.storage import (
+    BlobRef,
+    DownloadGrantRequest,
+    UploadGrantRequest,
+    UploadTransport,
+)
 
 
 @dataclass
@@ -22,6 +27,7 @@ class FakeOciObjectStorageClient:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str, str], tuple[bytes, str | None, str]] = {}
         self.par_requests: list[dict[str, object]] = []
+        self.head_requests: list[dict[str, str]] = []
 
     def create_preauthenticated_request(
         self,
@@ -69,6 +75,13 @@ class FakeOciObjectStorageClient:
         bucket_name: str,
         object_name: str,
     ) -> FakeResponse:
+        self.head_requests.append(
+            {
+                "namespace": namespace_name,
+                "bucket": bucket_name,
+                "object": object_name,
+            }
+        )
         try:
             body, content_type, checksum = self.objects[(namespace_name, bucket_name, object_name)]
         except KeyError as exc:
@@ -177,3 +190,23 @@ def test_oci_single_put_grant_is_object_specific_and_temporary() -> None:
     details = client.par_requests[0]["details"]
     assert getattr(details, "access_type", None) == "ObjectWrite"
     assert getattr(details, "object_name", None) == "trip/1/photo.jpg"
+
+
+def test_oci_download_grant_uses_known_blob_metadata_without_head() -> None:
+    client = FakeOciObjectStorageClient()
+    store = make_store(client)
+    blob_ref = BlobRef(
+        store_alias="media_private",
+        object_key="trip/1/photo.webp",
+        checksum_algorithm="sha256",
+        checksum="known",
+        size_bytes=12,
+        content_type="image/webp",
+    )
+
+    grant = store.create_download_grant(DownloadGrantRequest(blob_ref=blob_ref))
+
+    assert grant.size_bytes == 12
+    assert grant.content_type == "image/webp"
+    assert client.par_requests
+    assert client.head_requests == []

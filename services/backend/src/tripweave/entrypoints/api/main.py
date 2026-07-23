@@ -195,6 +195,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         max_attempts=resolved_settings.publication_rate_limit_max_attempts,
         window_seconds=resolved_settings.action_rate_limit_window_seconds,
     )
+    app.state.publication_manifest_cache = {}
     app.state.blob_store = create_blob_store(resolved_settings)
     app.state.geocoder = create_geocoder(resolved_settings)
 
@@ -936,6 +937,43 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 return dict(asset)
         raise PublicationError("asset_not_found", "Asset not found")
 
+    def blob_ref_for_public_asset(asset: dict[str, object]) -> BlobRef:
+        blob_ref_payload = asset.get("blobRef")
+        if not isinstance(blob_ref_payload, dict):
+            raise PublicationError("publication_invalid", "Story asset is invalid")
+        blob_ref = blob_ref_from_manifest(blob_ref_payload)
+        checksum = blob_ref_payload.get("checksum")
+        size_bytes = blob_ref_payload.get("sizeBytes")
+        content_type = blob_ref_payload.get("contentType") or asset.get("mimeType")
+        return BlobRef(
+            store_alias=blob_ref.store_alias,
+            object_key=blob_ref.object_key,
+            checksum_algorithm="sha256" if isinstance(checksum, str) else None,
+            checksum=checksum if isinstance(checksum, str) else None,
+            size_bytes=size_bytes if isinstance(size_bytes, int) else None,
+            content_type=content_type if isinstance(content_type, str) else None,
+        )
+
+    def cached_public_manifest(version: orm.StoryVersion) -> dict[str, object]:
+        cache_key = (
+            str(version.id),
+            version.manifest_store_alias,
+            version.manifest_object_key,
+            version.manifest_checksum,
+        )
+        cache: dict[tuple[str, str | None, str | None, str | None], dict[str, object]] = (
+            app.state.publication_manifest_cache
+        )
+        cached = cache.get(cache_key)
+        if cached is None:
+            cached = load_manifest(app.state.blob_store, version)
+            cache[cache_key] = cached
+            if len(cache) > 64:
+                oldest_key = next(iter(cache))
+                cache.pop(oldest_key, None)
+        manifest_copy = json.loads(json.dumps(cached))
+        return dict(manifest_copy) if isinstance(manifest_copy, dict) else {}
+
     def reconstruction_from_manifest(
         manifest: dict[str, object], asset_urls: dict[str, str]
     ) -> ReconstructionResponse:
@@ -1485,9 +1523,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         download_url: str | None = None
         try:
             download_url = app.state.blob_store.create_download_grant(
-                DownloadGrantRequest(
-                    blob_ref=BlobRef(store_alias=asset.store_alias, object_key=asset.object_key)
-                )
+                DownloadGrantRequest(blob_ref=blob_ref_for_media_asset(asset))
             ).url
         except BlobNotFoundError:
             download_url = None
@@ -1498,6 +1534,16 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             height=asset.height,
             mimeType=asset.mime_type,
             downloadUrl=download_url,
+        )
+
+    def blob_ref_for_media_asset(asset: orm.MediaAsset) -> BlobRef:
+        return BlobRef(
+            store_alias=asset.store_alias,
+            object_key=asset.object_key,
+            checksum_algorithm="sha256" if asset.checksum else None,
+            checksum=asset.checksum,
+            size_bytes=asset.byte_size,
+            content_type=asset.mime_type,
         )
 
     def media_error_for(db: DbSession, media_item_id: UUID) -> str | None:
@@ -4170,9 +4216,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         for asset in assets:
             try:
                 grant = app.state.blob_store.create_download_grant(
-                    DownloadGrantRequest(
-                        blob_ref=BlobRef(store_alias=asset.store_alias, object_key=asset.object_key)
-                    )
+                    DownloadGrantRequest(blob_ref=blob_ref_for_media_asset(asset))
                 )
             except BlobNotFoundError:
                 urls[asset.id] = None
@@ -4550,7 +4594,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Story is publishing"
             )
         try:
-            manifest = load_manifest(app.state.blob_store, version)
+            manifest = cached_public_manifest(version)
         except PublicationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
@@ -4569,12 +4613,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if version is None or version.state != StoryVersionState.PUBLISHED.value:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
         try:
-            manifest = load_manifest(app.state.blob_store, version)
+            manifest = cached_public_manifest(version)
             asset = public_asset_for_id(manifest, asset_id)
-            blob_ref = blob_ref_from_manifest(asset.get("blobRef"))
+            blob_ref = blob_ref_for_public_asset(asset)
             if blob_ref.store_alias != "story_published":
                 raise PublicationError("publication_invalid", "Story asset is invalid")
-            metadata = app.state.blob_store.stat(blob_ref)
         except PublicationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=exc.safe_message
@@ -4595,8 +4638,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
         return StreamingResponse(
             body(),
-            media_type=metadata.content_type or "application/octet-stream",
-            headers={"cache-control": "public, max-age=300"},
+            media_type=blob_ref.content_type or "application/octet-stream",
+            headers={"cache-control": "public, max-age=86400"},
         )
 
     @app.post("/trips/{trip_id}/edit-operations", response_model=EditOperationResponse)

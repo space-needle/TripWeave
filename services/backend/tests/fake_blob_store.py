@@ -76,15 +76,23 @@ class FakeInMemoryBlobStore:
         )
 
     def create_download_grant(self, request: DownloadGrantRequest) -> DownloadGrant:
-        metadata = self.stat(request.blob_ref)
+        metadata = None
+        if request.blob_ref.size_bytes is None or request.blob_ref.content_type is None:
+            metadata = self.stat(request.blob_ref)
+        content_type = request.blob_ref.content_type
+        if content_type is None and metadata is not None:
+            content_type = metadata.content_type
+        size_bytes = request.blob_ref.size_bytes
+        if size_bytes is None and metadata is not None:
+            size_bytes = metadata.size_bytes
         return DownloadGrant(
             blob_ref=request.blob_ref,
             method="api_proxy",
             url=f"{self._public_base_url}/download/{request.blob_ref.store_alias}/{request.blob_ref.object_key}",
             headers={},
             expires_at=request.expires_at or datetime.now(UTC) + timedelta(seconds=60),
-            content_type=metadata.content_type,
-            size_bytes=metadata.size_bytes,
+            content_type=content_type,
+            size_bytes=size_bytes,
         )
 
     def stat(self, blob_ref: BlobRef) -> BlobMetadata:
