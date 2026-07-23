@@ -29,7 +29,7 @@ from tripweave.adapters.local_blob_store import (
     InvalidGrantError,
 )
 from tripweave.adapters.publication import PublicationError, blob_ref_from_manifest, load_manifest
-from tripweave.adapters.reconstruction import reconstruct_trip
+from tripweave.adapters.reconstruction import MOMENT_GAP_MINUTES, reconstruct_trip
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
 from tripweave.application.auth import (
@@ -1827,6 +1827,29 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             {"moment_ids": moment_ids},
         ).scalar_one_or_none()
 
+    def stop_centroid_for_media(db: DbSession, media_ids: list[UUID]) -> str | None:
+        if not media_ids:
+            return None
+        return db.execute(
+            text(
+                """
+                SELECT ST_AsEWKT(
+                    ST_SetSRID(
+                        ST_MakePoint(
+                            AVG(ST_X(effective_location::geometry)),
+                            AVG(ST_Y(effective_location::geometry))
+                        ),
+                        4326
+                    )
+                )
+                FROM media_items
+                WHERE id = ANY(:media_ids)
+                    AND effective_location IS NOT NULL
+                """
+            ),
+            {"media_ids": media_ids},
+        ).scalar_one_or_none()
+
     def rewire_merged_stop_legs(db: DbSession, source: orm.Stop, target: orm.Stop) -> None:
         legs = list(
             db.scalars(
@@ -1926,6 +1949,100 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if title is None:
             return None, None
         return f"{title} 1"[:255], f"{title} 2"[:255]
+
+    def media_capture_time(media: orm.MediaItem) -> datetime:
+        return media.effective_captured_at_utc or media.original_captured_at_utc or media.created_at
+
+    def ordered_stop_media(db: DbSession, stop_id: UUID) -> list[orm.MediaItem]:
+        return list(
+            db.scalars(
+                select(orm.MediaItem)
+                .join(orm.MomentMedia, orm.MomentMedia.media_item_id == orm.MediaItem.id)
+                .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+                .where(orm.Moment.stop_id == stop_id)
+                .order_by(
+                    orm.Moment.starts_at_utc,
+                    orm.Moment.position,
+                    orm.MomentMedia.position,
+                    orm.MediaItem.effective_captured_at_utc,
+                    orm.MediaItem.original_captured_at_utc,
+                    orm.MediaItem.created_at,
+                    orm.MediaItem.id,
+                )
+            )
+        )
+
+    def replace_stop_moments(
+        db: DbSession,
+        *,
+        run: orm.ReconstructionRun,
+        stop: orm.Stop,
+        media_items: list[orm.MediaItem],
+    ) -> list[orm.Moment]:
+        existing_moment_ids = [moment.id for moment in ordered_stop_moments(db, stop.id)]
+        if existing_moment_ids:
+            db.execute(
+                delete(orm.MomentParticipant).where(
+                    orm.MomentParticipant.moment_id.in_(existing_moment_ids)
+                )
+            )
+            db.execute(
+                delete(orm.MomentMedia).where(orm.MomentMedia.moment_id.in_(existing_moment_ids))
+            )
+            db.execute(delete(orm.Moment).where(orm.Moment.id.in_(existing_moment_ids)))
+            db.flush()
+
+        sorted_media = sorted(media_items, key=lambda item: (media_capture_time(item), item.id))
+        groups: list[list[orm.MediaItem]] = []
+        current: list[orm.MediaItem] = []
+        previous: orm.MediaItem | None = None
+        for media in sorted_media:
+            if previous is not None:
+                gap = (
+                    media_capture_time(media) - media_capture_time(previous)
+                ).total_seconds() / 60
+                if gap > MOMENT_GAP_MINUTES:
+                    groups.append(current)
+                    current = []
+            current.append(media)
+            previous = media
+        if current:
+            groups.append(current)
+
+        created: list[orm.Moment] = []
+        for position, group in enumerate(groups, start=1):
+            moment = orm.Moment(
+                trip_id=stop.trip_id,
+                stop_id=stop.id,
+                position=position,
+                starts_at_utc=min(media_capture_time(item) for item in group),
+                ends_at_utc=max(media_capture_time(item) for item in group),
+                **correction_generated(run),
+            )
+            db.add(moment)
+            db.flush()
+            for media_position, media in enumerate(group, start=1):
+                db.add(
+                    orm.MomentMedia(
+                        trip_id=stop.trip_id,
+                        moment_id=moment.id,
+                        media_item_id=media.id,
+                        position=media_position,
+                        **correction_generated(run),
+                    )
+                )
+            for participant_id in sorted({media.contributor_member_id for media in group}):
+                db.add(
+                    orm.MomentParticipant(
+                        trip_id=stop.trip_id,
+                        moment_id=moment.id,
+                        trip_member_id=participant_id,
+                        **correction_generated(run),
+                    )
+                )
+            created.append(moment)
+        db.flush()
+        return created
 
     def edit_operation_response(operation: orm.EditOperation) -> EditOperationResponse:
         return EditOperationResponse(
@@ -2106,14 +2223,45 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if stop is None or stop.trip_id != trip_id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(stop, payload.expected_updated_at)
-            split_after = payload_uuid(data, "afterMomentId")
             moments = ordered_stop_moments(db, stop.id)
-            index = next((i for i, moment in enumerate(moments) if moment.id == split_after), -1)
-            if index < 0 or index == len(moments) - 1:
+            media_items = ordered_stop_media(db, stop.id)
+            split_after_media_id: UUID | None = None
+            split_after_moment_id: UUID | None = None
+            if "afterMediaItemId" in data:
+                split_after_media_id = payload_uuid(data, "afterMediaItemId")
+            elif "afterMomentId" in data:
+                split_after_moment_id = payload_uuid(data, "afterMomentId")
+                split_after_moment = next(
+                    (moment for moment in moments if moment.id == split_after_moment_id), None
+                )
+                if split_after_moment is not None:
+                    moment_media = [
+                        media
+                        for media in media_items
+                        if db.scalar(
+                            select(orm.MomentMedia.id).where(
+                                orm.MomentMedia.moment_id == split_after_moment.id,
+                                orm.MomentMedia.media_item_id == media.id,
+                            )
+                        )
+                        is not None
+                    ]
+                    if moment_media:
+                        split_after_media_id = moment_media[-1].id
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="afterMediaItemId is required",
+                )
+            media_index = next(
+                (i for i, media in enumerate(media_items) if media.id == split_after_media_id), -1
+            )
+            if media_index < 0 or media_index == len(media_items) - 1:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT, detail="Cannot split stop there"
                 )
-            moved_moments = moments[index + 1 :]
+            kept_media = media_items[: media_index + 1]
+            moved_media = media_items[media_index + 1 :]
             next_stop = db.execute(
                 select(orm.Stop)
                 .where(
@@ -2139,7 +2287,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             for following_stop in following_stops:
                 following_stop.position += 1
                 lock_record(following_stop)
-            moved_centroid = stop_centroid_for_moments(db, [moment.id for moment in moved_moments])
+            moved_centroid = stop_centroid_for_media(db, [media.id for media in moved_media])
             original_title, new_title = split_stop_titles(stop)
             new_stop = orm.Stop(
                 trip_id=trip_id,
@@ -2147,7 +2295,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 place_id=stop.place_id,
                 title=new_title,
                 position=stop.position + 1,
-                starts_at_utc=moments[index + 1].starts_at_utc,
+                starts_at_utc=min(media_capture_time(media) for media in moved_media),
                 ends_at_utc=stop.ends_at_utc,
                 centroid=moved_centroid or stop.centroid,
                 **correction_generated(run),
@@ -2156,24 +2304,26 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             db.flush()
             before = {
                 "stopId": str(stop.id),
-                "splitAfterMomentId": str(split_after),
+                "splitAfterMomentId": str(split_after_moment_id)
+                if split_after_moment_id is not None
+                else None,
+                "splitAfterMediaItemId": str(split_after_media_id),
                 "momentIds": [str(moment.id) for moment in moments],
-                "movedMomentIds": [str(moment.id) for moment in moved_moments],
+                "mediaItemIds": [str(media.id) for media in media_items],
+                "movedMediaItemIds": [str(media.id) for media in moved_media],
                 "nextStopId": str(next_stop.id) if next_stop is not None else None,
                 "originalStop": original_stop_values,
             }
-            for new_position, moment in enumerate(moved_moments, start=1):
-                moment.stop_id = new_stop.id
-                moment.position = new_position
-                lock_record(moment)
-            stop.ends_at_utc = moments[index].ends_at_utc
+            stop.ends_at_utc = max(media_capture_time(media) for media in kept_media)
             stop.title = original_title
             stop.centroid = (
-                stop_centroid_for_moments(db, [moment.id for moment in moments[: index + 1]])
-                or stop.centroid
+                stop_centroid_for_media(db, [media.id for media in kept_media]) or stop.centroid
             )
-            for old_position, moment in enumerate(moments[: index + 1], start=1):
-                moment.position = old_position
+            kept_moments = replace_stop_moments(db, run=run, stop=stop, media_items=kept_media)
+            moved_moments = replace_stop_moments(
+                db, run=run, stop=new_stop, media_items=moved_media
+            )
+            for moment in kept_moments + moved_moments:
                 lock_record(moment)
             lock_record(stop)
             lock_reconstruction_parents(db, stop)
@@ -2183,6 +2333,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             after = {
                 "newStopId": str(new_stop.id),
                 "movedMomentIds": [str(moment.id) for moment in moved_moments],
+                "movedMediaItemIds": [str(media.id) for media in moved_media],
                 "newStopPosition": new_stop.position,
             }
             target_type, target_id = "stop", stop.id

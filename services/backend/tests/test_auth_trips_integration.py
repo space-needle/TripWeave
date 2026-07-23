@@ -1836,6 +1836,69 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
     assert (source_stop["id"], next_stop["id"]) not in legs
 
 
+def test_split_stop_can_split_inside_single_moment_by_media(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "split-media-owner@example.com")
+    trip = create_trip(client, csrf_token, "Split Media Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    """
+                    SELECT id FROM trip_members
+                    WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    media_ids = [
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"split-media-{index}.jpg",
+            captured_at=datetime(2026, 6, 8, 1, minute, tzinfo=UTC),
+            latitude=35.0,
+            longitude=127.0,
+            sha256=f"{index:064d}",
+        )
+        for index, minute in enumerate([0, 2, 4, 8, 9], start=1)
+    ]
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200
+    source_stop = reconstructed.json()["days"][0]["stops"][0]
+    assert source_stop["mediaCount"] == 5
+    assert len(source_stop["moments"]) == 1
+
+    split = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "split_stop",
+            "payload": {"stopId": source_stop["id"], "afterMediaItemId": media_ids[2]},
+        },
+    )
+    assert split.status_code == 200, split.text
+    new_stop_id = split.json()["afterValues"]["newStopId"]
+    assert split.json()["afterValues"]["movedMediaItemIds"] == media_ids[3:]
+
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
+    assert refreshed.status_code == 200
+    split_stops = refreshed.json()["days"][0]["stops"]
+    assert [stop["id"] for stop in split_stops] == [source_stop["id"], new_stop_id]
+    assert [stop["mediaCount"] for stop in split_stops] == [3, 2]
+    assert [len(stop["moments"]) for stop in split_stops] == [1, 1]
+    assert [item["id"] for item in split_stops[0]["moments"][0]["media"]] == media_ids[:3]
+    assert [item["id"] for item in split_stops[1]["moments"][0]["media"]] == media_ids[3:]
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:

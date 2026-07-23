@@ -28,6 +28,7 @@ import type {
   PublicationsListResponse,
   PublicStoryResponse,
   ReconstructionResponse,
+  ReconstructionStopResponse,
   SimilarityGroupResponse,
   StoryPhotoProjectionResponse,
   StoryPhotoProjectionPhotoResponse,
@@ -1150,7 +1151,7 @@ function OwnerWorkspace() {
     }
   }
 
-  async function splitStop(stopId: string, afterMomentId: string) {
+  async function splitStop(stopId: string, afterMediaItemId: string) {
     if (!selectedTrip) {
       return;
     }
@@ -1158,7 +1159,7 @@ function OwnerWorkspace() {
     try {
       await api.createEditOperation(selectedTrip.id, {
         operationType: "split_stop",
-        payload: { stopId, afterMomentId },
+        payload: { stopId, afterMediaItemId },
       });
       await loadReconstruction(selectedTrip.id);
     } catch (error) {
@@ -2365,7 +2366,7 @@ function TripStoryExplorer({
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
   onSetDayNote?: (dayId: string, note: string) => Promise<void>;
   onSetStopNote?: (stopId: string, note: string) => Promise<void>;
-  onSplitStop?: (stopId: string, afterMomentId: string) => Promise<void>;
+  onSplitStop?: (stopId: string, afterMediaItemId: string) => Promise<void>;
   mobilePane?: StoryMobilePane;
   onMobilePaneChange?: (pane: StoryMobilePane) => void;
   timezoneId: string;
@@ -2458,14 +2459,18 @@ function TripStoryExplorer({
       }
       return (
         reconstruction?.days
-          .filter((day) => !state.selectedDayId || day.id === state.selectedDayId)
+          .filter(
+            (day) => !state.selectedDayId || day.id === state.selectedDayId,
+          )
           .map((day) => ({
             day,
             stops: day.stops
               .map((stop) => ({
                 stop,
                 photos: filteredModel.media
-                  .filter((item) => item.stopId === stop.id && item.thumbnailUrl)
+                  .filter(
+                    (item) => item.stopId === stop.id && item.thumbnailUrl,
+                  )
                   .map((item) =>
                     galleryPhotoFromStoryMedia(item, displayStopTitle(stop)),
                   ),
@@ -2475,7 +2480,9 @@ function TripStoryExplorer({
           .filter((day) => day.stops.length > 0) ?? []
       );
     }
-    const day = reconstruction?.days.find((item) => item.id === activePhotoDayId);
+    const day = reconstruction?.days.find(
+      (item) => item.id === activePhotoDayId,
+    );
     if (!day) {
       return [];
     }
@@ -2527,7 +2534,10 @@ function TripStoryExplorer({
         return null;
       }
       const cacheKey = `${photoProjectionScope}:day:${dayId}`;
-      if (photoProjectionCache[cacheKey] || loadingPhotoProjectionKey === cacheKey) {
+      if (
+        photoProjectionCache[cacheKey] ||
+        loadingPhotoProjectionKey === cacheKey
+      ) {
         return photoProjectionCache[cacheKey];
       }
       setPhotoProjectionError("");
@@ -2546,7 +2556,12 @@ function TripStoryExplorer({
         setLoadingPhotoProjectionKey(null);
       }
     },
-    [loadingPhotoProjectionKey, photoProjectionCache, photoProjectionScope, tripId],
+    [
+      loadingPhotoProjectionKey,
+      photoProjectionCache,
+      photoProjectionScope,
+      tripId,
+    ],
   );
 
   const loadStopPhotoProjection = useCallback(
@@ -2555,7 +2570,10 @@ function TripStoryExplorer({
         return null;
       }
       const cacheKey = `${photoProjectionScope}:stop:${stopId}`;
-      if (photoProjectionCache[cacheKey] || loadingPhotoProjectionKey === cacheKey) {
+      if (
+        photoProjectionCache[cacheKey] ||
+        loadingPhotoProjectionKey === cacheKey
+      ) {
         return photoProjectionCache[cacheKey];
       }
       setPhotoProjectionError("");
@@ -2574,12 +2592,19 @@ function TripStoryExplorer({
         setLoadingPhotoProjectionKey(null);
       }
     },
-    [loadingPhotoProjectionKey, photoProjectionCache, photoProjectionScope, tripId],
+    [
+      loadingPhotoProjectionKey,
+      photoProjectionCache,
+      photoProjectionScope,
+      tripId,
+    ],
   );
 
   useEffect(() => {
     if (isPhotoRollVisible && activePhotoDayId) {
-      void Promise.resolve().then(() => loadDayPhotoProjection(activePhotoDayId));
+      void Promise.resolve().then(() =>
+        loadDayPhotoProjection(activePhotoDayId),
+      );
     }
   }, [activePhotoDayId, isPhotoRollVisible, loadDayPhotoProjection]);
 
@@ -2922,19 +2947,23 @@ function TripStoryExplorer({
     }
   }
 
-  async function splitStopAfterMoment(
+  function orderedStopMedia(stop: ReconstructionStopResponse) {
+    return stop.moments.flatMap((moment) => moment.media);
+  }
+
+  async function splitStopAfterMedia(
     stopId: string,
-    afterMomentId: string,
+    afterMediaItemId: string,
     dayId: string,
   ) {
     if (!onSplitStop) {
       return;
     }
-    const key = `${stopId}:${afterMomentId}`;
+    const key = `${stopId}:${afterMediaItemId}`;
     setSplittingStopKey(key);
     setSplitStopError("");
     try {
-      await onSplitStop(stopId, afterMomentId);
+      await onSplitStop(stopId, afterMediaItemId);
       onStateChange(selectStoryStop(state, stopId, dayId));
       setSplitStopId(null);
       setEditToolsStopId(null);
@@ -3217,8 +3246,8 @@ function TripStoryExplorer({
             </select>
           </label>
         </div>
-        {(photoRollDays.length > 0 ||
-          (activeDay?.stops.some((stop) => stop.mediaCount > 0) ?? false)) ? (
+        {photoRollDays.length > 0 ||
+        (activeDay?.stops.some((stop) => stop.mediaCount > 0) ?? false) ? (
           <div className="story-photo-roll-launch">
             <div>
               <strong>
@@ -3336,6 +3365,7 @@ function TripStoryExplorer({
                 const mergeCandidates = day.stops.filter(
                   (candidate) => candidate.id !== stop.id,
                 );
+                const stopMedia = orderedStopMedia(stop);
                 return (
                   <section
                     className={`timeline-stop ${
@@ -3567,7 +3597,7 @@ function TripStoryExplorer({
                             </form>
                           ) : null}
                           {(onMergeStops && mergeCandidates.length > 0) ||
-                          (onSplitStop && stop.moments.length > 1) ? (
+                          (onSplitStop && stopMedia.length > 1) ? (
                             <div className="timeline-structure-tools">
                               {onMergeStops && mergeCandidates.length > 0 ? (
                                 <button
@@ -3598,7 +3628,7 @@ function TripStoryExplorer({
                                     : "Merge"}
                                 </button>
                               ) : null}
-                              {onSplitStop && stop.moments.length > 1 ? (
+                              {onSplitStop && stopMedia.length > 1 ? (
                                 <button
                                   type="button"
                                   className="timeline-tool-button"
@@ -3671,39 +3701,41 @@ function TripStoryExplorer({
                             </div>
                           ) : null}
                           {onSplitStop &&
-                          stop.moments.length > 1 &&
+                          stopMedia.length > 1 &&
                           splitStopId === stop.id ? (
                             <div className="timeline-stop-split">
                               <div className="timeline-stop-split-panel">
                                 <p>
-                                  Pick the last photo group that should stay in{" "}
+                                  Pick the last photo that should stay in{" "}
                                   {displayStopTitle(stop)}.
                                 </p>
-                                {stop.moments.slice(0, -1).map((moment) => {
-                                  const splitKey = `${stop.id}:${moment.id}`;
+                                {stopMedia.slice(0, -1).map((media, index) => {
+                                  const splitKey = `${stop.id}:${media.id}`;
                                   return (
                                     <div
                                       className="timeline-stop-split-option"
-                                      key={moment.id}
+                                      key={media.id}
                                     >
                                       <div>
                                         <strong>
                                           {formatTimelineStopTime(
-                                            moment.endsAt,
-                                            moment.endsAtLocal ?? null,
+                                            media.capturedAt ?? stop.endsAt,
+                                            media.capturedAtLocal ?? null,
                                             timezoneId,
                                           )}
                                         </strong>
                                         <span>
-                                          {moment.mediaCount} photos before
-                                          split
+                                          {index + 1} photos before split
                                         </span>
                                         <div
                                           className="timeline-stop-split-thumbs"
                                           aria-hidden="true"
                                         >
-                                          {moment.media
-                                            .slice(0, 4)
+                                          {stopMedia
+                                            .slice(
+                                              Math.max(0, index - 3),
+                                              index + 1,
+                                            )
                                             .map((item) =>
                                               item.thumbnailUrl ? (
                                                 <img
@@ -3729,9 +3761,9 @@ function TripStoryExplorer({
                                         title="Split here"
                                         disabled={splittingStopKey === splitKey}
                                         onClick={() =>
-                                          void splitStopAfterMoment(
+                                          void splitStopAfterMedia(
                                             stop.id,
-                                            moment.id,
+                                            media.id,
                                             day.id,
                                           )
                                         }
@@ -3794,7 +3826,9 @@ function TripStoryExplorer({
             <div className="story-photo-roll" aria-label="Photos by stop">
               {photoRollDays.length === 0 ? (
                 <p>
-                  {loadingPhotoProjectionKey ? "Loading photos..." : "No photos found."}
+                  {loadingPhotoProjectionKey
+                    ? "Loading photos..."
+                    : "No photos found."}
                 </p>
               ) : null}
               {photoRollDays.map(({ day, stops }) => (
@@ -3805,7 +3839,9 @@ function TripStoryExplorer({
                     </strong>
                   ) : null}
                   {stops.map(({ stop, photos }) => {
-                    const dayPhotos = stops.flatMap((section) => section.photos);
+                    const dayPhotos = stops.flatMap(
+                      (section) => section.photos,
+                    );
                     return (
                       <section className="story-photo-stop-grid" key={stop.id}>
                         <div className="story-photo-stop-heading">
