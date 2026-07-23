@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import uvicorn
@@ -147,6 +148,24 @@ class AuthenticatedActor:
     @property
     def is_guest(self) -> bool:
         return self.guest_member is not None
+
+
+LOCAL_PUBLIC_API_BASE_URL = "http://localhost:8000"
+
+
+def public_asset_base_url(settings: Settings, request_base_url: str) -> str:
+    configured_base_url = settings.public_api_base_url.rstrip("/")
+    parsed_configured = urlparse(configured_base_url)
+    parsed_request = urlparse(request_base_url)
+    configured_host = parsed_configured.hostname
+    request_host = parsed_request.hostname
+    configured_is_loopback = configured_host in {"localhost", "127.0.0.1", "::1"}
+    request_is_loopback = request_host in {"localhost", "127.0.0.1", "::1"}
+    if configured_is_loopback and not request_is_loopback:
+        return request_base_url.rstrip("/")
+    if settings.environment == "local" and configured_base_url == LOCAL_PUBLIC_API_BASE_URL:
+        return request_base_url.rstrip("/")
+    return configured_base_url
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
@@ -901,13 +920,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if not isinstance(assets, list):
             return {}
         request_base_url = str(request.base_url).rstrip("/")
-        if (
-            resolved_settings.environment == "local"
-            and resolved_settings.public_api_base_url == "http://localhost:8000"
-        ):
-            public_base_url = request_base_url
-        else:
-            public_base_url = resolved_settings.public_api_base_url.rstrip("/")
+        public_base_url = public_asset_base_url(resolved_settings, request_base_url)
         return {
             str(asset["id"]): f"{public_base_url}/public/shares/{token}/assets/{asset['id']}"
             for asset in assets
