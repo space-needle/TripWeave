@@ -7,7 +7,7 @@ Publication creates an immutable local story version from the private trip state
 `story_versions` records one requested publication snapshot. A version moves through
 `pending`, `publishing`, `published`, or `failed`. The row records the requested trip,
 version number, publication audit fields, manifest BlobRef, source reconstruction run,
-and a versioned `story_published` object-key prefix.
+and a versioned manifest prefix in `story_published`.
 
 `share_links` records unlisted access. A share token is generated once and only its hash
 is stored. A link points at one story version and can be revoked without deleting the
@@ -28,6 +28,13 @@ temporary local endpoint URLs from asset IDs, but those URLs are not persisted.
 Only metadata-stripped thumbnail and preview derivatives are copied into
 `story_published`. Originals remain in `media_private` and are never exposed through the
 public viewer.
+
+Published manifests are immutable and remain under the story version prefix. Public
+derivative objects use checksum-addressed keys scoped to the trip, so repeated
+publication versions can reference the same sanitized derivative without creating a new
+versioned object for unchanged bytes. The publisher discovers already-copied public
+derivatives from previous published manifests rather than probing object storage for
+each asset.
 
 Publishability v1 requires:
 

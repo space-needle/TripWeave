@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -199,6 +200,32 @@ def insert_capture_device(
 def upload_path(grant_url: str) -> str:
     parsed = urlparse(grant_url)
     return parsed.path
+
+
+def published_manifest(
+    client: TestClient, engine: Engine, trip_id: str, version: int
+) -> dict[str, Any]:
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                """
+                SELECT manifest_store_alias, manifest_object_key
+                FROM story_versions
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                  AND version_number = :version
+                """
+            ),
+            {"trip_id": trip_id, "version": version},
+        ).one()
+    blob_ref = BlobRef(store_alias=row.manifest_store_alias, object_key=row.manifest_object_key)
+    app = cast(Any, client.app)
+    with app.state.blob_store.open_reader(blob_ref) as reader:
+        return cast(dict[str, Any], json.loads(reader.read().decode("utf-8")))
+
+
+def published_asset_keys(manifest: dict[str, Any]) -> list[str]:
+    assets = cast(list[dict[str, Any]], manifest["assets"])
+    return sorted(cast(str, asset["blobRef"]["objectKey"]) for asset in assets)
 
 
 def jpeg_bytes(size: tuple[int, int] = (32, 24)) -> bytes:
@@ -1248,6 +1275,11 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     token = share_url.rsplit("/", 1)[-1]
 
     run_one_worker_job(client, engine)
+    first_manifest = published_manifest(client, engine, trip_id, 1)
+    first_asset_keys = published_asset_keys(first_manifest)
+    assert first_asset_keys
+    assert all("/story/assets/sha256/" in key for key in first_asset_keys)
+    assert all("/story/v" not in key for key in first_asset_keys)
 
     public_story = client.get(f"/public/shares/{token}")
     assert public_story.status_code == 200
@@ -1280,6 +1312,8 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     assert second_publication.status_code == 200
     second_token = second_publication.json()["shareLink"]["shareUrl"].rsplit("/", 1)[-1]
     run_one_worker_job(client, engine)
+    second_manifest = published_manifest(client, engine, trip_id, 2)
+    assert published_asset_keys(second_manifest) == first_asset_keys
     assert client.get(f"/public/shares/{second_token}").status_code == 200
 
     links = client.get(f"/trips/{trip_id}/publications")

@@ -54,7 +54,12 @@ def publish_story_version(
 
     try:
         manifest, audit = build_manifest(db, trip=trip, story_version=story_version)
-        copy_publication_assets(blob_store, manifest)
+        existing_public_asset_keys = published_asset_keys_for_trip(
+            db, blob_store=blob_store, trip_id=story_version.trip_id, exclude_id=story_version.id
+        )
+        copy_publication_assets(
+            blob_store, manifest, existing_public_asset_keys=existing_public_asset_keys
+        )
         public_manifest = strip_internal_asset_refs(manifest)
         encoded = json.dumps(public_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
         manifest_key = f"{story_version.asset_prefix}/manifest.json"
@@ -405,9 +410,7 @@ def publication_asset_map(
     ).scalars()
     assets: dict[UUID, dict[str, dict[str, object]]] = {}
     for asset in rows:
-        public_key = (
-            f"{story_version.asset_prefix}/assets/{asset.media_item_id}/{asset.asset_type}.webp"
-        )
+        public_key = publication_asset_key(asset, story_version)
         assets.setdefault(asset.media_item_id, {})[asset.asset_type] = {
             "id": str(asset.id),
             "sourceAssetId": str(asset.id),
@@ -437,10 +440,64 @@ def publication_asset_map(
     return assets
 
 
-def copy_publication_assets(blob_store: Any, manifest: dict[str, object]) -> None:
+def publication_asset_key(asset: orm.MediaAsset, story_version: orm.StoryVersion) -> str:
+    if asset.checksum:
+        checksum = asset.checksum.lower()
+        shard = checksum[:2]
+        return f"trips/{story_version.trip_id}/story/assets/sha256/{shard}/{checksum}.webp"
+    return f"{story_version.asset_prefix}/assets/{asset.media_item_id}/{asset.asset_type}.webp"
+
+
+def published_asset_keys_for_trip(
+    db: Session,
+    *,
+    blob_store: Any,
+    trip_id: UUID,
+    exclude_id: UUID,
+) -> set[str]:
+    versions = db.scalars(
+        select(orm.StoryVersion)
+        .where(
+            orm.StoryVersion.trip_id == trip_id,
+            orm.StoryVersion.id != exclude_id,
+            orm.StoryVersion.state == StoryVersionState.PUBLISHED.value,
+            orm.StoryVersion.manifest_store_alias.is_not(None),
+            orm.StoryVersion.manifest_object_key.is_not(None),
+        )
+        .order_by(orm.StoryVersion.version_number)
+    )
+    keys: set[str] = set()
+    for version in versions:
+        try:
+            manifest = load_manifest(blob_store, version)
+        except PublicationError:
+            continue
+        assets = manifest.get("assets")
+        if not isinstance(assets, list):
+            continue
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            blob_ref = asset.get("blobRef")
+            if not isinstance(blob_ref, dict):
+                continue
+            store_alias = blob_ref.get("storeAlias")
+            object_key = blob_ref.get("objectKey")
+            if store_alias == STORY_STORE_ALIAS and isinstance(object_key, str):
+                keys.add(object_key)
+    return keys
+
+
+def copy_publication_assets(
+    blob_store: Any,
+    manifest: dict[str, object],
+    *,
+    existing_public_asset_keys: set[str] | None = None,
+) -> None:
     assets = manifest.get("assets")
     if not isinstance(assets, list):
         raise PublicationError("publication_invalid", "Publication manifest is invalid")
+    known_public_asset_keys = set(existing_public_asset_keys or set())
     for asset in assets:
         if not isinstance(asset, dict):
             continue
@@ -451,7 +508,7 @@ def copy_publication_assets(blob_store: Any, manifest: dict[str, object]) -> Non
             or public_ref.store_alias != STORY_STORE_ALIAS
         ):
             raise PublicationError("publication_invalid", "Publication asset store is invalid")
-        if blob_store.exists(public_ref):
+        if public_ref.object_key in known_public_asset_keys:
             continue
         blob_size = asset.get("blobRef")
         max_size = 50_000_000
@@ -465,6 +522,7 @@ def copy_publication_assets(blob_store: Any, manifest: dict[str, object]) -> Non
                     max_size_bytes=max_size,
                     content_type=str(asset.get("mimeType") or "application/octet-stream"),
                 )
+                known_public_asset_keys.add(public_ref.object_key)
         except BlobNotFoundError as exc:
             raise PublicationError("asset_missing", "A publication asset is missing") from exc
 

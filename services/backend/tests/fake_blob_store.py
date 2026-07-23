@@ -40,6 +40,7 @@ class FakeInMemoryBlobStore:
         self._public_base_url = public_base_url.rstrip("/")
         self._supported_transports = supported_transports or {UploadTransport.API_PROXY}
         self._blobs: dict[tuple[str, str], StoredBlob] = {}
+        self.exists_calls: list[BlobRef] = []
         self._capabilities = StorageCapabilities(
             supports_api_proxy_upload=UploadTransport.API_PROXY in self._supported_transports,
             supports_single_put_upload=UploadTransport.SINGLE_PUT in self._supported_transports,
@@ -148,6 +149,7 @@ class FakeInMemoryBlobStore:
         self._blobs.pop(self._key(blob_ref), None)
 
     def exists(self, blob_ref: BlobRef) -> bool:
+        self.exists_calls.append(blob_ref)
         try:
             self._validate_ref(blob_ref)
         except ValueError:
