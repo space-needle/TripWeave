@@ -12,7 +12,7 @@ LOCAL_WEB_ORIGIN_REGEX = (
     r"10(?:\.\d{1,3}){3}|"
     r"172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|"
     r"192\.168(?:\.\d{1,3}){2}"
-    r"):3000$"
+    r"):300[0-9]$"
 )
 
 
@@ -155,7 +155,7 @@ class Settings(BaseSettings):
         if self.environment != "local":
             return False
         parsed = urlparse(origin)
-        if parsed.scheme not in {"http", "https"} or parsed.port != 3000:
+        if parsed.scheme not in {"http", "https"} or parsed.port not in range(3000, 3010):
             return False
         host = parsed.hostname
         if host in {"localhost", "127.0.0.1", "::1"}:

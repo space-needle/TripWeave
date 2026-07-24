@@ -1293,6 +1293,41 @@ button.needs-update {
   height: 100%;
 }
 
+.map-active-day {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  max-width: min(260px, calc(100% - 32px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 94%);
+  color: var(--text);
+  padding: 8px 11px;
+  box-shadow: 0 10px 24px rgb(33 48 39 / 14%);
+  pointer-events: none;
+}
+
+.map-active-day span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.map-active-day strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .map-day-return {
   position: absolute;
   left: 16px;
@@ -1374,8 +1409,8 @@ button.needs-update {
 
 .photo-stop-marker {
   position: relative;
-  width: 58px;
-  height: 58px;
+  width: 30px;
+  height: 30px;
   display: grid;
   justify-items: center;
   overflow: visible;
@@ -1384,7 +1419,7 @@ button.needs-update {
   color: var(--text);
   cursor: zoom-in;
   padding: 0;
-  filter: drop-shadow(0 10px 22px rgb(23 32 42 / 18%));
+  filter: drop-shadow(0 5px 12px rgb(23 32 42 / 20%));
   transition:
     filter 160ms ease,
     transform 160ms ease;
@@ -1392,26 +1427,30 @@ button.needs-update {
 
 .photo-stop-marker-image {
   position: relative;
-  width: 58px;
+  width: 30px;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
   overflow: visible;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
   border-radius: 999px;
   background: var(--stop-color, var(--accent));
   color: #fff;
   box-shadow:
-    0 0 0 4px var(--stop-color, var(--accent)),
-    0 10px 24px rgb(23 32 42 / 24%);
+    0 0 0 2px var(--stop-color, var(--accent)),
+    0 6px 14px rgb(23 32 42 / 20%);
 }
 
 .photo-stop-marker.active {
+  width: 58px;
+  height: 58px;
   filter: drop-shadow(0 16px 30px rgb(23 32 42 / 28%));
   transform: translate(-50%, -50%) scale(1.12);
 }
 
 .photo-stop-marker.active .photo-stop-marker-image {
+  width: 58px;
+  border-width: 3px;
   box-shadow:
     0 0 0 5px var(--stop-color, var(--accent)),
     0 0 0 11px rgb(255 255 255 / 82%),
@@ -1428,9 +1467,13 @@ button.needs-update {
 .photo-stop-marker-frame {
   width: 100%;
   height: 100%;
-  display: block;
+  display: none;
   overflow: hidden;
   border-radius: 999px;
+}
+
+.photo-stop-marker.active .photo-stop-marker-frame {
+  display: block;
 }
 
 .photo-stop-marker img,
@@ -1452,44 +1495,55 @@ button.needs-update {
   font-weight: 900;
 }
 
-.photo-stop-flow-badge {
+.photo-stop-sequence {
   position: absolute;
-  right: -14px;
-  bottom: -4px;
+  inset: 0;
   z-index: 1;
-  min-width: 26px;
-  min-height: 24px;
+  width: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
   border: 2px solid #fff;
   border-radius: 999px;
   background: var(--text);
   color: #fff;
-  font-size: 0.64rem;
+  font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
-  padding: 3px 7px;
-  text-transform: uppercase;
+  padding: 0;
 }
 
-.photo-stop-flow-badge.start {
+.photo-stop-sequence.start {
   background: #267563;
 }
 
-.photo-stop-flow-badge.end {
+.photo-stop-sequence.end {
   background: #9f2d20;
 }
 
-.photo-stop-flow-badge.step {
+.photo-stop-marker.active .photo-stop-sequence {
   right: -8px;
+  bottom: -4px;
+  inset: auto -8px -4px auto;
+  width: auto;
+  height: auto;
   min-width: 24px;
+  min-height: 24px;
+  font-size: 0.64rem;
   padding: 3px 6px;
+}
+
+.photo-stop-marker.active .photo-stop-sequence.start,
+.photo-stop-marker.active .photo-stop-sequence.end {
+  right: -14px;
+  min-width: 26px;
 }
 
 .photo-stop-marker-label {
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
+  display: none;
   max-width: 116px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1504,6 +1558,10 @@ button.needs-update {
   text-overflow: ellipsis;
   transform: translateX(-50%);
   white-space: nowrap;
+}
+
+.photo-stop-marker.active .photo-stop-marker-label {
+  display: block;
 }
 
 .photo-stop-marker.active .photo-stop-marker-label {

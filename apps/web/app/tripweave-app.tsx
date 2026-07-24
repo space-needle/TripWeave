@@ -2876,12 +2876,13 @@ function TripStoryExplorer({
   }
 
   function showDayStops(dayId: string) {
+    const firstStop = filteredModel.stops.find((stop) => stop.dayId === dayId);
     skipNextTimelineSelectionRef.current = true;
     onStateChange({
       ...state,
       viewMode: "STOP",
       selectedDayId: dayId,
-      selectedStopId: null,
+      selectedStopId: firstStop?.id ?? null,
       selectedMomentId: null,
       selectedMediaId: null,
       mapControlMode: "STORY_CONTROLLED",
@@ -3106,6 +3107,7 @@ function TripStoryExplorer({
         <StoryMapCanvas
           model={filteredModel}
           state={state}
+          activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
           onStateChange={onStateChange}
           onDayMarkerClick={showDayStops}
           onStopMarkerClick={openStopPhotos}
@@ -4223,6 +4225,7 @@ function syncStoryMapMarkerSelection(
 function StoryMapCanvas({
   model,
   state,
+  activeDayLabel,
   onStateChange,
   onDayMarkerClick,
   onStopMarkerClick,
@@ -4230,6 +4233,7 @@ function StoryMapCanvas({
 }: {
   model: ReturnType<typeof buildStoryModel>;
   state: StoryMapState;
+  activeDayLabel: string | null;
   onStateChange: (state: StoryMapState) => void;
   onDayMarkerClick: (dayId: string) => void;
   onStopMarkerClick: (stopId: string, dayId: string) => void;
@@ -4741,10 +4745,10 @@ function StoryMapCanvas({
         mediaFrame.appendChild(fallback);
       }
       bubble.appendChild(mediaFrame);
-      const badge = document.createElement("small");
-      badge.className = `photo-stop-flow-badge ${flowTone}`;
-      badge.textContent = flowLabel;
-      bubble.appendChild(badge);
+      const sequence = document.createElement("small");
+      sequence.className = `photo-stop-sequence ${flowTone}`;
+      sequence.textContent = flowLabel;
+      bubble.appendChild(sequence);
       const label = document.createElement("strong");
       label.className = "photo-stop-marker-label";
       label.textContent = stop.label;
@@ -4835,27 +4839,42 @@ function StoryMapCanvas({
         selectedStopId: state.selectedStopId,
         viewMode: state.viewMode,
       };
+      if (previousFocus.viewMode !== "STOP") {
+        const dayCoordinates = dayStopCoordinates(
+          model,
+          state.selectedDayId,
+          stopDisplayCoordinates,
+        );
+        if (dayCoordinates.length > 1) {
+          map.fitBounds(boundsForCoordinates(dayCoordinates), {
+            padding: 56,
+            maxZoom: 14,
+            duration: reducedMotion ? 0 : 700,
+          });
+          return;
+        }
+      }
+      const targetZoom = stopSelectionZoom(
+        model,
+        state.selectedDayId,
+        coordinates[0],
+        stopDisplayCoordinates,
+      );
       if (
         previousFocus.viewMode === "STOP" &&
         previousFocus.selectedStopId &&
         previousFocus.selectedStopId !== state.selectedStopId
       ) {
-        if (map.getZoom() < 12) {
-          map.easeTo({
-            center: coordinates[0],
-            zoom: 13,
-            duration: reducedMotion ? 0 : 360,
-          });
-          return;
-        }
-        map.panTo(coordinates[0], {
+        map.easeTo({
+          center: coordinates[0],
+          zoom: Math.max(map.getZoom(), targetZoom),
           duration: reducedMotion ? 0 : 360,
         });
         return;
       }
       map.easeTo({
         center: coordinates[0],
-        zoom: Math.max(map.getZoom(), 13),
+        zoom: Math.max(map.getZoom(), targetZoom),
         duration: reducedMotion ? 0 : 360,
       });
       return;
@@ -4886,6 +4905,12 @@ function StoryMapCanvas({
       }`}
     >
       <div className="story-map" ref={mapNode} aria-hidden="true" />
+      {activeDayLabel && ["STOP", "MOMENT"].includes(state.viewMode) ? (
+        <div className="map-active-day" aria-live="polite">
+          <span>Selected day</span>
+          <strong>{activeDayLabel}</strong>
+        </div>
+      ) : null}
       {canReturnToDayMode && state.selectedDayId ? (
         <button
           type="button"
@@ -5031,6 +5056,73 @@ function focusCoordinates(
       .filter((item) => item.coordinates)
       .map((item) => item.coordinates as [number, number]),
   ];
+}
+
+function dayStopCoordinates(
+  model: ReturnType<typeof buildStoryModel>,
+  dayId: string | null,
+  stopCoordinates: Map<string, [number, number]>,
+): [number, number][] {
+  if (!dayId) {
+    return [];
+  }
+  return model.stops
+    .filter((stop) => stop.dayId === dayId)
+    .map((stop) => stopCoordinates.get(stop.id) ?? null)
+    .filter((coordinate) => coordinate !== null);
+}
+
+function stopSelectionZoom(
+  model: ReturnType<typeof buildStoryModel>,
+  dayId: string | null,
+  selectedCoordinate: [number, number],
+  stopCoordinates: Map<string, [number, number]>,
+): number {
+  const nearestDistance = dayStopCoordinates(model, dayId, stopCoordinates)
+    .map((coordinate) => distanceMeters(selectedCoordinate, coordinate))
+    .filter((distance) => distance > 0.5)
+    .sort((left, right) => left - right)[0];
+  if (typeof nearestDistance !== "number") {
+    return 13.4;
+  }
+  if (nearestDistance < 120) {
+    return 16.2;
+  }
+  if (nearestDistance < 250) {
+    return 15.5;
+  }
+  if (nearestDistance < 500) {
+    return 14.8;
+  }
+  if (nearestDistance < 900) {
+    return 14.1;
+  }
+  return 13.4;
+}
+
+function distanceMeters(
+  left: [number, number],
+  right: [number, number],
+): number {
+  const earthRadiusMeters = 6_371_000;
+  const leftLatitude = degreesToRadians(left[1]);
+  const rightLatitude = degreesToRadians(right[1]);
+  const latitudeDelta = degreesToRadians(right[1] - left[1]);
+  const longitudeDelta = degreesToRadians(right[0] - left[0]);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(leftLatitude) *
+      Math.cos(rightLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return (
+    2 *
+    earthRadiusMeters *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
+
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180;
 }
 
 function boundsForCoordinates(coordinates: [number, number][]): LngLatBounds {
