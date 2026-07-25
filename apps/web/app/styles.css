@@ -285,6 +285,28 @@ p {
   color: #9f3a22;
 }
 
+.story-update-status.updating {
+  color: var(--accent-strong);
+}
+
+.button-spinner {
+  width: 0.82em;
+  aspect-ratio: 1;
+  display: inline-block;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  margin-right: 6px;
+  vertical-align: -0.12em;
+  animation: button-spinner-rotate 720ms linear infinite;
+}
+
+@keyframes button-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .trip-primary-nav {
   display: grid;
   gap: 6px;

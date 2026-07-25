@@ -283,6 +283,7 @@ function OwnerWorkspace() {
   const [createForm, setCreateForm] = useState<TripForm>(emptyTripForm);
   const [settingsForm, setSettingsForm] = useState<TripForm>(emptyTripForm);
   const [isBusy, setIsBusy] = useState(false);
+  const [isReconstructingStory, setIsReconstructingStory] = useState(false);
   const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
     [],
   );
@@ -335,6 +336,12 @@ function OwnerWorkspace() {
         } need update`
       : "Story is up to date"
     : "";
+  const storyActionButtonLabel = isReconstructingStory
+    ? "Updating story..."
+    : "Update story";
+  const storyActionStatusLabel = isReconstructingStory
+    ? "Rebuilding map and timeline..."
+    : storyUpdateLabel;
 
   const selectedUploadFiles = useMemo(
     () => uploadSessions.flatMap((session) => session.files),
@@ -973,6 +980,7 @@ function OwnerWorkspace() {
       return;
     }
     setReconstructionError("");
+    setIsReconstructingStory(true);
     setIsBusy(true);
     try {
       const result = await api.startReconstruction(selectedTrip.id);
@@ -982,6 +990,7 @@ function OwnerWorkspace() {
     } catch (error) {
       setReconstructionError(messageFrom(error));
     } finally {
+      setIsReconstructingStory(false);
       setIsBusy(false);
     }
   }
@@ -1392,18 +1401,24 @@ function OwnerWorkspace() {
                 type="button"
                 onClick={runReconstruction}
                 disabled={isBusy}
+                aria-busy={isReconstructingStory}
               >
-                Update story
+                {isReconstructingStory ? (
+                  <span className="button-spinner" aria-hidden="true" />
+                ) : null}
+                {storyActionButtonLabel}
               </button>
-              {storyUpdate ? (
+              {storyUpdate || isReconstructingStory ? (
                 <span
                   className={
-                    storyUpdateNeeded
-                      ? "story-update-status needs-update"
-                      : "story-update-status"
+                    isReconstructingStory
+                      ? "story-update-status updating"
+                      : storyUpdateNeeded
+                        ? "story-update-status needs-update"
+                        : "story-update-status"
                   }
                 >
-                  {storyUpdateLabel}
+                  {storyActionStatusLabel}
                 </span>
               ) : null}
             </div>
@@ -1501,18 +1516,27 @@ function OwnerWorkspace() {
                           type="button"
                           onClick={runReconstruction}
                           disabled={isBusy}
+                          aria-busy={isReconstructingStory}
                         >
-                          Update story
+                          {isReconstructingStory ? (
+                            <span
+                              className="button-spinner"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {storyActionButtonLabel}
                         </button>
-                        {storyUpdate ? (
+                        {storyUpdate || isReconstructingStory ? (
                           <span
                             className={
-                              storyUpdateNeeded
-                                ? "story-update-status needs-update"
-                                : "story-update-status"
+                              isReconstructingStory
+                                ? "story-update-status updating"
+                                : storyUpdateNeeded
+                                  ? "story-update-status needs-update"
+                                  : "story-update-status"
                             }
                           >
-                            {storyUpdateLabel}
+                            {storyActionStatusLabel}
                           </span>
                         ) : null}
                       </div>
