@@ -4701,6 +4701,11 @@ function StoryMapCanvas({
             .addTo(map),
         );
       }
+      syncStoryMapMarkerSelection(
+        stopPhotoMarkers.current,
+        state.selectedDayId,
+        state.selectedStopId,
+      );
       return () => {
         stopPhotoMarkers.current.forEach((marker) => marker.remove());
         stopPhotoMarkers.current = [];
@@ -4765,6 +4770,11 @@ function StoryMapCanvas({
           .addTo(map),
       );
     }
+    syncStoryMapMarkerSelection(
+      stopPhotoMarkers.current,
+      state.selectedDayId,
+      state.selectedStopId,
+    );
     return () => {
       stopPhotoMarkers.current.forEach((marker) => marker.remove());
       stopPhotoMarkers.current = [];
@@ -4775,6 +4785,8 @@ function StoryMapCanvas({
     orderedDayMarkerData,
     orderedStopMarkerData,
     showDayMarkers,
+    state.selectedDayId,
+    state.selectedStopId,
   ]);
 
   useEffect(() => {
