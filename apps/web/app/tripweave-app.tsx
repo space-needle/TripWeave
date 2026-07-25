@@ -3086,10 +3086,7 @@ function TripStoryExplorer({
     ? displayStopTitle(selectedStopDetail)
     : (selectedStop?.label ?? null);
   const selectedStopSummary = selectedStopDetail
-    ? selectedStopDetail.placeName &&
-      selectedStopDetail.placeName !== selectedStopTitle
-      ? selectedStopDetail.placeName
-      : `${selectedStopDetail.mediaCount} photos · ${selectedStopDetail.contributorCount} travelers`
+    ? `${selectedStopDetail.mediaCount} photos · ${selectedStopDetail.contributorCount} travelers`
     : activeDay
       ? `${activeDay.stops.length} stops · ${activeDay.stops.reduce(
           (total, stop) => total + stop.mediaCount,
