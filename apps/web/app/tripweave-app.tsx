@@ -2922,6 +2922,15 @@ function TripStoryExplorer({
     return stop.title ?? stop.placeName ?? `Stop ${stop.position}`;
   }
 
+  function displayStopPosition(
+    stop: Pick<
+      ReconstructionResponse["days"][number]["stops"][number],
+      "displayPosition" | "position"
+    >,
+  ): string {
+    return stop.displayPosition ?? String(stop.position);
+  }
+
   function startRenamingStop(
     stop: ReconstructionResponse["days"][number]["stops"][number],
   ) {
@@ -3465,7 +3474,7 @@ function TripStoryExplorer({
                         >
                           <span>
                             <span className="timeline-stop-number">
-                              {stop.displayPosition}
+                              {displayStopPosition(stop)}
                             </span>
                             <span className="timeline-stop-title">
                               {displayStopTitle(stop)}
@@ -5832,10 +5841,15 @@ function ReconstructionOutline({
               <h3>{day.title ?? day.date}</h3>
               {day.stops.map((stop) => (
                 <div className="outline-stop" key={stop.id}>
-                  <strong>
-                    {stop.title ?? `Stop ${stop.position}`}
-                    {stop.placeName ? ` · ${stop.placeName}` : ""}
-                  </strong>
+                  <div className="outline-stop-heading">
+                    <span className="outline-stop-number">
+                      {stop.displayPosition ?? String(stop.position)}
+                    </span>
+                    <strong>
+                      {stop.title ?? `Stop ${stop.position}`}
+                      {stop.placeName ? ` · ${stop.placeName}` : ""}
+                    </strong>
+                  </div>
                   <small>
                     {formatReconstructionTime(
                       stop.startsAt,

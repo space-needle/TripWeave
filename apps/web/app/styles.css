@@ -2142,6 +2142,33 @@ button.needs-update {
   margin-top: 3px;
 }
 
+.outline-stop-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.outline-stop-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.outline-stop-number {
+  min-width: 30px;
+  min-height: 24px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #1f4f54;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0 8px;
+}
+
 .outline-day {
   display: grid;
   gap: 10px;
