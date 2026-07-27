@@ -13,7 +13,6 @@ from typing import Any
 
 from PIL import ExifTags, Image
 
-
 API_BASE = os.environ.get("TRIPWEAVE_LOCAL_API", "http://localhost:8000").rstrip("/")
 OWNER_EMAIL = os.environ.get("TRIPWEAVE_DEMO_OWNER_EMAIL", "owner.demo@tripweave.local")
 PASSWORD = os.environ.get("TRIPWEAVE_DEMO_PASSWORD", "local-demo-password")
@@ -29,9 +28,7 @@ class ApiResponse:
 class ApiClient:
     def __init__(self) -> None:
         self.cookies = CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.cookies)
-        )
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
         self.csrf_token = ""
 
     def request(
@@ -53,9 +50,7 @@ class ApiClient:
         if raw is not None:
             data = raw
         url = f"{API_BASE}{path}"
-        request = urllib.request.Request(
-            url, data=data, headers=request_headers, method=method
-        )
+        request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
         try:
             response = self.opener.open(request, timeout=30)
             payload = response.read()
@@ -78,9 +73,7 @@ class ApiClient:
         headers = {"x-csrf-token": self.csrf_token} if self.csrf_token else {}
         response = self.request(method, path, body=body, headers=headers)
         if response.status >= 400:
-            raise RuntimeError(
-                f"{method} {path} failed: {response.status} {response.body}"
-            )
+            raise RuntimeError(f"{method} {path} failed: {response.status} {response.body}")
         return response.body
 
 
@@ -187,9 +180,7 @@ def accept_contributor(owner: ApiClient, trip_id: str, display_name: str) -> Api
             "POST", "/auth/login", body={"email": email, "password": PASSWORD}
         )
         if logged_in.status != 200:
-            raise RuntimeError(
-                f"Contributor account failed: {registered.status} {registered.body}"
-            )
+            raise RuntimeError(f"Contributor account failed: {registered.status} {registered.body}")
         contributor.csrf_token = str(logged_in.body["csrfToken"])
     else:
         contributor.csrf_token = str(registered.body["csrfToken"])
@@ -200,9 +191,7 @@ def accept_contributor(owner: ApiClient, trip_id: str, display_name: str) -> Api
         headers={"x-csrf-token": contributor.csrf_token},
     )
     if accepted.status != 200:
-        raise RuntimeError(
-            f"Contributor invitation failed: {accepted.status} {accepted.body}"
-        )
+        raise RuntimeError(f"Contributor invitation failed: {accepted.status} {accepted.body}")
     return contributor
 
 
@@ -230,9 +219,7 @@ def upload(client: ApiClient, trip_id: str, filename: str, payload: bytes) -> No
     client.json("POST", f"/upload-files/{upload_file['id']}/complete")
 
 
-def wait_for_worker(
-    client: ApiClient, expected_ready: int, timeout_seconds: int = 120
-) -> None:
+def wait_for_worker(client: ApiClient, expected_ready: int, timeout_seconds: int = 120) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         media = client.json("GET", "/trips")
@@ -327,6 +314,54 @@ def main() -> None:
                 model="ContributorTwo",
             ),
         ),
+        (
+            owner,
+            "area-demo-asakusa-1.jpg",
+            jpeg_fixture(
+                color="teal",
+                captured_at="2026:06:08 14:00:00",
+                latitude=35.7101,
+                longitude=139.8107,
+                make="TripWeaveCam",
+                model="AreaDemo",
+            ),
+        ),
+        (
+            contributor_one,
+            "area-demo-asakusa-2.jpg",
+            jpeg_fixture(
+                color="cyan",
+                captured_at="2026:06:08 14:12:00",
+                latitude=35.7119,
+                longitude=139.8107,
+                make="TripWeaveCam",
+                model="AreaDemo",
+            ),
+        ),
+        (
+            contributor_two,
+            "area-demo-asakusa-3.jpg",
+            jpeg_fixture(
+                color="navy",
+                captured_at="2026:06:08 14:24:00",
+                latitude=35.7137,
+                longitude=139.8107,
+                make="TripWeaveCam",
+                model="AreaDemo",
+            ),
+        ),
+        (
+            owner,
+            "area-demo-asakusa-4.jpg",
+            jpeg_fixture(
+                color="lime",
+                captured_at="2026:06:08 14:36:00",
+                latitude=35.7155,
+                longitude=139.8107,
+                make="TripWeaveCam",
+                model="AreaDemo",
+            ),
+        ),
     ]
     duplicate = fixtures[0][2]
     fixtures.append((contributor_two, "exact-duplicate.jpg", duplicate))
@@ -335,12 +370,24 @@ def main() -> None:
     for client, filename, payload in fixtures:
         upload(client, trip_id, filename, payload)
 
-    wait_for_worker(owner, expected_ready=7)
+    wait_for_worker(owner, expected_ready=11)
     reconstruction = owner.json("POST", f"/trips/{trip_id}/reconstruction-runs")
+    area_visit_count = 0
+    for day in reconstruction.get("days", []):
+        area_visits = owner.json(
+            "GET",
+            f"/trips/{trip_id}/days/{day['id']}/area-visits",
+        )
+        area_visit_count += len(area_visits.get("areas", []))
     owner.json("POST", f"/trips/{trip_id}/publications")
     print(
         json.dumps(
-            {"tripId": trip_id, "days": len(reconstruction.get("days", []))}, indent=2
+            {
+                "tripId": trip_id,
+                "days": len(reconstruction.get("days", [])),
+                "areaVisits": area_visit_count,
+            },
+            indent=2,
         )
     )
 
