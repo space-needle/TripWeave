@@ -969,6 +969,84 @@ def test_area_visits_endpoint_returns_grouped_and_standalone_stops(
     assert denied.status_code == 404
 
 
+def test_reconstruction_automatically_persists_area_visits(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "area-auto-owner@example.com")
+    trip = create_trip(client, csrf_token, "Area Auto Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text("SELECT id FROM trip_members WHERE trip_id = CAST(:trip_id AS uuid)"),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    for index, latitude in enumerate([35.0000, 35.0018, 35.0036, 35.0054], start=1):
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"area-auto-{index}.jpg",
+            captured_at=datetime(2026, 6, 8, 9, index * 10, tzinfo=UTC),
+            latitude=latitude,
+            longitude=127.0,
+            sha256=str(index) * 64,
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+
+    assert reconstructed.status_code == 200, reconstructed.text
+    body = reconstructed.json()
+    assert body["latestRun"]["summary"]["areaVisits"] == 1
+    day_id = body["days"][0]["id"]
+    assert len(body["days"][0]["stops"]) == 4
+
+    areas = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+
+    assert areas.status_code == 200
+    payload = areas.json()
+    assert payload["sourceReconstructionRunId"] == body["latestRun"]["id"]
+    assert len(payload["areas"]) == 1
+    assert [stop["position"] for stop in payload["areas"][0]["stops"]] == [1, 2, 3, 4]
+    assert payload["standaloneStops"] == []
+
+    rerun = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert rerun.status_code == 200, rerun.text
+    with engine.connect() as connection:
+        area_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM area_visits
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                  AND user_locked = false
+                """
+            ),
+            {"trip_id": trip_id},
+        ).scalar_one()
+        membership_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM area_visit_stops
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                  AND user_locked = false
+                """
+            ),
+            {"trip_id": trip_id},
+        ).scalar_one()
+    assert area_count == 1
+    assert membership_count == 4
+
+
 def test_invitation_rejects_expired_revoked_and_malformed(
     client: TestClient, engine: Engine
 ) -> None:

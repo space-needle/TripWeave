@@ -12,6 +12,7 @@ from sqlalchemy import ColumnElement, delete, exists, func, literal_column, or_,
 from sqlalchemy.orm import Session
 
 from tripweave.adapters import orm
+from tripweave.adapters.area_visit_persistence import persist_area_visits_for_trip
 from tripweave.adapters.collaboration_intelligence import analyze_collaboration
 from tripweave.domain.enums import (
     ProcessingState,
@@ -153,6 +154,8 @@ def reconstruct_trip(
     merge_empty_locked_stops_with_generated_media(db, trip.id, run)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
+    area_visit_summaries = persist_area_visits_for_trip(db=db, trip_id=trip.id, run=run)
+    area_visit_count = area_visit_count_from_summaries(area_visit_summaries)
 
     run.state = ReconstructionRunState.SUCCEEDED.value
     run.finished_at = datetime.now(UTC)
@@ -161,6 +164,7 @@ def reconstruct_trip(
         "stops": sum(len(stops) for stops in created.values()),
         "moments": moments,
         "legs": legs,
+        "areaVisits": area_visit_count,
         "similarityGroups": intelligence.similarity_groups,
         "clockOffsetSuggestions": intelligence.clock_suggestions,
         "reviewItems": review_count,
@@ -290,6 +294,8 @@ def increment_story(
     merge_empty_locked_stops_with_generated_media(db, trip.id, run)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
+    area_visit_summaries = persist_area_visits_for_trip(db=db, trip_id=trip.id, run=run)
+    area_visit_count = area_visit_count_from_summaries(area_visit_summaries)
     days = count_visible(db, orm.TripDay, trip.id, run.id)
     stops = count_visible(db, orm.Stop, trip.id, run.id)
     moments = count_visible(db, orm.Moment, trip.id, run.id)
@@ -302,6 +308,7 @@ def increment_story(
         "stops": stops,
         "moments": moments,
         "legs": legs,
+        "areaVisits": area_visit_count,
         "newMedia": len(unassigned),
         "assignedMedia": assigned_media,
         "addedStops": added_stops,
@@ -331,6 +338,15 @@ def count_visible(db: Session, model: Any, trip_id: UUID, run_id: UUID) -> int:
         )
         or 0
     )
+
+
+def area_visit_count_from_summaries(summaries: list[dict[str, object]]) -> int:
+    count = 0
+    for summary in summaries:
+        proposed_count = summary.get("proposed_area_count")
+        if isinstance(proposed_count, int):
+            count += proposed_count
+    return count
 
 
 def unassigned_media_points(
@@ -949,6 +965,8 @@ def delete_unlocked_outputs(db: Session, trip_id: UUID) -> None:
     for model in (
         orm.ReviewItem,
         orm.TripLeg,
+        orm.AreaVisitStop,
+        orm.AreaVisit,
         orm.MomentParticipant,
         orm.MomentMedia,
         orm.Moment,

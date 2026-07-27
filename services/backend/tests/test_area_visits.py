@@ -3,13 +3,13 @@ from typing import cast
 from uuid import uuid4
 
 from tripweave.adapters import orm
+from tripweave.adapters.area_visit_persistence import persist_grouping_result
 from tripweave.application.area_visits import (
     AreaRejectionReason,
     AreaVisitConfig,
     StopInput,
     group_area_visits,
 )
-from tripweave.entrypoints.area_visits.main import persist_grouping_result
 
 BASE_TIME = datetime(2026, 6, 26, 17, 0, tzinfo=UTC)
 BASE_LATITUDE = 47.6537
@@ -229,6 +229,9 @@ class FakeSession:
     def __init__(self) -> None:
         self.added: list[object] = []
         self.executed = 0
+
+    def scalar(self, statement: object) -> object | None:
+        return None
 
     def add(self, record: object) -> None:
         self.added.append(record)
