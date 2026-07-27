@@ -3392,6 +3392,7 @@ function TripStoryExplorer({
         <StoryMapCanvas
           model={filteredModel}
           state={state}
+          areaVisitsByDay={areaVisitsByDay}
           activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
           onStateChange={onStateChange}
           onDayMarkerClick={showDayStops}
@@ -4716,6 +4717,7 @@ function syncStoryMapMarkerSelection(
 function StoryMapCanvas({
   model,
   state,
+  areaVisitsByDay,
   activeDayLabel,
   onStateChange,
   onDayMarkerClick,
@@ -4724,6 +4726,7 @@ function StoryMapCanvas({
 }: {
   model: ReturnType<typeof buildStoryModel>;
   state: StoryMapState;
+  areaVisitsByDay: Record<string, AreaVisitsResponse>;
   activeDayLabel: string | null;
   onStateChange: (state: StoryMapState) => void;
   onDayMarkerClick: (dayId: string) => void;
@@ -4827,11 +4830,16 @@ function StoryMapCanvas({
     }),
     [dayColorMap, model.media, state.selectedMediaId],
   );
+  const areaCollection = useMemo(
+    () => areaVisitCollection(areaVisitsByDay, stopDisplayCoordinates, state),
+    [areaVisitsByDay, state, stopDisplayCoordinates],
+  );
   const hasMapData =
     routeCollection.features.length > 0 ||
     stopCollection.features.length > 0 ||
     mediaCollection.features.length > 0;
   const mapDataRef = useRef({
+    areaCollection,
     mediaCollection,
     routeCollection,
     stopCollection,
@@ -4839,11 +4847,12 @@ function StoryMapCanvas({
 
   useEffect(() => {
     mapDataRef.current = {
+      areaCollection,
       mediaCollection,
       routeCollection,
       stopCollection,
     };
-  }, [mediaCollection, routeCollection, stopCollection]);
+  }, [areaCollection, mediaCollection, routeCollection, stopCollection]);
   const canReturnToDayMode =
     Boolean(state.selectedDayId) &&
     !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
@@ -4967,6 +4976,10 @@ function StoryMapCanvas({
         cluster: true,
         clusterRadius: 36,
       });
+      map.addSource("trip-areas", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
       (map.getSource("trip-routes") as GeoJSONSource | undefined)?.setData(
         mapDataRef.current.routeCollection,
       );
@@ -4976,6 +4989,39 @@ function StoryMapCanvas({
       (map.getSource("trip-media") as GeoJSONSource | undefined)?.setData(
         mapDataRef.current.mediaCollection,
       );
+      (map.getSource("trip-areas") as GeoJSONSource | undefined)?.setData(
+        mapDataRef.current.areaCollection,
+      );
+      map.addLayer({
+        id: "area-visits-fill",
+        type: "fill",
+        source: "trip-areas",
+        paint: {
+          "fill-color": "#267563",
+          "fill-opacity": [
+            "case",
+            ["==", ["get", "selected"], true],
+            0.2,
+            0.12,
+          ],
+        },
+      });
+      map.addLayer({
+        id: "area-visits-outline",
+        type: "line",
+        source: "trip-areas",
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "selected"], true],
+            "#174a40",
+            "#267563",
+          ],
+          "line-width": ["case", ["==", ["get", "selected"], true], 2.4, 1.4],
+          "line-dasharray": [2, 1.2],
+          "line-opacity": 0.78,
+        },
+      });
       map.addLayer({
         id: "routes-confirmed",
         type: "line",
@@ -5126,7 +5172,10 @@ function StoryMapCanvas({
     (map.getSource("trip-media") as GeoJSONSource | undefined)?.setData(
       mediaCollection,
     );
-  }, [mediaCollection, routeCollection, stopCollection]);
+    (map.getSource("trip-areas") as GeoJSONSource | undefined)?.setData(
+      areaCollection,
+    );
+  }, [areaCollection, mediaCollection, routeCollection, stopCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5435,6 +5484,100 @@ function StoryMapCanvas({
       ) : null}
     </div>
   );
+}
+
+type AreaVisitFeature = {
+  type: "Feature";
+  id: string;
+  properties: {
+    id: string;
+    dayId: string;
+    title: string;
+    selected: boolean;
+  };
+  geometry: {
+    type: "Polygon";
+    coordinates: number[][][];
+  };
+};
+
+function areaVisitCollection(
+  areaVisitsByDay: Record<string, AreaVisitsResponse>,
+  stopCoordinates: Map<string, [number, number]>,
+  state: StoryMapState,
+) {
+  const activeDayId =
+    state.viewMode === "TRIP_OVERVIEW" ? null : state.selectedDayId;
+  const features: AreaVisitFeature[] = [];
+  for (const [dayId, areaVisits] of Object.entries(areaVisitsByDay)) {
+    if (activeDayId && dayId !== activeDayId) {
+      continue;
+    }
+    for (const area of areaVisits.areas) {
+      const coordinates = area.stops
+        .map((stop) => stopCoordinates.get(stop.id) ?? null)
+        .filter((coordinate) => coordinate !== null);
+      const polygon = areaPolygonForCoordinates(coordinates);
+      if (!polygon) {
+        continue;
+      }
+      features.push({
+        type: "Feature",
+        id: area.id,
+        properties: {
+          id: area.id,
+          dayId,
+          title: area.title ?? `Area ${area.sortOrder}`,
+          selected: area.stops.some((stop) => stop.id === state.selectedStopId),
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [polygon],
+        },
+      });
+    }
+  }
+  return {
+    type: "FeatureCollection" as const,
+    features,
+  };
+}
+
+function areaPolygonForCoordinates(
+  coordinates: [number, number][],
+): number[][] | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+  const longitudes = coordinates.map((coordinate) => coordinate[0]);
+  const latitudes = coordinates.map((coordinate) => coordinate[1]);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const centerLongitude = (minLongitude + maxLongitude) / 2;
+  const centerLatitude = (minLatitude + maxLatitude) / 2;
+  const latitudeScale = Math.max(
+    Math.cos(degreesToRadians(centerLatitude)),
+    0.25,
+  );
+  const latitudeRadius = Math.max((maxLatitude - minLatitude) / 2, 0.0011);
+  const longitudeRadius = Math.max(
+    (maxLongitude - minLongitude) / 2,
+    0.0011 / latitudeScale,
+  );
+  const paddedLatitudeRadius =
+    latitudeRadius + Math.max(latitudeRadius * 0.45, 0.0006);
+  const paddedLongitudeRadius =
+    longitudeRadius + Math.max(longitudeRadius * 0.45, 0.0006 / latitudeScale);
+  const ring = Array.from({ length: 24 }, (_, index) => {
+    const angle = (index / 24) * Math.PI * 2;
+    return [
+      centerLongitude + Math.cos(angle) * paddedLongitudeRadius,
+      centerLatitude + Math.sin(angle) * paddedLatitudeRadius,
+    ];
+  });
+  return [...ring, ring[0]];
 }
 
 function centerOfCoordinates(
