@@ -130,6 +130,7 @@ class ReviewItemType(StrEnum):
     POSSIBLE_WRONG_DAY = "possible_wrong_day"
     POSSIBLE_STOP_MERGE = "possible_stop_merge"
     POSSIBLE_STOP_SPLIT = "possible_stop_split"
+    POSSIBLE_AREA_VISIT = "possible_area_visit"
     POSSIBLE_CLOCK_OFFSET = "possible_clock_offset"
     UNASSIGNED_MEDIA = "unassigned_media"
     FAILED_MEDIA_PROCESSING = "failed_media_processing"

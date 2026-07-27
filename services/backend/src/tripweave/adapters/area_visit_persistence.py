@@ -15,7 +15,14 @@ from tripweave.application.area_visits import (
     StopInput,
     group_area_visits,
 )
-from tripweave.domain.enums import ReconstructionSource
+from tripweave.domain.enums import (
+    ReconstructionSource,
+    ReviewItemStatus,
+    ReviewItemType,
+    ReviewSeverity,
+)
+
+LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.70
 
 
 def persist_area_visits_for_trip(
@@ -84,6 +91,7 @@ def persist_grouping_result(
 
     delete_existing_generated_area_visits(db, trip_id, day_id, run.id, stop_ids)
     persisted_area_ids: list[str] = []
+    review_count = 0
     for sort_order, area in enumerate(result.areas, start=1):
         persisted_area = orm.AreaVisit(
             trip_id=trip_id,
@@ -119,11 +127,21 @@ def persist_grouping_result(
                     user_locked=False,
                 )
             )
+        if add_low_confidence_area_review(
+            db=db,
+            trip_id=trip_id,
+            day_id=day_id,
+            run=run,
+            area=area,
+            persisted_area=persisted_area,
+        ):
+            review_count += 1
     return {
         "trip_id": str(trip_id),
         "day_id": str(day_id),
         "reconstruction_run_id": str(run.id),
         "persisted_area_visit_ids": persisted_area_ids,
+        "area_review_count": review_count,
         **result_summary,
     }
 
@@ -159,6 +177,66 @@ def locked_area_visit_data_exists(
         .limit(1)
     )
     return locked_membership_id is not None
+
+
+def add_low_confidence_area_review(
+    *,
+    db: Session,
+    trip_id: UUID,
+    day_id: UUID,
+    run: orm.ReconstructionRun,
+    area: AreaVisitResult,
+    persisted_area: orm.AreaVisit,
+) -> bool:
+    if area.confidence >= LOW_CONFIDENCE_REVIEW_THRESHOLD:
+        return False
+    existing = db.scalar(
+        select(orm.ReviewItem.id)
+        .where(
+            orm.ReviewItem.trip_id == trip_id,
+            orm.ReviewItem.target_type == "area_visit",
+            orm.ReviewItem.target_id == persisted_area.id,
+        )
+        .limit(1)
+    )
+    if existing is not None:
+        return False
+    db.add(
+        orm.ReviewItem(
+            trip_id=trip_id,
+            media_item_id=None,
+            item_type=ReviewItemType.POSSIBLE_AREA_VISIT.value,
+            severity=ReviewSeverity.LOW.value,
+            target_type="area_visit",
+            target_id=persisted_area.id,
+            target_refs={
+                "areaVisitId": str(persisted_area.id),
+                "dayId": str(day_id),
+                "stopIds": area.stop_ids,
+            },
+            status=ReviewItemStatus.OPEN.value,
+            message=(
+                "AreaVisit grouping has low confidence. Review the included stops "
+                "before publishing."
+            ),
+            payload={
+                "areaVisitId": str(persisted_area.id),
+                "dayId": str(day_id),
+                "stopIds": area.stop_ids,
+                "stopCount": len(area.stop_ids),
+                "confidence": area.confidence,
+                "threshold": LOW_CONFIDENCE_REVIEW_THRESHOLD,
+                "diameterMeters": area.diameter_m,
+                "algorithmVersion": area.algorithm_version,
+            },
+            source=ReconstructionSource.AUTOMATION.value,
+            confidence=area.confidence,
+            algorithm_version=area.algorithm_version,
+            reconstruction_run_id=run.id,
+            user_locked=False,
+        )
+    )
+    return True
 
 
 def delete_existing_generated_area_visits(

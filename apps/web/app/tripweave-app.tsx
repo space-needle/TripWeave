@@ -6250,6 +6250,27 @@ function ReconstructionOutline({
                 </div>
               </dl>
             ) : null}
+            {currentReview.itemType === "possible_area_visit" ? (
+              <dl className="compact-facts">
+                <div>
+                  <dt>Stops</dt>
+                  <dd>{String(currentReview.payload.stopCount ?? "?")}</dd>
+                </div>
+                <div>
+                  <dt>Threshold</dt>
+                  <dd>{String(currentReview.payload.threshold ?? "?")}</dd>
+                </div>
+                <div>
+                  <dt>Diameter</dt>
+                  <dd>
+                    {Math.round(
+                      Number(currentReview.payload.diameterMeters ?? 0),
+                    )}
+                    m
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
             <div className="button-row">
               {currentReview.itemType === "possible_clock_offset" ? (
                 <button

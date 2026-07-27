@@ -1185,6 +1185,84 @@ def test_organizer_can_rename_area_visit_and_adjust_membership(
     assert outsider_denied.status_code == 404
 
 
+def test_low_confidence_area_visit_enters_review_inbox(
+    client: TestClient,
+    engine: Engine,
+) -> None:
+    csrf_token = register(client, "area-review-owner@example.com")
+    trip = create_trip(client, csrf_token, "Area Review Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text("SELECT id FROM trip_members WHERE trip_id = CAST(:trip_id AS uuid)"),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    base_time = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    for index, (minute, latitude) in enumerate(
+        [(0, 35.0000), (43, 35.0031), (86, 35.0062)],
+        start=1,
+    ):
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"area-review-{index}.jpg",
+            captured_at=base_time + timedelta(minutes=minute),
+            latitude=latitude,
+            longitude=127.0,
+            sha256=f"{index + 20:064d}",
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    body = reconstructed.json()
+    assert body["latestRun"]["summary"]["areaVisits"] == 1
+    assert body["latestRun"]["summary"]["reviewItems"] == 1
+    area_review = body["reviewItems"][0]
+    assert area_review["itemType"] == "possible_area_visit"
+    assert area_review["targetType"] == "area_visit"
+    assert area_review["mediaItemId"] is None
+    assert area_review["payload"]["stopCount"] == 3
+    assert area_review["payload"]["confidence"] < 0.70
+
+    resolved = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "resolve_review_item",
+            "reviewItemId": area_review["id"],
+            "payload": {
+                "reviewItemId": area_review["id"],
+                "resolution": "Area reviewed",
+            },
+        },
+    )
+    assert resolved.status_code == 200, resolved.text
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction")
+    assert refreshed.status_code == 200
+    refreshed_review = refreshed.json()["reviewItems"][0]
+    assert refreshed_review["status"] == "resolved"
+    area_id = area_review["payload"]["areaVisitId"]
+    with engine.connect() as connection:
+        area_locked = connection.execute(
+            text(
+                """
+                SELECT user_locked
+                FROM area_visits
+                WHERE id = CAST(:area_id AS uuid)
+                """
+            ),
+            {"area_id": area_id},
+        ).scalar_one()
+    assert area_locked is True
+
+
 def test_invitation_rejects_expired_revoked_and_malformed(
     client: TestClient, engine: Engine
 ) -> None:

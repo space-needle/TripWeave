@@ -300,3 +300,50 @@ def test_persist_grouping_result_creates_area_and_membership_records() -> None:
     assert [membership.sort_order for membership in memberships] == [1, 2, 3]
     assert {membership.reconstruction_run_id for membership in memberships} == {run.id}
     assert summary["persisted_area_visit_ids"] == [str(area_visits[0].id)]
+
+
+def test_persist_grouping_result_flags_low_confidence_area_for_review() -> None:
+    trip_id = uuid4()
+    day_id = uuid4()
+    run = orm.ReconstructionRun(
+        id=uuid4(), trip_id=trip_id, algorithm_version="test", state="succeeded"
+    )
+    stop_inputs = [
+        area_stop(1, minutes=0, latitude=35.0000, longitude=127.0),
+        area_stop(2, minutes=43, latitude=35.0031, longitude=127.0),
+        area_stop(3, minutes=86, latitude=35.0062, longitude=127.0),
+    ]
+    stops = [persisted_stop(stop_input, trip_id, day_id) for stop_input in stop_inputs]
+    db_stop_inputs = [
+        StopInput(
+            id=str(stop.id),
+            day_id=str(day_id),
+            sort_order=stop_input.sort_order,
+            start_time=stop_input.start_time,
+            end_time=stop_input.end_time,
+            latitude=stop_input.latitude,
+            longitude=stop_input.longitude,
+            location_confidence=stop_input.location_confidence,
+        )
+        for stop_input, stop in zip(stop_inputs, stops, strict=True)
+    ]
+    result = group_area_visits(db_stop_inputs)
+    assert result.areas[0].confidence < 0.70
+    session = FakeSession()
+
+    summary = persist_grouping_result(
+        db=session,  # type: ignore[arg-type]
+        trip_id=trip_id,
+        day_id=day_id,
+        run=run,
+        result=result,
+        stop_rows=[(stop, None, None) for stop in stops],
+    )
+
+    review_items = [record for record in session.added if isinstance(record, orm.ReviewItem)]
+    assert summary["area_review_count"] == 1
+    assert len(review_items) == 1
+    assert review_items[0].item_type == "possible_area_visit"
+    assert review_items[0].target_type == "area_visit"
+    assert review_items[0].media_item_id is None
+    assert review_items[0].payload["stopCount"] == 3

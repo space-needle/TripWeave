@@ -156,6 +156,7 @@ def reconstruct_trip(
     review_count += intelligence.review_items
     area_visit_summaries = persist_area_visits_for_trip(db=db, trip_id=trip.id, run=run)
     area_visit_count = area_visit_count_from_summaries(area_visit_summaries)
+    review_count += area_visit_review_count_from_summaries(area_visit_summaries)
 
     run.state = ReconstructionRunState.SUCCEEDED.value
     run.finished_at = datetime.now(UTC)
@@ -296,6 +297,7 @@ def increment_story(
     review_count += intelligence.review_items
     area_visit_summaries = persist_area_visits_for_trip(db=db, trip_id=trip.id, run=run)
     area_visit_count = area_visit_count_from_summaries(area_visit_summaries)
+    review_count += area_visit_review_count_from_summaries(area_visit_summaries)
     days = count_visible(db, orm.TripDay, trip.id, run.id)
     stops = count_visible(db, orm.Stop, trip.id, run.id)
     moments = count_visible(db, orm.Moment, trip.id, run.id)
@@ -346,6 +348,15 @@ def area_visit_count_from_summaries(summaries: list[dict[str, object]]) -> int:
         proposed_count = summary.get("proposed_area_count")
         if isinstance(proposed_count, int):
             count += proposed_count
+    return count
+
+
+def area_visit_review_count_from_summaries(summaries: list[dict[str, object]]) -> int:
+    count = 0
+    for summary in summaries:
+        review_count = summary.get("area_review_count")
+        if isinstance(review_count, int):
+            count += review_count
     return count
 
 

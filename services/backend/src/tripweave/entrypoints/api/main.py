@@ -56,6 +56,7 @@ from tripweave.domain.enums import (
     ProcessingTargetType,
     ReconstructionSource,
     ReviewItemStatus,
+    ReviewItemType,
     RouteSource,
     ShareLinkStatus,
     StoryVersionState,
@@ -2867,6 +2868,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             item.resolved_at = datetime.now(UTC)
             item.user_locked = True
             item.updated_at = datetime.now(UTC)
+            if (
+                operation_type == EditOperationType.RESOLVE_REVIEW_ITEM.value
+                and item.item_type == ReviewItemType.POSSIBLE_AREA_VISIT.value
+                and item.target_type == "area_visit"
+                and item.target_id is not None
+            ):
+                area = db.get(orm.AreaVisit, item.target_id)
+                if area is not None and area.trip_id == trip_id:
+                    lock_record(area)
             after = record_values(item, ["status", "resolution", "resolved_by", "resolved_at"])
             target_type, target_id = "review_item", item.id
             review_item = item
