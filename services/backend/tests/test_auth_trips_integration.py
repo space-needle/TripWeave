@@ -778,6 +778,197 @@ def test_account_contributor_can_view_shared_story_without_editing(
     assert cannot_edit.status_code == 404
 
 
+def test_area_visits_endpoint_returns_grouped_and_standalone_stops(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    csrf_owner = register(client, "area-api-owner@example.com")
+    trip = create_trip(client, csrf_owner, "Area API Trip")
+    trip_id = str(trip["id"])
+
+    with engine.begin() as connection:
+        run_id = str(
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO reconstruction_runs (
+                        trip_id, state, source, confidence, algorithm_version,
+                        algorithm_config, summary, finished_at
+                    )
+                    VALUES (
+                        CAST(:trip_id AS uuid), 'succeeded', 'automation', 1.0,
+                        'reconstruction_v1', '{}'::jsonb, '{}'::jsonb, now()
+                    )
+                    RETURNING id
+                    """
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+        day_id = str(
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO trip_days (
+                        trip_id, day_date, position, starts_at_utc, ends_at_utc,
+                        source, confidence, algorithm_version, reconstruction_run_id
+                    )
+                    VALUES (
+                        CAST(:trip_id AS uuid), DATE '2026-06-08', 1,
+                        TIMESTAMPTZ '2026-06-08 00:00:00+00',
+                        TIMESTAMPTZ '2026-06-08 23:59:00+00',
+                        'automation', 1.0, 'reconstruction_v1',
+                        CAST(:run_id AS uuid)
+                    )
+                    RETURNING id
+                    """
+                ),
+                {"trip_id": trip_id, "run_id": run_id},
+            ).scalar_one()
+        )
+        place_id = str(
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO places (
+                        trip_id, name, centroid, source, confidence,
+                        algorithm_version, reconstruction_run_id
+                    )
+                    VALUES (
+                        CAST(:trip_id AS uuid), 'Hanok Village',
+                        ST_SetSRID(ST_MakePoint(127.153, 35.815), 4326)::geography,
+                        'automation', 1.0, 'reconstruction_v1',
+                        CAST(:run_id AS uuid)
+                    )
+                    RETURNING id
+                    """
+                ),
+                {"trip_id": trip_id, "run_id": run_id},
+            ).scalar_one()
+        )
+        stop_ids: list[str] = []
+        for position, latitude in enumerate([35.8150, 35.8154, 35.8158, 35.83], start=1):
+            stop_ids.append(
+                str(
+                    connection.execute(
+                        text(
+                            """
+                            INSERT INTO stops (
+                                trip_id, trip_day_id, place_id, title, position,
+                                starts_at_utc, ends_at_utc, centroid, source, confidence,
+                                algorithm_version, reconstruction_run_id
+                            )
+                            VALUES (
+                                CAST(:trip_id AS uuid), CAST(:day_id AS uuid),
+                                CAST(:place_id AS uuid), :title, :position,
+                                TIMESTAMPTZ '2026-06-08 09:00:00+00'
+                                    + (:position * INTERVAL '10 minutes'),
+                                TIMESTAMPTZ '2026-06-08 09:05:00+00'
+                                    + (:position * INTERVAL '10 minutes'),
+                                ST_SetSRID(
+                                    ST_MakePoint(127.153, CAST(:latitude AS double precision)),
+                                    4326
+                                )::geography,
+                                'automation', 1.0, 'reconstruction_v1',
+                                CAST(:run_id AS uuid)
+                            )
+                            RETURNING id
+                            """
+                        ),
+                        {
+                            "trip_id": trip_id,
+                            "day_id": day_id,
+                            "place_id": place_id,
+                            "title": f"Stop {position}",
+                            "position": position,
+                            "latitude": latitude,
+                            "run_id": run_id,
+                        },
+                    ).scalar_one()
+                )
+            )
+        area_id = str(
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO area_visits (
+                        trip_id, trip_day_id, title, sort_order, starts_at_utc, ends_at_utc,
+                        center, bounds, diagnostics, source, confidence,
+                        algorithm_version, reconstruction_run_id
+                    )
+                    VALUES (
+                        CAST(:trip_id AS uuid), CAST(:day_id AS uuid), 'Hanok Cluster', 1,
+                        TIMESTAMPTZ '2026-06-08 09:10:00+00',
+                        TIMESTAMPTZ '2026-06-08 09:35:00+00',
+                        ST_SetSRID(ST_MakePoint(127.153, 35.8154), 4326)::geography,
+                        CAST(:bounds AS jsonb), CAST(:diagnostics AS jsonb),
+                        'automation', 0.92, 'area_visit_v1', CAST(:run_id AS uuid)
+                    )
+                    RETURNING id
+                    """
+                ),
+                {
+                    "trip_id": trip_id,
+                    "day_id": day_id,
+                    "run_id": run_id,
+                    "bounds": json.dumps({"north": 35.8158, "south": 35.8150}),
+                    "diagnostics": json.dumps({"stopCount": 3}),
+                },
+            ).scalar_one()
+        )
+        for sort_order, stop_id in enumerate(stop_ids[:3], start=1):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO area_visit_stops (
+                        trip_id, area_visit_id, stop_id, reconstruction_run_id, sort_order,
+                        membership_source, confidence, algorithm_version
+                    )
+                    VALUES (
+                        CAST(:trip_id AS uuid), CAST(:area_id AS uuid),
+                        CAST(:stop_id AS uuid), CAST(:run_id AS uuid), :sort_order,
+                        'automation', 0.92, 'area_visit_v1'
+                    )
+                    """
+                ),
+                {
+                    "trip_id": trip_id,
+                    "area_id": area_id,
+                    "stop_id": stop_id,
+                    "run_id": run_id,
+                    "sort_order": sort_order,
+                },
+            )
+
+    response = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tripId"] == trip_id
+    assert payload["dayId"] == day_id
+    assert payload["sourceReconstructionRunId"] == run_id
+    assert len(payload["areas"]) == 1
+    area = payload["areas"][0]
+    assert area["id"] == area_id
+    assert area["title"] == "Hanok Cluster"
+    assert area["algorithmVersion"] == "area_visit_v1"
+    assert area["bounds"] == {"north": 35.8158, "south": 35.8150}
+    assert [stop["position"] for stop in area["stops"]] == [1, 2, 3]
+    assert [stop["membershipSortOrder"] for stop in area["stops"]] == [1, 2, 3]
+    assert [stop["position"] for stop in payload["standaloneStops"]] == [4]
+
+    other_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    register(other_client, "area-api-outsider@example.com", "Outsider")
+    denied = other_client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert denied.status_code == 404
+
+
 def test_invitation_rejects_expired_revoked_and_malformed(
     client: TestClient, engine: Engine
 ) -> None:

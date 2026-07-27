@@ -72,6 +72,9 @@ from tripweave.domain.storage import (
     UploadTransport,
 )
 from tripweave.entrypoints.api.schemas import (
+    AreaVisitResponse,
+    AreaVisitsResponse,
+    AreaVisitStopResponse,
     AuthResponse,
     BlobRefResponse,
     CompleteUploadFileResponse,
@@ -3911,6 +3914,138 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             storyUpdate=story_update,
         )
 
+    def area_visit_stop_response(
+        stop: orm.Stop,
+        place: orm.Place,
+        latitude: Any,
+        longitude: Any,
+        membership: orm.AreaVisitStop | None = None,
+    ) -> AreaVisitStopResponse:
+        return AreaVisitStopResponse(
+            id=stop.id,
+            position=stop.position,
+            title=stop.title,
+            startsAt=stop.starts_at_utc,
+            endsAt=stop.ends_at_utc,
+            placeName=place.name,
+            latitude=float(latitude) if latitude is not None else None,
+            longitude=float(longitude) if longitude is not None else None,
+            membershipSource=membership.membership_source if membership is not None else None,
+            membershipConfidence=membership.confidence if membership is not None else None,
+            membershipSortOrder=membership.sort_order if membership is not None else None,
+            membershipUserLocked=membership.user_locked if membership is not None else None,
+        )
+
+    def area_visits_response(db: DbSession, trip_id: UUID, day_id: UUID) -> AreaVisitsResponse:
+        day = db.execute(
+            select(orm.TripDay).where(
+                orm.TripDay.id == day_id,
+                orm.TripDay.trip_id == trip_id,
+            )
+        ).scalar_one_or_none()
+        if day is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip day not found")
+
+        latest_run = latest_run_for_trip_or_none(db, trip_id)
+        source_reconstruction_run_id = (
+            latest_run.id if latest_run is not None else day.reconstruction_run_id
+        )
+        active_generated = orm.AreaVisit.reconstruction_run_id == source_reconstruction_run_id
+        active_stop = orm.Stop.reconstruction_run_id == source_reconstruction_run_id
+
+        area_lat: Any = literal_column("ST_Y(area_visits.center::geometry)").label("latitude")
+        area_lon: Any = literal_column("ST_X(area_visits.center::geometry)").label("longitude")
+        area_rows = list(
+            db.execute(
+                select(orm.AreaVisit, area_lat, area_lon)
+                .where(
+                    orm.AreaVisit.trip_id == trip_id,
+                    orm.AreaVisit.trip_day_id == day_id,
+                    or_(active_generated, orm.AreaVisit.user_locked.is_(True)),
+                )
+                .order_by(
+                    orm.AreaVisit.sort_order,
+                    orm.AreaVisit.starts_at_utc,
+                    orm.AreaVisit.id,
+                )
+            ).all()
+        )
+        area_ids = [area.id for area, _, _ in area_rows]
+
+        stop_lat: Any = literal_column("ST_Y(stops.centroid::geometry)").label("latitude")
+        stop_lon: Any = literal_column("ST_X(stops.centroid::geometry)").label("longitude")
+        membership_rows = []
+        if area_ids:
+            membership_rows = list(
+                db.execute(
+                    select(orm.AreaVisitStop, orm.Stop, orm.Place, stop_lat, stop_lon)
+                    .join(orm.Stop, orm.Stop.id == orm.AreaVisitStop.stop_id)
+                    .join(orm.Place, orm.Place.id == orm.Stop.place_id)
+                    .where(orm.AreaVisitStop.area_visit_id.in_(area_ids))
+                    .order_by(
+                        orm.AreaVisitStop.area_visit_id,
+                        orm.AreaVisitStop.sort_order,
+                        orm.Stop.position,
+                        orm.Stop.id,
+                    )
+                ).all()
+            )
+
+        stop_ids_in_areas: set[UUID] = set()
+        stops_by_area: dict[UUID, list[AreaVisitStopResponse]] = {}
+        for membership, stop, place, latitude, longitude in membership_rows:
+            stop_ids_in_areas.add(stop.id)
+            stops_by_area.setdefault(membership.area_visit_id, []).append(
+                area_visit_stop_response(stop, place, latitude, longitude, membership)
+            )
+
+        stop_rows = list(
+            db.execute(
+                select(orm.Stop, orm.Place, stop_lat, stop_lon)
+                .join(orm.Place, orm.Place.id == orm.Stop.place_id)
+                .where(
+                    orm.Stop.trip_id == trip_id,
+                    orm.Stop.trip_day_id == day_id,
+                    or_(active_stop, orm.Stop.user_locked.is_(True)),
+                )
+                .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+            ).all()
+        )
+        standalone_stops = [
+            area_visit_stop_response(stop, place, latitude, longitude)
+            for stop, place, latitude, longitude in stop_rows
+            if stop.id not in stop_ids_in_areas
+        ]
+
+        return AreaVisitsResponse(
+            tripId=trip_id,
+            dayId=day_id,
+            sourceReconstructionRunId=source_reconstruction_run_id,
+            areas=[
+                AreaVisitResponse(
+                    id=area.id,
+                    tripId=area.trip_id,
+                    dayId=area.trip_day_id,
+                    reconstructionRunId=area.reconstruction_run_id,
+                    sortOrder=area.sort_order,
+                    title=area.title,
+                    startsAt=area.starts_at_utc,
+                    endsAt=area.ends_at_utc,
+                    latitude=float(latitude) if latitude is not None else None,
+                    longitude=float(longitude) if longitude is not None else None,
+                    confidence=area.confidence,
+                    source=area.source,
+                    algorithmVersion=area.algorithm_version,
+                    userLocked=area.user_locked,
+                    bounds=area.bounds,
+                    diagnostics=area.diagnostics,
+                    stops=stops_by_area.get(area.id, []),
+                )
+                for area, latitude, longitude in area_rows
+            ],
+            standaloneStops=standalone_stops,
+        )
+
     STORY_PHOTO_PROJECTION_SCHEMA_VERSION = 1
     DOWNLOAD_GRANT_REFRESH_WINDOW = timedelta(seconds=60)
 
@@ -4342,6 +4477,16 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     ) -> ReconstructionResponse:
         require_member_for_actor(db, trip_id, actor)
         return reconstruction_response(db, trip_id)
+
+    @app.get("/trips/{trip_id}/days/{day_id}/area-visits", response_model=AreaVisitsResponse)
+    def get_area_visits(
+        trip_id: UUID,
+        day_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> AreaVisitsResponse:
+        require_member_for_actor(db, trip_id, actor)
+        return area_visits_response(db, trip_id, day_id)
 
     @app.get("/trips/{trip_id}/story-draft-projection", response_model=ReconstructionResponse)
     def get_story_draft_projection(

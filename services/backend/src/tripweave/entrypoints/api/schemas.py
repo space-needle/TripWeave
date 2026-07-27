@@ -442,6 +442,51 @@ class ReconstructionResponse(BaseModel):
     story_update: StoryUpdateStatusResponse = Field(alias="storyUpdate")
 
 
+class AreaVisitStopResponse(BaseModel):
+    id: UUID
+    position: int
+    title: str | None = None
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime = Field(alias="endsAt")
+    place_name: str | None = Field(default=None, alias="placeName")
+    latitude: float | None = None
+    longitude: float | None = None
+    membership_source: str | None = Field(default=None, alias="membershipSource")
+    membership_confidence: float | None = Field(default=None, alias="membershipConfidence")
+    membership_sort_order: int | None = Field(default=None, alias="membershipSortOrder")
+    membership_user_locked: bool | None = Field(default=None, alias="membershipUserLocked")
+
+
+class AreaVisitResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    day_id: UUID = Field(alias="dayId")
+    reconstruction_run_id: UUID = Field(alias="reconstructionRunId")
+    sort_order: int = Field(alias="sortOrder")
+    title: str | None = None
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    latitude: float | None = None
+    longitude: float | None = None
+    confidence: float | None = None
+    source: str
+    algorithm_version: str = Field(alias="algorithmVersion")
+    user_locked: bool = Field(alias="userLocked")
+    bounds: dict[str, object]
+    diagnostics: dict[str, object]
+    stops: list[AreaVisitStopResponse]
+
+
+class AreaVisitsResponse(BaseModel):
+    trip_id: UUID = Field(alias="tripId")
+    day_id: UUID = Field(alias="dayId")
+    source_reconstruction_run_id: UUID | None = Field(
+        default=None, alias="sourceReconstructionRunId"
+    )
+    areas: list[AreaVisitResponse]
+    standalone_stops: list[AreaVisitStopResponse] = Field(alias="standaloneStops")
+
+
 class StoryPhotoProjectionPhotoResponse(BaseModel):
     id: UUID
     filename: str | None = None
