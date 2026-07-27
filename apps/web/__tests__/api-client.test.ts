@@ -86,4 +86,27 @@ describe("api client", () => {
     expect(options.credentials).toBe("include");
     expect((options.headers as Headers).get("x-tripweave-actor")).toBe("guest");
   });
+
+  it("reads day area visits", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          tripId: "trip-id",
+          dayId: "day-id",
+          sourceReconstructionRunId: "run-id",
+          areas: [],
+          standaloneStops: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.areaVisits("trip-id", "day-id");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain("/trips/trip-id/days/day-id/area-visits");
+    expect(options.method).toBe("GET");
+    expect(options.credentials).toBe("include");
+  });
 });

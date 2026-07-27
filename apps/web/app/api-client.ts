@@ -1,5 +1,9 @@
 import type {
+  AreaVisitsResponse,
   AuthResponse,
+  CompleteUploadFileResponse,
+  EditOperationRequest,
+  EditOperationResponse,
   GuestMemberResponse,
   InvitationAcceptRequest,
   InvitationCreateRequest,
@@ -23,9 +27,6 @@ import type {
   TripResponse,
   TripsListResponse,
   TripUpdateRequest,
-  CompleteUploadFileResponse,
-  EditOperationRequest,
-  EditOperationResponse,
   UploadSessionCreateRequest,
   UploadSessionResponse,
   UploadSessionsListResponse,
@@ -237,6 +238,11 @@ export const api = {
   ): Promise<StoryPhotoProjectionResponse> {
     return apiRequest<StoryPhotoProjectionResponse>(
       `/trips/${tripId}/story-stop-photos/${stopId}`,
+    );
+  },
+  areaVisits(tripId: string, dayId: string): Promise<AreaVisitsResponse> {
+    return apiRequest<AreaVisitsResponse>(
+      `/trips/${tripId}/days/${dayId}/area-visits`,
     );
   },
   startReconstruction(tripId: string): Promise<ReconstructionResponse> {
