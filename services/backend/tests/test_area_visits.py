@@ -162,7 +162,33 @@ def test_low_confidence_locations_do_not_create_area_boundary_by_themselves() ->
     result = group_area_visits(stops)
 
     assert [area.stop_ids for area in result.areas] == [["stop-1", "stop-2", "stop-3", "stop-4"]]
-    assert result.areas[0].confidence < 1.0
+    assert result.areas[0].confidence == 0.8
+
+
+def test_valid_broad_area_keeps_review_friendly_confidence() -> None:
+    stops = [
+        area_stop(1, latitude=BASE_LATITUDE),
+        area_stop(2, latitude=BASE_LATITUDE + 0.002),
+        area_stop(3, latitude=BASE_LATITUDE + 0.004),
+        area_stop(4, latitude=BASE_LATITUDE + 0.006),
+        area_stop(5, latitude=BASE_LATITUDE + 0.008),
+        area_stop(6, latitude=BASE_LATITUDE + 0.010),
+    ]
+
+    result = group_area_visits(stops)
+
+    assert [area.stop_ids for area in result.areas] == [
+        ["stop-1", "stop-2", "stop-3", "stop-4", "stop-5", "stop-6"]
+    ]
+    assert result.areas[0].diameter_m > 1000
+    assert result.areas[0].confidence >= 0.75
+
+
+def test_minimum_size_area_gets_small_confidence_penalty() -> None:
+    result = group_area_visits([area_stop(1), area_stop(2), area_stop(3)])
+
+    assert [area.stop_ids for area in result.areas] == [["stop-1", "stop-2", "stop-3"]]
+    assert result.areas[0].confidence == 0.9
 
 
 def test_non_contiguous_stop_order_is_rejected() -> None:

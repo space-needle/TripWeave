@@ -370,21 +370,57 @@ def confidence_for_area(stops: list[StopInput], config: AreaVisitConfig) -> floa
         for candidate in stops[config.min_area_stops :]:
             diagnostics.append(candidate_decision(area_stops, candidate, config))
             area_stops.append(candidate)
-    ratios: list[float] = []
+
+    confidence = 0.95
+    if len(stops) == config.min_area_stops:
+        confidence -= 0.05
+
+    ratios: dict[str, float] = {}
     for diagnostic in diagnostics:
         if diagnostic.previous_distance_m is not None:
-            ratios.append(diagnostic.previous_distance_m / config.max_previous_distance_meters)
+            ratios["previous_distance"] = max(
+                ratios.get("previous_distance", 0),
+                diagnostic.previous_distance_m / config.max_previous_distance_meters,
+            )
         if diagnostic.center_distance_m is not None:
-            ratios.append(diagnostic.center_distance_m / config.max_center_distance_meters)
+            ratios["center_distance"] = max(
+                ratios.get("center_distance", 0),
+                diagnostic.center_distance_m / config.max_center_distance_meters,
+            )
         if diagnostic.new_area_diameter_m is not None:
-            ratios.append(diagnostic.new_area_diameter_m / config.max_area_diameter_meters)
+            ratios["area_diameter"] = max(
+                ratios.get("area_diameter", 0),
+                diagnostic.new_area_diameter_m / config.max_area_diameter_meters,
+            )
         if diagnostic.time_gap_seconds is not None:
-            ratios.append(diagnostic.time_gap_seconds / (config.max_time_gap_minutes * 60))
-        if diagnostic.location_confidence is not None:
-            ratios.append(1 - diagnostic.location_confidence)
-    if not ratios:
-        return 1.0
-    return round(max(0.0, min(1.0, 1 - max(ratios))), 3)
+            ratios["time_gap"] = max(
+                ratios.get("time_gap", 0),
+                diagnostic.time_gap_seconds / (config.max_time_gap_minutes * 60),
+            )
+    for ratio in ratios.values():
+        confidence -= confidence_penalty_for_ratio(ratio)
+
+    location_confidences = [
+        stop.location_confidence for stop in stops if stop.location_confidence is not None
+    ]
+    if location_confidences:
+        min_location_confidence = min(location_confidences)
+        if min_location_confidence < 0.7:
+            confidence -= 0.15
+        elif min_location_confidence < 0.85:
+            confidence -= 0.05
+
+    return round(max(0.0, min(1.0, confidence)), 3)
+
+
+def confidence_penalty_for_ratio(ratio: float) -> float:
+    if ratio >= 0.95:
+        return 0.12
+    if ratio >= 0.85:
+        return 0.08
+    if ratio >= 0.75:
+        return 0.04
+    return 0.0
 
 
 def has_location(stop: StopInput) -> bool:
