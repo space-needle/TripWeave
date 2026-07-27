@@ -1747,13 +1747,21 @@ button.needs-update {
 
 .timeline-area-heading {
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
   margin-left: 98px;
   border: 1px solid #c8ddd6;
   border-radius: 12px;
   background: #f5fbf8;
   color: var(--text);
   padding: 10px 12px;
+}
+
+.timeline-area-heading-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .timeline-area-heading strong,
@@ -1773,6 +1781,27 @@ button.needs-update {
   color: var(--muted);
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.timeline-area-edit-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #d8e7e1;
+  padding-top: 8px;
+}
+
+.timeline-area-edge-tools,
+.timeline-area-member-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-area-member-tools .timeline-tool-button {
+  border-color: #d8e7e1;
+  background: #fff;
+  color: var(--accent-strong);
 }
 
 .timeline-stop::before {

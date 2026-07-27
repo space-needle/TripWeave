@@ -1047,6 +1047,144 @@ def test_reconstruction_automatically_persists_area_visits(
     assert membership_count == 4
 
 
+def test_organizer_can_rename_area_visit_and_adjust_membership(
+    client: TestClient,
+    engine: Engine,
+    tmp_path: Path,
+) -> None:
+    csrf_token = register(client, "area-edit-owner@example.com")
+    trip = create_trip(client, csrf_token, "Area Edit Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text("SELECT id FROM trip_members WHERE trip_id = CAST(:trip_id AS uuid)"),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    for index, (minute, latitude) in enumerate(
+        [(10, 35.0000), (20, 35.0018), (30, 35.0036), (120, 35.0054)],
+        start=1,
+    ):
+        captured_at = datetime(2026, 6, 8, 9, 0, tzinfo=UTC) + timedelta(minutes=minute)
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"area-edit-{index}.jpg",
+            captured_at=captured_at,
+            latitude=latitude,
+            longitude=127.0,
+            sha256=f"{index:064d}",
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    day_id = reconstructed.json()["days"][0]["id"]
+    areas = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert areas.status_code == 200
+    area = areas.json()["areas"][0]
+    area_id = area["id"]
+    standalone_stop_id = areas.json()["standaloneStops"][0]["id"]
+
+    renamed = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_area_visit",
+            "payload": {"areaVisitId": area_id, "title": "Asakusa afternoon"},
+        },
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["targetType"] == "area_visit"
+
+    added = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "add_area_visit_stop",
+            "payload": {"areaVisitId": area_id, "stopId": standalone_stop_id},
+        },
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["afterValues"]["stopIds"][-1] == standalone_stop_id
+
+    updated = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert updated.status_code == 200
+    updated_area = updated.json()["areas"][0]
+    assert updated_area["title"] == "Asakusa afternoon"
+    assert updated_area["userLocked"] is True
+    assert [stop["id"] for stop in updated_area["stops"]] == [
+        stop["id"] for stop in area["stops"]
+    ] + [standalone_stop_id]
+    assert updated.json()["standaloneStops"] == []
+
+    removed = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "remove_area_visit_stop",
+            "payload": {"areaVisitId": area_id, "stopId": standalone_stop_id},
+        },
+    )
+    assert removed.status_code == 200, removed.text
+    after_remove = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
+    assert [stop["id"] for stop in after_remove["areas"][0]["stops"]] == [
+        stop["id"] for stop in area["stops"]
+    ]
+    assert [stop["id"] for stop in after_remove["standaloneStops"]] == [standalone_stop_id]
+
+    url = get_test_database_url()
+    assert url is not None
+    invitation = create_invitation(client, csrf_token, trip_id)
+    contributor_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_contributor = register(
+        contributor_client,
+        "area-edit-contributor@example.com",
+        "Area Contributor",
+    )
+    accept_invitation(
+        contributor_client,
+        token_from_invite_url(str(invitation["inviteUrl"])),
+        csrf_contributor,
+    )
+    contributor_denied = contributor_client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_contributor},
+        json={
+            "operationType": "rename_area_visit",
+            "payload": {"areaVisitId": area_id, "title": "Contributor rename"},
+        },
+    )
+    assert contributor_denied.status_code == 404
+
+    outsider_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_outsider = register(outsider_client, "area-edit-outsider@example.com", "Outsider")
+    outsider_denied = outsider_client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_outsider},
+        json={
+            "operationType": "add_area_visit_stop",
+            "payload": {"areaVisitId": area_id, "stopId": standalone_stop_id},
+        },
+    )
+    assert outsider_denied.status_code == 404
+
+
 def test_invitation_rejects_expired_revoked_and_malformed(
     client: TestClient, engine: Engine
 ) -> None:

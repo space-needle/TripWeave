@@ -1214,6 +1214,57 @@ function OwnerWorkspace() {
     }
   }
 
+  async function renameAreaVisit(areaVisitId: string, title: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "rename_area_visit",
+        payload: { areaVisitId, title },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
+  async function addAreaVisitStop(areaVisitId: string, stopId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "add_area_visit_stop",
+        payload: { areaVisitId, stopId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
+  async function removeAreaVisitStop(areaVisitId: string, stopId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "remove_area_visit_stop",
+        payload: { areaVisitId, stopId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function publishTrip() {
     if (!selectedTrip) {
       return;
@@ -1565,6 +1616,15 @@ function OwnerWorkspace() {
                   onStateChange={setStoryState}
                   onMergeStops={
                     canOrganizeSelectedTrip ? mergeStops : undefined
+                  }
+                  onAddAreaVisitStop={
+                    canOrganizeSelectedTrip ? addAreaVisitStop : undefined
+                  }
+                  onRemoveAreaVisitStop={
+                    canOrganizeSelectedTrip ? removeAreaVisitStop : undefined
+                  }
+                  onRenameAreaVisit={
+                    canOrganizeSelectedTrip ? renameAreaVisit : undefined
                   }
                   onRenameStop={
                     canOrganizeSelectedTrip ? renameStop : undefined
@@ -2410,7 +2470,10 @@ function TripStoryExplorer({
   tripId,
   state,
   onStateChange,
+  onAddAreaVisitStop,
   onMergeStops,
+  onRemoveAreaVisitStop,
+  onRenameAreaVisit,
   onRenameStop,
   onSetDayNote,
   onSetStopNote,
@@ -2423,7 +2486,13 @@ function TripStoryExplorer({
   tripId?: string;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
+  onAddAreaVisitStop?: (areaVisitId: string, stopId: string) => Promise<void>;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
+  onRemoveAreaVisitStop?: (
+    areaVisitId: string,
+    stopId: string,
+  ) => Promise<void>;
+  onRenameAreaVisit?: (areaVisitId: string, title: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
   onSetDayNote?: (dayId: string, note: string) => Promise<void>;
   onSetStopNote?: (stopId: string, note: string) => Promise<void>;
@@ -2486,6 +2555,12 @@ function TripStoryExplorer({
   const [areaVisitsByDay, setAreaVisitsByDay] = useState<
     Record<string, AreaVisitsResponse>
   >({});
+  const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [areaTitleDraft, setAreaTitleDraft] = useState("");
+  const [areaEditError, setAreaEditError] = useState("");
+  const [savingAreaActionKey, setSavingAreaActionKey] = useState<string | null>(
+    null,
+  );
   const displayMobilePane = mobilePane === "photos" ? "map" : mobilePane;
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
@@ -3015,6 +3090,90 @@ function TripStoryExplorer({
     return null;
   }
 
+  function areaEditableEdges(
+    day: ReconstructionDayResponse,
+    area: AreaVisitResponse,
+  ): {
+    previous: ReconstructionStopResponse | null;
+    next: ReconstructionStopResponse | null;
+  } {
+    const areaStopIds = new Set(area.stops.map((stop) => stop.id));
+    const standaloneStopIds = new Set(
+      areaVisitsByDay[day.id]?.standaloneStops.map((stop) => stop.id) ?? [],
+    );
+    const areaIndexes = day.stops
+      .map((stop, index) => (areaStopIds.has(stop.id) ? index : -1))
+      .filter((index) => index >= 0);
+    if (areaIndexes.length === 0) {
+      return { previous: null, next: null };
+    }
+    const firstIndex = Math.min(...areaIndexes);
+    const lastIndex = Math.max(...areaIndexes);
+    const previous = day.stops[firstIndex - 1] ?? null;
+    const next = day.stops[lastIndex + 1] ?? null;
+    return {
+      previous:
+        previous && standaloneStopIds.has(previous.id) ? previous : null,
+      next: next && standaloneStopIds.has(next.id) ? next : null,
+    };
+  }
+
+  function startEditingArea(area: AreaVisitResponse) {
+    setEditingAreaId(area.id);
+    setAreaTitleDraft(displayAreaTitle(area));
+    setAreaEditError("");
+  }
+
+  async function saveAreaTitle(area: AreaVisitResponse) {
+    const nextTitle = areaTitleDraft.trim();
+    if (!onRenameAreaVisit || !nextTitle) {
+      return;
+    }
+    setSavingAreaActionKey(`rename:${area.id}`);
+    setAreaEditError("");
+    try {
+      await onRenameAreaVisit(area.id, nextTitle);
+      setEditingAreaId(null);
+      setAreaTitleDraft("");
+    } catch (error) {
+      setAreaEditError(messageFrom(error));
+    } finally {
+      setSavingAreaActionKey(null);
+    }
+  }
+
+  async function addStopToArea(area: AreaVisitResponse, stopId: string) {
+    if (!onAddAreaVisitStop) {
+      return;
+    }
+    const key = `add:${area.id}:${stopId}`;
+    setSavingAreaActionKey(key);
+    setAreaEditError("");
+    try {
+      await onAddAreaVisitStop(area.id, stopId);
+    } catch (error) {
+      setAreaEditError(messageFrom(error));
+    } finally {
+      setSavingAreaActionKey(null);
+    }
+  }
+
+  async function removeStopFromArea(area: AreaVisitResponse, stopId: string) {
+    if (!onRemoveAreaVisitStop) {
+      return;
+    }
+    const key = `remove:${area.id}:${stopId}`;
+    setSavingAreaActionKey(key);
+    setAreaEditError("");
+    try {
+      await onRemoveAreaVisitStop(area.id, stopId);
+    } catch (error) {
+      setAreaEditError(messageFrom(error));
+    } finally {
+      setSavingAreaActionKey(null);
+    }
+  }
+
   function startRenamingStop(
     stop: ReconstructionResponse["days"][number]["stops"][number],
   ) {
@@ -3518,6 +3677,15 @@ function TripStoryExplorer({
                 const stopMedia = orderedStopMedia(stop);
                 const areaContext = areaForStop(day, stop.id);
                 const isFirstAreaStop = areaContext?.stops[0]?.id === stop.id;
+                const canEditArea =
+                  onRenameAreaVisit ||
+                  onAddAreaVisitStop ||
+                  onRemoveAreaVisitStop;
+                const areaEdges = areaContext
+                  ? areaEditableEdges(day, areaContext.area)
+                  : null;
+                const previousAreaStop = areaEdges?.previous ?? null;
+                const nextAreaStop = areaEdges?.next ?? null;
                 return (
                   <div
                     className={
@@ -3529,11 +3697,176 @@ function TripStoryExplorer({
                   >
                     {areaContext && isFirstAreaStop ? (
                       <div className="timeline-area-heading">
-                        <span className="timeline-area-kicker">
-                          Area {areaContext.area.sortOrder}
-                        </span>
-                        <strong>{displayAreaTitle(areaContext.area)}</strong>
-                        <small>{areaSummary(areaContext.stops)}</small>
+                        <div className="timeline-area-heading-main">
+                          <span className="timeline-area-kicker">
+                            Area {areaContext.area.sortOrder}
+                          </span>
+                          <strong>{displayAreaTitle(areaContext.area)}</strong>
+                          <small>{areaSummary(areaContext.stops)}</small>
+                        </div>
+                        {canEditArea ? (
+                          <button
+                            type="button"
+                            className="timeline-icon-button"
+                            aria-expanded={
+                              editingAreaId === areaContext.area.id
+                            }
+                            aria-label={
+                              editingAreaId === areaContext.area.id
+                                ? `Close editing tools for ${displayAreaTitle(areaContext.area)}`
+                                : `Edit ${displayAreaTitle(areaContext.area)}`
+                            }
+                            title={
+                              editingAreaId === areaContext.area.id
+                                ? "Done"
+                                : "Edit area"
+                            }
+                            onClick={() => {
+                              if (editingAreaId === areaContext.area.id) {
+                                setEditingAreaId(null);
+                                setAreaTitleDraft("");
+                                setAreaEditError("");
+                              } else {
+                                startEditingArea(areaContext.area);
+                              }
+                            }}
+                          >
+                            <TimelineActionIcon
+                              name={
+                                editingAreaId === areaContext.area.id
+                                  ? "check"
+                                  : "edit"
+                              }
+                            />
+                          </button>
+                        ) : null}
+                        {editingAreaId === areaContext.area.id ? (
+                          <div className="timeline-area-edit-panel">
+                            {onRenameAreaVisit ? (
+                              <form
+                                className="timeline-stop-rename"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  void saveAreaTitle(areaContext.area);
+                                }}
+                              >
+                                <label>
+                                  Area name
+                                  <input
+                                    autoFocus
+                                    value={areaTitleDraft}
+                                    onChange={(event) =>
+                                      setAreaTitleDraft(event.target.value)
+                                    }
+                                    onKeyDown={(event) =>
+                                      event.stopPropagation()
+                                    }
+                                    maxLength={255}
+                                    required
+                                  />
+                                </label>
+                                <div className="timeline-inline-actions">
+                                  <button
+                                    type="submit"
+                                    className="timeline-icon-button"
+                                    aria-label="Save area name"
+                                    title="Save"
+                                    disabled={
+                                      savingAreaActionKey ===
+                                        `rename:${areaContext.area.id}` ||
+                                      !areaTitleDraft.trim()
+                                    }
+                                  >
+                                    <TimelineActionIcon name="check" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="timeline-icon-button"
+                                    aria-label="Cancel area renaming"
+                                    title="Cancel"
+                                    onClick={() => {
+                                      setEditingAreaId(null);
+                                      setAreaTitleDraft("");
+                                      setAreaEditError("");
+                                    }}
+                                  >
+                                    <TimelineActionIcon name="x" />
+                                  </button>
+                                </div>
+                              </form>
+                            ) : null}
+                            {onAddAreaVisitStop &&
+                            (previousAreaStop || nextAreaStop) ? (
+                              <div className="timeline-area-edge-tools">
+                                {previousAreaStop ? (
+                                  <button
+                                    type="button"
+                                    className="timeline-tool-button"
+                                    disabled={
+                                      savingAreaActionKey ===
+                                      `add:${areaContext.area.id}:${previousAreaStop.id}`
+                                    }
+                                    onClick={() =>
+                                      void addStopToArea(
+                                        areaContext.area,
+                                        previousAreaStop.id,
+                                      )
+                                    }
+                                  >
+                                    Add before:{" "}
+                                    {displayStopPosition(previousAreaStop)}
+                                  </button>
+                                ) : null}
+                                {nextAreaStop ? (
+                                  <button
+                                    type="button"
+                                    className="timeline-tool-button"
+                                    disabled={
+                                      savingAreaActionKey ===
+                                      `add:${areaContext.area.id}:${nextAreaStop.id}`
+                                    }
+                                    onClick={() =>
+                                      void addStopToArea(
+                                        areaContext.area,
+                                        nextAreaStop.id,
+                                      )
+                                    }
+                                  >
+                                    Add after:{" "}
+                                    {displayStopPosition(nextAreaStop)}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {onRemoveAreaVisitStop ? (
+                              <div className="timeline-area-member-tools">
+                                {areaContext.stops.map((areaStop) => (
+                                  <button
+                                    type="button"
+                                    className="timeline-tool-button"
+                                    key={areaStop.id}
+                                    disabled={
+                                      areaContext.stops.length <= 1 ||
+                                      savingAreaActionKey ===
+                                        `remove:${areaContext.area.id}:${areaStop.id}`
+                                    }
+                                    onClick={() =>
+                                      void removeStopFromArea(
+                                        areaContext.area,
+                                        areaStop.id,
+                                      )
+                                    }
+                                  >
+                                    Remove {displayStopPosition(areaStop)}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                            {areaEditError ? (
+                              <p className="error">{areaEditError}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                     <section

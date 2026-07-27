@@ -54,6 +54,7 @@ from tripweave.domain.enums import (
     ProcessingJobType,
     ProcessingState,
     ProcessingTargetType,
+    ReconstructionSource,
     ReviewItemStatus,
     RouteSource,
     ShareLinkStatus,
@@ -1749,6 +1750,58 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if hasattr(record, field):
                 setattr(record, field, value)
 
+    def area_visit_membership_rows(
+        db: DbSession,
+        area_id: UUID,
+    ) -> list[tuple[orm.AreaVisitStop, orm.Stop, float | None, float | None]]:
+        stop_lat: Any = literal_column("ST_Y(stops.centroid::geometry)").label("latitude")
+        stop_lon: Any = literal_column("ST_X(stops.centroid::geometry)").label("longitude")
+        rows = db.execute(
+            select(orm.AreaVisitStop, orm.Stop, stop_lat, stop_lon)
+            .join(orm.Stop, orm.Stop.id == orm.AreaVisitStop.stop_id)
+            .where(orm.AreaVisitStop.area_visit_id == area_id)
+            .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+        ).all()
+        return [
+            (membership, stop, latitude, longitude)
+            for membership, stop, latitude, longitude in rows
+        ]
+
+    def area_visit_snapshot(db: DbSession, area: orm.AreaVisit) -> dict[str, object]:
+        return {
+            "areaVisitId": str(area.id),
+            "title": area.title,
+            "userLocked": area.user_locked,
+            "stopIds": [str(stop.id) for _, stop, _, _ in area_visit_membership_rows(db, area.id)],
+        }
+
+    def recalculate_area_visit(db: DbSession, area: orm.AreaVisit) -> None:
+        rows = area_visit_membership_rows(db, area.id)
+        if not rows:
+            return
+        for sort_order, (membership, _, _, _) in enumerate(rows, start=1):
+            membership.sort_order = sort_order
+            membership.updated_at = datetime.now(UTC)
+        stops = [stop for _, stop, _, _ in rows]
+        area.starts_at_utc = min(stop.starts_at_utc for stop in stops)
+        area.ends_at_utc = max(stop.ends_at_utc for stop in stops)
+        located = [
+            (float(latitude), float(longitude))
+            for _, _, latitude, longitude in rows
+            if latitude is not None and longitude is not None
+        ]
+        if located:
+            center_latitude = sum(latitude for latitude, _ in located) / len(located)
+            center_longitude = sum(longitude for _, longitude in located) / len(located)
+            area.center = f"SRID=4326;POINT({center_longitude} {center_latitude})"
+            area.bounds = {
+                "min_latitude": min(latitude for latitude, _ in located),
+                "min_longitude": min(longitude for _, longitude in located),
+                "max_latitude": max(latitude for latitude, _ in located),
+                "max_longitude": max(longitude for _, longitude in located),
+            }
+        lock_record(area)
+
     def lock_reconstruction_parents(db: DbSession, record: object) -> None:
         if isinstance(record, orm.Moment):
             stop = db.get(orm.Stop, record.stop_id)
@@ -2452,22 +2505,119 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             EditOperationType.RENAME_DAY.value,
             EditOperationType.RENAME_STOP.value,
             EditOperationType.RENAME_MOMENT.value,
+            EditOperationType.RENAME_AREA_VISIT.value,
         }:
             model_by_type = {
                 EditOperationType.RENAME_DAY.value: (orm.TripDay, "day", "dayId"),
                 EditOperationType.RENAME_STOP.value: (orm.Stop, "stop", "stopId"),
                 EditOperationType.RENAME_MOMENT.value: (orm.Moment, "moment", "momentId"),
+                EditOperationType.RENAME_AREA_VISIT.value: (
+                    orm.AreaVisit,
+                    "area_visit",
+                    "areaVisitId",
+                ),
             }
             model, label, key = model_by_type[operation_type]
             record = get_trip_record(db, model, payload_uuid(data, key), trip_id, label)
             expected_fresh(record, payload.expected_updated_at)
             before = record_values(record, ["title", "user_locked"])
             title_field = "title"
-            setattr(record, title_field, payload_str(data, "title"))
+            title = payload_str(data, "title").strip()
+            if len(title) > 255:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="title is too long",
+                )
+            setattr(record, title_field, title)
             lock_record(record)
             lock_reconstruction_parents(db, record)
             after = record_values(record, ["title", "user_locked"])
             target_type, target_id = label, record.id
+
+        elif operation_type == EditOperationType.ADD_AREA_VISIT_STOP.value:
+            area = get_trip_record(
+                db,
+                orm.AreaVisit,
+                payload_uuid(data, "areaVisitId"),
+                trip_id,
+                "area_visit",
+            )
+            stop = get_trip_record(db, orm.Stop, payload_uuid(data, "stopId"), trip_id, "stop")
+            expected_fresh(area, payload.expected_updated_at)
+            if stop.trip_day_id != area.trip_day_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Stop must be from the same day",
+                )
+            existing_membership = db.execute(
+                select(orm.AreaVisitStop)
+                .where(
+                    orm.AreaVisitStop.trip_id == trip_id,
+                    orm.AreaVisitStop.stop_id == stop.id,
+                    or_(
+                        orm.AreaVisitStop.reconstruction_run_id == area.reconstruction_run_id,
+                        orm.AreaVisitStop.user_locked.is_(True),
+                    ),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if existing_membership is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Stop already belongs to an Area",
+                )
+            before = area_visit_snapshot(db, area)
+            db.add(
+                orm.AreaVisitStop(
+                    trip_id=trip_id,
+                    area_visit_id=area.id,
+                    stop_id=stop.id,
+                    reconstruction_run_id=area.reconstruction_run_id,
+                    sort_order=len(before["stopIds"]) + 1
+                    if isinstance(before["stopIds"], list)
+                    else 1,
+                    membership_source=ReconstructionSource.USER_CORRECTION.value,
+                    confidence=1.0,
+                    algorithm_version=area.algorithm_version,
+                    user_locked=True,
+                )
+            )
+            db.flush()
+            recalculate_area_visit(db, area)
+            after = area_visit_snapshot(db, area)
+            target_type, target_id = "area_visit", area.id
+
+        elif operation_type == EditOperationType.REMOVE_AREA_VISIT_STOP.value:
+            area = get_trip_record(
+                db,
+                orm.AreaVisit,
+                payload_uuid(data, "areaVisitId"),
+                trip_id,
+                "area_visit",
+            )
+            stop_id = payload_uuid(data, "stopId")
+            expected_fresh(area, payload.expected_updated_at)
+            rows = area_visit_membership_rows(db, area.id)
+            if len(rows) <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Area must keep at least one stop",
+                )
+            membership = next(
+                (item for item, stop, _, _ in rows if stop.id == stop_id),
+                None,
+            )
+            if membership is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Area stop not found",
+                )
+            before = area_visit_snapshot(db, area)
+            db.delete(membership)
+            db.flush()
+            recalculate_area_visit(db, area)
+            after = area_visit_snapshot(db, area)
+            target_type, target_id = "area_visit", area.id
 
         elif operation_type in {
             EditOperationType.SET_DAY_NOTE.value,
@@ -2761,6 +2911,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             EditOperationType.RENAME_DAY.value,
             EditOperationType.RENAME_STOP.value,
             EditOperationType.RENAME_MOMENT.value,
+            EditOperationType.RENAME_AREA_VISIT.value,
             EditOperationType.SET_DAY_NOTE.value,
             EditOperationType.SET_STOP_NOTE.value,
             EditOperationType.MOVE_STOP_ON_MAP.value,
@@ -2807,6 +2958,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 "day": orm.TripDay,
                 "stop": orm.Stop,
                 "moment": orm.Moment,
+                "area_visit": orm.AreaVisit,
                 "trip_leg": orm.TripLeg,
                 "review_item": orm.ReviewItem,
                 "place": orm.Place,
