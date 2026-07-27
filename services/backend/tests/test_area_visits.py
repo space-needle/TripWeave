@@ -1,11 +1,15 @@
 from datetime import UTC, datetime, timedelta
+from typing import cast
+from uuid import uuid4
 
+from tripweave.adapters import orm
 from tripweave.application.area_visits import (
     AreaRejectionReason,
     AreaVisitConfig,
     StopInput,
     group_area_visits,
 )
+from tripweave.entrypoints.area_visits.main import persist_grouping_result
 
 BASE_TIME = datetime(2026, 6, 26, 17, 0, tzinfo=UTC)
 BASE_LATITUDE = 47.6537
@@ -219,3 +223,77 @@ def test_repeated_execution_is_identical() -> None:
     second = group_area_visits(stops).to_dict()
 
     assert first == second
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.executed = 0
+
+    def add(self, record: object) -> None:
+        self.added.append(record)
+
+    def flush(self) -> None:
+        for record in self.added:
+            if isinstance(record, orm.AreaVisit) and record.id is None:
+                record.id = uuid4()
+
+    def execute(self, statement: object) -> None:
+        self.executed += 1
+
+
+def persisted_stop(stop_input: StopInput, trip_id: object, day_id: object) -> orm.Stop:
+    return orm.Stop(
+        id=uuid4(),
+        trip_id=trip_id,
+        trip_day_id=day_id,
+        place_id=uuid4(),
+        position=stop_input.sort_order,
+        starts_at_utc=stop_input.start_time,
+        ends_at_utc=stop_input.end_time,
+    )
+
+
+def test_persist_grouping_result_creates_area_and_membership_records() -> None:
+    trip_id = uuid4()
+    day_id = uuid4()
+    run = orm.ReconstructionRun(
+        id=uuid4(), trip_id=trip_id, algorithm_version="test", state="succeeded"
+    )
+    stop_inputs = [area_stop(index) for index in range(1, 4)]
+    stops = [persisted_stop(stop_input, trip_id, day_id) for stop_input in stop_inputs]
+    for stop_input, stop in zip(stop_inputs, stops, strict=True):
+        stop_input_with_db_id = StopInput(
+            id=str(stop.id),
+            day_id=str(day_id),
+            sort_order=stop_input.sort_order,
+            start_time=stop_input.start_time,
+            end_time=stop_input.end_time,
+            latitude=stop_input.latitude,
+            longitude=stop_input.longitude,
+            location_confidence=stop_input.location_confidence,
+        )
+        stop_inputs[stop_input.sort_order - 1] = stop_input_with_db_id
+    result = group_area_visits(stop_inputs)
+    session = FakeSession()
+
+    summary = persist_grouping_result(
+        db=session,  # type: ignore[arg-type]
+        trip_id=trip_id,
+        day_id=day_id,
+        run=run,
+        result=result,
+        stop_rows=[(stop, None, None) for stop in stops],
+    )
+
+    area_visits = [record for record in session.added if isinstance(record, orm.AreaVisit)]
+    memberships = [record for record in session.added if isinstance(record, orm.AreaVisitStop)]
+    assert session.executed == 2
+    assert len(area_visits) == 1
+    assert len(memberships) == 3
+    assert area_visits[0].source == "automation"
+    assert area_visits[0].algorithm_version == "area_visit_v1"
+    assert cast(str, area_visits[0].center).startswith("SRID=4326;POINT(")
+    assert [membership.sort_order for membership in memberships] == [1, 2, 3]
+    assert {membership.reconstruction_run_id for membership in memberships} == {run.id}
+    assert summary["persisted_area_visit_ids"] == [str(area_visits[0].id)]
