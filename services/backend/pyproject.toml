@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 tripweave-api = "tripweave.entrypoints.api.main:run"
+tripweave-area-visits = "tripweave.entrypoints.area_visits.main:main"
 tripweave-worker = "tripweave.entrypoints.worker.main:run"
 tripweave-backup = "tripweave.entrypoints.backup.main:main"
 
