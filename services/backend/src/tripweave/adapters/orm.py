@@ -840,6 +840,87 @@ class TripLeg(Base, GeneratedRecordMixin):
     geometry: Mapped[object | None] = mapped_column(GeographyLineString)
 
 
+class AreaVisit(Base, GeneratedRecordMixin):
+    __tablename__ = "area_visits"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({enum_values(ReconstructionSource)})", name="source"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        CheckConstraint("sort_order > 0", name="sort_order_positive"),
+        CheckConstraint(
+            "ends_at_utc IS NULL OR starts_at_utc IS NULL OR ends_at_utc >= starts_at_utc",
+            name="time_order",
+        ),
+        UniqueConstraint("trip_day_id", "sort_order", "reconstruction_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_day_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trip_days.id", ondelete="CASCADE"), nullable=False
+    )
+    place_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("places.id", ondelete="SET NULL")
+    )
+    title: Mapped[str | None] = mapped_column(String(255))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    center: Mapped[object | None] = mapped_column(GeographyPoint)
+    bounds: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    cover_media_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="SET NULL")
+    )
+    diagnostics: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+
+class AreaVisitStop(Base, TimestampMixin):
+    __tablename__ = "area_visit_stops"
+    __table_args__ = (
+        CheckConstraint(
+            f"membership_source IN ({enum_values(ReconstructionSource)})", name="source"
+        ),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence"
+        ),
+        CheckConstraint("sort_order > 0", name="sort_order_positive"),
+        UniqueConstraint("area_visit_id", "stop_id"),
+        UniqueConstraint("reconstruction_run_id", "stop_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    area_visit_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("area_visits.id", ondelete="CASCADE"), nullable=False
+    )
+    stop_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("stops.id", ondelete="CASCADE"), nullable=False
+    )
+    reconstruction_run_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("reconstruction_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    membership_source: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    algorithm_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    user_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
 class ReviewItem(Base, GeneratedRecordMixin):
     __tablename__ = "review_items"
     __table_args__ = (
@@ -1133,6 +1214,12 @@ Index("ix_moment_media_media_item_id", MomentMedia.media_item_id)
 Index("ix_moment_participants_trip_member_id", MomentParticipant.trip_member_id)
 Index("ix_trip_legs_trip_day_id", TripLeg.trip_day_id)
 Index("ix_trip_legs_geometry_gist", TripLeg.geometry, postgresql_using="gist")
+Index("ix_area_visits_trip_day_id", AreaVisit.trip_day_id)
+Index("ix_area_visits_trip_run", AreaVisit.trip_id, AreaVisit.reconstruction_run_id)
+Index("ix_area_visits_center_gist", AreaVisit.center, postgresql_using="gist")
+Index("ix_area_visit_stops_area_visit_id", AreaVisitStop.area_visit_id)
+Index("ix_area_visit_stops_stop_id", AreaVisitStop.stop_id)
+Index("ix_area_visit_stops_trip_run", AreaVisitStop.trip_id, AreaVisitStop.reconstruction_run_id)
 Index("ix_review_items_trip_id", ReviewItem.trip_id)
 Index("ix_review_items_media_item_id", ReviewItem.media_item_id)
 Index("ix_review_items_trip_status", ReviewItem.trip_id, ReviewItem.status)

@@ -2,9 +2,9 @@ from dataclasses import fields
 from typing import cast
 
 import pytest
-from sqlalchemy import Table
+from sqlalchemy import Table, UniqueConstraint
 
-from tripweave.adapters.orm import Base, MediaItem
+from tripweave.adapters.orm import AreaVisit, AreaVisitStop, Base, MediaItem
 from tripweave.domain.enums import UploadState
 from tripweave.domain.storage import BlobRef
 from tripweave.domain.upload_state import (
@@ -49,6 +49,8 @@ def test_upload_state_transitions_are_explicit() -> None:
 
 def test_schema_has_expected_domain_tables() -> None:
     assert set(Base.metadata.tables) == {
+        "area_visit_stops",
+        "area_visits",
         "capture_devices",
         "device_clock_offset_suggestions",
         "guest_sessions",
@@ -131,3 +133,21 @@ def test_geographic_columns_have_gist_indexes() -> None:
         indexes["ix_media_items_effective_location_gist"].dialect_options["postgresql"]["using"]
         == "gist"
     )
+
+
+def test_area_visit_schema_preserves_stop_membership_invariants() -> None:
+    area_visit_table = cast(Table, AreaVisit.__table__)
+    area_visit_stop_table = cast(Table, AreaVisitStop.__table__)
+    area_visit_indexes = {cast(str, index.name): index for index in area_visit_table.indexes}
+    membership_unique_constraints = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in area_visit_stop_table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+
+    assert (
+        area_visit_indexes["ix_area_visits_center_gist"].dialect_options["postgresql"]["using"]
+        == "gist"
+    )
+    assert ("reconstruction_run_id", "stop_id") in membership_unique_constraints
+    assert ("area_visit_id", "stop_id") in membership_unique_constraints
