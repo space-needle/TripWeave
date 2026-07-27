@@ -574,3 +574,6 @@ class PublicStoryResponse(BaseModel):
     story: ReconstructionResponse
     trip: dict[str, object]
     participants: list[dict[str, object]]
+    area_visits_by_day: dict[str, AreaVisitsResponse] = Field(
+        default_factory=dict, alias="areaVisitsByDay"
+    )

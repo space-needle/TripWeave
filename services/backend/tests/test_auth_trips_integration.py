@@ -1697,28 +1697,33 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
                 {"trip_id": trip_id},
             ).scalar_one()
         )
-    media_id = insert_ready_media_for_reconstruction(
-        engine,
-        trip_id=trip_id,
-        member_id=member_id,
-        filename="private-original-name.jpg",
-        captured_at=datetime(2026, 7, 2, 16, 0, tzinfo=UTC),
-        latitude=35.0,
-        longitude=135.0,
-        sha256="9" * 64,
-    )
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                UPDATE media_items
-                SET visibility = 'story', include_in_story = true
-                WHERE id = CAST(:media_id AS uuid)
-                """
-            ),
-            {"media_id": media_id},
+    media_ids = [
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"private-original-name-{index}.jpg",
+            captured_at=datetime(2026, 7, 2, 16, index * 10, tzinfo=UTC),
+            latitude=35.0 + (index * 0.0018),
+            longitude=135.0,
+            sha256=str(index + 1) * 64,
         )
-    insert_sanitized_assets(client, engine, media_id)
+        for index in range(4)
+    ]
+    with engine.begin() as connection:
+        for media_id in media_ids:
+            connection.execute(
+                text(
+                    """
+                    UPDATE media_items
+                    SET visibility = 'story', include_in_story = true
+                    WHERE id = CAST(:media_id AS uuid)
+                    """
+                ),
+                {"media_id": media_id},
+            )
+    for media_id in media_ids:
+        insert_sanitized_assets(client, engine, media_id)
 
     reconstructed = client.post(
         f"/trips/{trip_id}/reconstruction-runs",
@@ -1765,6 +1770,13 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     assert first_asset_keys
     assert all("/story/assets/sha256/" in key for key in first_asset_keys)
     assert all("/story/v" not in key for key in first_asset_keys)
+    manifest_day = first_manifest["days"][0]
+    assert manifest_day["sourceReconstructionRunId"] == reconstructed_body["latestRun"]["id"]
+    assert len(manifest_day["areaVisits"]) == 1
+    assert manifest_day["areaVisits"][0]["stopIds"] == [
+        stop["id"] for stop in reconstructed_body["days"][0]["stops"]
+    ]
+    assert manifest_day["standaloneStops"] == []
 
     public_story = client.get(f"/public/shares/{token}")
     assert public_story.status_code == 200
@@ -1777,6 +1789,13 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     story_day = public_story.json()["story"]["days"][0]
     assert story_day["note"] == "Start with temple photos."
     assert story_day["stops"][0]["note"] == "Golden hour by the river."
+    area_visits = public_story.json()["areaVisitsByDay"][day_id]
+    assert len(area_visits["areas"]) == 1
+    assert [stop["id"] for stop in area_visits["areas"][0]["stops"]] == [
+        stop["id"] for stop in story_day["stops"]
+    ]
+    assert area_visits["sourceReconstructionRunId"] == reconstructed_body["latestRun"]["id"]
+    assert area_visits["standaloneStops"] == []
 
     thumbnail_url = story_day["stops"][0]["moments"][0]["media"][0]["thumbnailUrl"]
     preview_url = story_day["stops"][0]["moments"][0]["media"][0]["previewUrl"]

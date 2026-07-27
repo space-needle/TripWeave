@@ -195,6 +195,7 @@ export type PublicStoryResponse = {
   story: ReconstructionResponse;
   trip: Record<string, unknown>;
   participants: Record<string, unknown>[];
+  areaVisitsByDay?: Record<string, unknown>;
 };
 
 export type PublicationResponse = {

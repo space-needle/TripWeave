@@ -2470,6 +2470,7 @@ function TripStoryExplorer({
   tripId,
   state,
   onStateChange,
+  initialAreaVisitsByDay,
   onAddAreaVisitStop,
   onMergeStops,
   onRemoveAreaVisitStop,
@@ -2486,6 +2487,7 @@ function TripStoryExplorer({
   tripId?: string;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
+  initialAreaVisitsByDay?: Record<string, AreaVisitsResponse>;
   onAddAreaVisitStop?: (areaVisitId: string, stopId: string) => Promise<void>;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRemoveAreaVisitStop?: (
@@ -2742,6 +2744,16 @@ function TripStoryExplorer({
   useEffect(() => {
     const runId = reconstruction?.latestRun?.id;
     let cancelled = false;
+    if (!tripId && initialAreaVisitsByDay) {
+      Promise.resolve().then(() => {
+        if (!cancelled) {
+          setAreaVisitsByDay(initialAreaVisitsByDay);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     if (!tripId || !runId || reconstruction.days.length === 0) {
       Promise.resolve().then(() => {
         if (!cancelled) {
@@ -2775,7 +2787,7 @@ function TripStoryExplorer({
     return () => {
       cancelled = true;
     };
-  }, [reconstruction, tripId]);
+  }, [initialAreaVisitsByDay, reconstruction, tripId]);
 
   useEffect(() => {
     if (isPhotoRollVisible && activePhotoDayId) {
@@ -6070,6 +6082,7 @@ function PublicStoryViewer({ token }: { token: string }) {
     typeof trip.description === "string" ? trip.description : null;
   const timezoneId =
     typeof trip.timezoneId === "string" ? trip.timezoneId : "UTC";
+  const areaVisitsByDay = areaVisitsByDayRecord(story.areaVisitsByDay);
 
   return (
     <main className="app-shell public-story-shell">
@@ -6109,11 +6122,35 @@ function PublicStoryViewer({ token }: { token: string }) {
         reconstruction={story.story}
         state={storyState}
         onStateChange={setStoryState}
+        initialAreaVisitsByDay={areaVisitsByDay}
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         timezoneId={timezoneId}
       />
     </main>
+  );
+}
+
+function areaVisitsByDayRecord(
+  value: Record<string, unknown> | undefined,
+): Record<string, AreaVisitsResponse> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(value).filter(([, areaVisits]) =>
+      isAreaVisitsResponse(areaVisits),
+    ),
+  ) as Record<string, AreaVisitsResponse>;
+}
+
+function isAreaVisitsResponse(value: unknown): value is AreaVisitsResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as { areas?: unknown; standaloneStops?: unknown };
+  return (
+    Array.isArray(candidate.areas) && Array.isArray(candidate.standaloneStops)
   );
 }
 

@@ -321,6 +321,77 @@ def build_manifest(
             }
         )
 
+    area_lat: Any = literal_column("ST_Y(area_visits.center::geometry)").label("latitude")
+    area_lon: Any = literal_column("ST_X(area_visits.center::geometry)").label("longitude")
+    area_rows = db.execute(
+        select(orm.AreaVisit, area_lat, area_lon)
+        .where(
+            orm.AreaVisit.trip_id == trip.id,
+            or_(
+                orm.AreaVisit.reconstruction_run_id == run.id,
+                orm.AreaVisit.user_locked.is_(True),
+            ),
+        )
+        .order_by(orm.AreaVisit.sort_order, orm.AreaVisit.starts_at_utc, orm.AreaVisit.id)
+    ).all()
+    area_ids = [area.id for area, _, _ in area_rows]
+    area_membership_rows: list[orm.AreaVisitStop] = []
+    if area_ids:
+        area_membership_rows = list(
+            db.scalars(
+                select(orm.AreaVisitStop)
+                .where(orm.AreaVisitStop.area_visit_id.in_(area_ids))
+                .order_by(orm.AreaVisitStop.area_visit_id, orm.AreaVisitStop.sort_order)
+            )
+        )
+    published_stop_ids = {
+        UUID(str(stop["id"]))
+        for day_stops in stops_by_day.values()
+        for stop in day_stops
+        if isinstance(stop.get("id"), str)
+    }
+    stop_ids_by_area: dict[UUID, list[UUID]] = {}
+    stop_ids_in_areas: set[UUID] = set()
+    for membership in area_membership_rows:
+        if membership.stop_id not in published_stop_ids:
+            continue
+        stop_ids_by_area.setdefault(membership.area_visit_id, []).append(membership.stop_id)
+        stop_ids_in_areas.add(membership.stop_id)
+
+    area_visits_by_day: dict[UUID, list[dict[str, object]]] = {}
+    for area, latitude, longitude in area_rows:
+        area_stop_ids = stop_ids_by_area.get(area.id, [])
+        if not area_stop_ids:
+            continue
+        area_visits_by_day.setdefault(area.trip_day_id, []).append(
+            {
+                "id": str(area.id),
+                "tripId": str(area.trip_id),
+                "dayId": str(area.trip_day_id),
+                "reconstructionRunId": str(area.reconstruction_run_id),
+                "sortOrder": area.sort_order,
+                "title": area.title,
+                "startsAt": iso(area.starts_at_utc),
+                "endsAt": iso(area.ends_at_utc),
+                "latitude": float(latitude) if latitude is not None else None,
+                "longitude": float(longitude) if longitude is not None else None,
+                "confidence": area.confidence,
+                "source": area.source,
+                "algorithmVersion": area.algorithm_version,
+                "userLocked": area.user_locked,
+                "bounds": area.bounds,
+                "diagnostics": area.diagnostics,
+                "stopIds": [str(stop_id) for stop_id in area_stop_ids],
+            }
+        )
+    standalone_stop_ids_by_day: dict[UUID, list[str]] = {}
+    for day_id, day_stops in stops_by_day.items():
+        standalone_stop_ids_by_day[day_id] = [
+            str(stop["id"])
+            for stop in day_stops
+            if isinstance(stop.get("id"), str) and UUID(str(stop["id"])) not in stop_ids_in_areas
+        ]
+
     manifest_days = [
         {
             "id": str(day.id),
@@ -330,6 +401,9 @@ def build_manifest(
             "note": day.note,
             "stops": stops_by_day.get(day.id, []),
             "legs": legs_by_day.get(day.id, []),
+            "sourceReconstructionRunId": str(run.id),
+            "areaVisits": area_visits_by_day.get(day.id, []),
+            "standaloneStops": standalone_stop_ids_by_day.get(day.id, []),
         }
         for day in days
         if stops_by_day.get(day.id)

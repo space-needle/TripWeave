@@ -917,6 +917,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             story=story,
             trip=trip,
             participants=list_of_dicts(manifest.get("participants")),
+            areaVisitsByDay=area_visits_by_day_from_manifest(manifest, story),
         )
 
     def public_asset_urls(
@@ -1097,11 +1098,131 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             ),
         )
 
+    def area_visit_stop_from_story_stop(
+        stop: ReconstructionStopResponse,
+        *,
+        membership_sort_order: int | None = None,
+        membership_confidence: float | None = None,
+        membership_source: str | None = None,
+        membership_user_locked: bool | None = None,
+    ) -> AreaVisitStopResponse:
+        return AreaVisitStopResponse(
+            id=stop.id,
+            position=stop.position,
+            title=stop.title,
+            startsAt=stop.starts_at,
+            endsAt=stop.ends_at,
+            placeName=stop.place_name,
+            latitude=stop.latitude,
+            longitude=stop.longitude,
+            membershipSource=membership_source,
+            membershipConfidence=membership_confidence,
+            membershipSortOrder=membership_sort_order,
+            membershipUserLocked=membership_user_locked,
+        )
+
+    def area_visits_by_day_from_manifest(
+        manifest: dict[str, object],
+        story: ReconstructionResponse,
+    ) -> dict[str, AreaVisitsResponse]:
+        days_payload = manifest.get("days")
+        days_list = days_payload if isinstance(days_payload, list) else []
+        trip_payload = dict_or_empty(manifest.get("trip"))
+        trip_id_value = trip_payload.get("id")
+        if not isinstance(trip_id_value, str):
+            return {}
+        trip_id = UUID(trip_id_value)
+        story_days_by_id = {str(day.id): day for day in story.days}
+        result: dict[str, AreaVisitsResponse] = {}
+        for day_payload in days_list:
+            if not isinstance(day_payload, dict) or not isinstance(day_payload.get("id"), str):
+                continue
+            day_id = str(day_payload["id"])
+            story_day = story_days_by_id.get(day_id)
+            if story_day is None:
+                continue
+            stop_by_id = {str(stop.id): stop for stop in story_day.stops}
+            areas: list[AreaVisitResponse] = []
+            for area_payload in list_payload(day_payload, "areaVisits"):
+                required_area_fields = [
+                    area_payload.get("id"),
+                    area_payload.get("tripId"),
+                    area_payload.get("reconstructionRunId"),
+                ]
+                if not all(isinstance(value, str) for value in required_area_fields):
+                    continue
+                stop_ids = string_list(area_payload.get("stopIds"))
+                area_stops = [
+                    area_visit_stop_from_story_stop(
+                        stop,
+                        membership_sort_order=index,
+                        membership_confidence=number_or_none(area_payload.get("confidence")),
+                        membership_source=str(area_payload.get("source") or "automation"),
+                        membership_user_locked=bool(area_payload.get("userLocked")),
+                    )
+                    for index, stop_id in enumerate(stop_ids, start=1)
+                    if (stop := stop_by_id.get(stop_id)) is not None
+                ]
+                if not area_stops:
+                    continue
+                areas.append(
+                    AreaVisitResponse(
+                        id=UUID(str(area_payload["id"])),
+                        tripId=UUID(str(area_payload["tripId"])),
+                        dayId=UUID(day_id),
+                        reconstructionRunId=UUID(str(area_payload["reconstructionRunId"])),
+                        sortOrder=int_or_zero(area_payload.get("sortOrder")),
+                        title=str(area_payload["title"])
+                        if area_payload.get("title") is not None
+                        else None,
+                        startsAt=parse_datetime(area_payload.get("startsAt")),
+                        endsAt=parse_datetime(area_payload.get("endsAt")),
+                        latitude=number_or_none(area_payload.get("latitude")),
+                        longitude=number_or_none(area_payload.get("longitude")),
+                        confidence=number_or_none(area_payload.get("confidence")),
+                        source=str(area_payload.get("source") or "automation"),
+                        algorithmVersion=str(
+                            area_payload.get("algorithmVersion") or "area_visit_v1"
+                        ),
+                        userLocked=bool(area_payload.get("userLocked")),
+                        bounds=dict_or_empty(area_payload.get("bounds")),
+                        diagnostics=dict_or_empty(area_payload.get("diagnostics")),
+                        stops=area_stops,
+                    )
+                )
+            standalone_stops = [
+                area_visit_stop_from_story_stop(stop)
+                for stop_id in string_list(day_payload.get("standaloneStops"))
+                if (stop := stop_by_id.get(stop_id)) is not None
+            ]
+            if areas or standalone_stops:
+                source_reconstruction_run_id = uuid_or_none(
+                    day_payload.get("sourceReconstructionRunId")
+                )
+                if source_reconstruction_run_id is None and areas:
+                    source_reconstruction_run_id = areas[0].reconstruction_run_id
+                result[day_id] = AreaVisitsResponse(
+                    tripId=trip_id,
+                    dayId=UUID(day_id),
+                    sourceReconstructionRunId=source_reconstruction_run_id,
+                    areas=areas,
+                    standaloneStops=standalone_stops,
+                )
+        return result
+
     def list_payload(payload: dict[str, object], key: str) -> list[dict[str, object]]:
         value = payload.get(key)
         if not isinstance(value, list):
             return []
         return [dict(item) for item in value if isinstance(item, dict)]
+
+    def string_list(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, str)]
+
+    def uuid_or_none(value: object) -> UUID | None:
+        return UUID(value) if isinstance(value, str) else None
 
     def parse_datetime(value: object) -> datetime | None:
         if not isinstance(value, str) or not value:
