@@ -43,13 +43,17 @@ def preview_area_visits(args: argparse.Namespace) -> None:
         trip_day = db.get(orm.TripDay, args.day_id)
         if trip_day is None or trip_day.trip_id != trip.id:
             raise SystemExit(f"Trip day not found for trip: {args.day_id}")
-        stops = load_stop_inputs(db, trip.id, trip_day.id, run.id)
+        stop_rows = load_stops(db, trip.id, trip_day.id)
+        stops = stop_inputs_from_rows(stop_rows)
         result = group_area_visits(stops, AreaVisitConfig())
         payload = {
             "trip_id": str(trip.id),
             "day_id": str(trip_day.id),
             "day_date": trip_day.day_date.isoformat(),
-            "reconstruction_run_id": str(run.id),
+            "latest_reconstruction_run_id": str(run.id),
+            "source_reconstruction_run_ids": sorted(
+                {str(stop.reconstruction_run_id) for stop, _, _ in stop_rows}
+            ),
             **result.to_dict(),
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -59,23 +63,14 @@ def load_stop_inputs(
     db: Session,
     trip_id: UUID,
     day_id: UUID,
-    reconstruction_run_id: UUID,
 ) -> list[StopInput]:
-    stop_lat: ColumnElement[float | None] = literal_column("ST_Y(stops.centroid::geometry)").label(
-        "latitude"
-    )
-    stop_lon: ColumnElement[float | None] = literal_column("ST_X(stops.centroid::geometry)").label(
-        "longitude"
-    )
-    rows = db.execute(
-        select(orm.Stop, stop_lat, stop_lon)
-        .where(
-            orm.Stop.trip_id == trip_id,
-            orm.Stop.trip_day_id == day_id,
-            orm.Stop.reconstruction_run_id == reconstruction_run_id,
-        )
-        .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
-    ).all()
+    rows = load_stops(db, trip_id, day_id)
+    return stop_inputs_from_rows(rows)
+
+
+def stop_inputs_from_rows(
+    rows: list[tuple[orm.Stop, float | None, float | None]],
+) -> list[StopInput]:
     return [
         StopInput(
             id=str(stop.id),
@@ -89,6 +84,28 @@ def load_stop_inputs(
         )
         for stop, latitude, longitude in rows
     ]
+
+
+def load_stops(
+    db: Session,
+    trip_id: UUID,
+    day_id: UUID,
+) -> list[tuple[orm.Stop, float | None, float | None]]:
+    stop_lat: ColumnElement[float | None] = literal_column("ST_Y(stops.centroid::geometry)").label(
+        "latitude"
+    )
+    stop_lon: ColumnElement[float | None] = literal_column("ST_X(stops.centroid::geometry)").label(
+        "longitude"
+    )
+    rows = db.execute(
+        select(orm.Stop, stop_lat, stop_lon)
+        .where(
+            orm.Stop.trip_id == trip_id,
+            orm.Stop.trip_day_id == day_id,
+        )
+        .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+    ).all()
+    return [(stop, latitude, longitude) for stop, latitude, longitude in rows]
 
 
 if __name__ == "__main__":
