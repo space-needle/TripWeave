@@ -338,7 +338,8 @@ p {
 }
 
 .mobile-workspace-tabs,
-.mobile-trip-actions {
+.mobile-trip-actions,
+.mobile-trip-action-menu {
   display: none;
 }
 
@@ -2743,7 +2744,23 @@ button.thumb-frame:focus-visible {
     backdrop-filter: blur(12px);
   }
 
-  .mobile-trip-actions button {
+  .mobile-trip-action-menu {
+    position: fixed;
+    top: 72px;
+    right: 12px;
+    z-index: 39;
+    display: flex;
+    gap: 5px;
+    border: 1px solid rgb(217 222 231 / 86%);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 94%);
+    padding: 5px;
+    box-shadow: 0 14px 36px rgb(23 32 42 / 14%);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobile-trip-actions button,
+  .mobile-trip-action-menu button {
     width: 38px;
     height: 38px;
     display: grid;
@@ -2755,16 +2772,19 @@ button.thumb-frame:focus-visible {
     padding: 0;
   }
 
-  .mobile-trip-actions button.active {
+  .mobile-trip-actions button.active,
+  .mobile-trip-action-menu button.active {
     background: var(--accent);
     color: #fff;
   }
 
-  .mobile-trip-actions button:disabled {
+  .mobile-trip-actions button:disabled,
+  .mobile-trip-action-menu button:disabled {
     opacity: 0.38;
   }
 
-  .mobile-trip-actions svg {
+  .mobile-trip-actions svg,
+  .mobile-trip-action-menu svg {
     width: 19px;
     height: 19px;
     fill: none;
@@ -2795,6 +2815,14 @@ button.thumb-frame:focus-visible {
 
   .trip-workspace > [data-mobile-tab-panel]:not(.mobile-tab-active),
   .trip-management > [data-mobile-tab-panel]:not(.mobile-tab-active) {
+    display: none;
+  }
+
+  .trip-primary-nav {
+    display: none;
+  }
+
+  .trip-nav .mobile-story-actions {
     display: none;
   }
 

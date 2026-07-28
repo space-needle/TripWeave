@@ -73,9 +73,17 @@ type GalleryPhoto = {
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
-type MobileWorkspaceTab = "story" | "timeline" | "photos" | "share" | "more";
+type MobileWorkspaceTab =
+  "story" | "timeline" | "photos" | "share" | "tripSettings" | "appSettings";
 type StoryMobilePane = "map" | "timeline" | "photos";
-type StoryHeaderIconAction = StoryMobilePane | "story" | "share" | "more";
+type StoryHeaderIconAction =
+  | StoryMobilePane
+  | "story"
+  | "share"
+  | "more"
+  | "upload"
+  | "manage"
+  | "settings";
 
 type TripForm = {
   title: string;
@@ -316,6 +324,7 @@ function OwnerWorkspace() {
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
+  const [mobileTripMenuOpen, setMobileTripMenuOpen] = useState(false);
   const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
   const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
@@ -368,6 +377,9 @@ function OwnerWorkspace() {
   const activeShareCount =
     publications?.shareLinks.filter((link) => link.status === "active")
       .length ?? 0;
+  const canManageSelectedTrip = Boolean(
+    selectedTrip && ["owner", "editor"].includes(selectedTrip.role),
+  );
 
   const loadTrips = useCallback(
     async (preferredTripId: string | null = null) => {
@@ -1426,11 +1438,8 @@ function OwnerWorkspace() {
       <nav className="mobile-trip-actions" aria-label="Trip sections">
         {(
           [
-            ["story", "Story", "story"],
+            ["story", "Map", "story"],
             ["timeline", "Timeline", "timeline"],
-            ["photos", "Photos", "photos"],
-            ["share", "Share", "share"],
-            ["more", "More", "more"],
           ] as Array<[MobileWorkspaceTab, string, StoryHeaderIconAction]>
         ).map(([tab, label, icon]) => (
           <button
@@ -1438,14 +1447,11 @@ function OwnerWorkspace() {
             aria-label={label}
             aria-pressed={mobileTab === tab}
             className={mobileTab === tab ? "active" : ""}
-            disabled={
-              (!selectedTrip && tab !== "more") ||
-              (tab === "share" &&
-                !["owner", "editor"].includes(selectedTrip?.role ?? ""))
-            }
+            disabled={!selectedTrip}
             key={tab}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
               setMobileTab(tab);
             }}
             title={label}
@@ -1453,15 +1459,106 @@ function OwnerWorkspace() {
             <StoryHeaderIcon action={icon} />
           </button>
         ))}
+        {canManageSelectedTrip ? (
+          <button
+            type="button"
+            aria-label="Trip actions"
+            aria-expanded={mobileTripMenuOpen}
+            className={mobileTripMenuOpen ? "active" : ""}
+            disabled={!selectedTrip}
+            onClick={() => setMobileTripMenuOpen((current) => !current)}
+            title="Trip actions"
+          >
+            <StoryHeaderIcon action="more" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label="Upload photos"
+            aria-pressed={mobileTab === "photos"}
+            className={mobileTab === "photos" ? "active" : ""}
+            disabled={!selectedTrip}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileTab("photos");
+            }}
+            title="Upload photos"
+          >
+            <StoryHeaderIcon action="upload" />
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label="Settings"
+          aria-pressed={mobileTab === "appSettings"}
+          className={mobileTab === "appSettings" ? "active" : ""}
+          onClick={() => {
+            setOwnerStoryPhotosOpen(false);
+            setMobileTripMenuOpen(false);
+            setMobileTab("appSettings");
+          }}
+          title="Settings"
+        >
+          <StoryHeaderIcon action="settings" />
+        </button>
       </nav>
+      {mobileTripMenuOpen && canManageSelectedTrip ? (
+        <nav className="mobile-trip-action-menu" aria-label="Trip actions">
+          <button
+            type="button"
+            aria-label="Upload photos"
+            aria-pressed={mobileTab === "photos"}
+            className={mobileTab === "photos" ? "active" : ""}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileTab("photos");
+            }}
+            title="Upload photos"
+          >
+            <StoryHeaderIcon action="upload" />
+          </button>
+          <button
+            type="button"
+            aria-label="Share trip"
+            aria-pressed={mobileTab === "share"}
+            className={mobileTab === "share" ? "active" : ""}
+            disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileTab("share");
+            }}
+            title="Share trip"
+          >
+            <StoryHeaderIcon action="share" />
+          </button>
+          <button
+            type="button"
+            aria-label="Trip settings"
+            aria-pressed={mobileTab === "tripSettings"}
+            className={mobileTab === "tripSettings" ? "active" : ""}
+            disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileTab("tripSettings");
+            }}
+            title="Trip settings"
+          >
+            <StoryHeaderIcon action="manage" />
+          </button>
+        </nav>
+      ) : null}
 
       <section className="workspace trip-workspace">
         <aside
           className={`trip-nav panel ${
-            mobileTab === "more" ? "mobile-tab-active" : ""
+            mobileTab === "appSettings" ? "mobile-tab-active" : ""
           }`}
           aria-label="Trip navigation"
-          data-mobile-tab-panel="more"
+          data-mobile-tab-panel="appSettings"
         >
           <div className="trip-brand">
             <strong>My Trip</strong>
@@ -1777,11 +1874,13 @@ function OwnerWorkspace() {
           {selectedTrip?.role === "owner" ? (
             <details
               className={`management-panel ${
-                mobileTab === "more" ? "mobile-tab-active" : ""
+                mobileTab === "tripSettings" ? "mobile-tab-active" : ""
               }`}
               id="travelers-panel"
-              open={isMobileWorkspace ? mobileTab === "more" : undefined}
-              data-mobile-tab-panel="more"
+              open={
+                isMobileWorkspace ? mobileTab === "tripSettings" : undefined
+              }
+              data-mobile-tab-panel="tripSettings"
             >
               <summary>
                 <span>Travelers</span>
@@ -1832,11 +1931,13 @@ function OwnerWorkspace() {
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <details
               className={`management-panel ${
-                mobileTab === "more" ? "mobile-tab-active" : ""
+                mobileTab === "tripSettings" ? "mobile-tab-active" : ""
               }`}
               id="review-panel"
-              open={isMobileWorkspace ? mobileTab === "more" : undefined}
-              data-mobile-tab-panel="more"
+              open={
+                isMobileWorkspace ? mobileTab === "tripSettings" : undefined
+              }
+              data-mobile-tab-panel="tripSettings"
               onToggle={(event) => {
                 if (event.currentTarget.open) {
                   loadReviewDetails();
@@ -1919,14 +2020,14 @@ function OwnerWorkspace() {
 
           <details
             className={`management-panel ${
-              mobileTab === "more" ? "mobile-tab-active" : ""
+              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
             }`}
             id="settings-panel"
-            open={isMobileWorkspace ? mobileTab === "more" : undefined}
-            data-mobile-tab-panel="more"
+            open={isMobileWorkspace ? mobileTab === "tripSettings" : undefined}
+            data-mobile-tab-panel="tripSettings"
           >
             <summary>
-              <span>Settings</span>
+              <span>Trip info</span>
               {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
             </summary>
             <form className="stack" onSubmit={updateTrip}>
@@ -6450,6 +6551,17 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
     );
   }
 
+  if (action === "upload") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 7.5h14v11H5z" />
+        <path d="m8 15 2.5-3 2 2.2 1.5-1.7 2.2 2.5" />
+        <path d="M12 4v7" />
+        <path d="m9.5 6.5 2.5-2.5 2.5 2.5" />
+      </svg>
+    );
+  }
+
   if (action === "share") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -6466,6 +6578,28 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
         <path d="M5 12h.01" />
         <path d="M12 12h.01" />
         <path d="M19 12h.01" />
+      </svg>
+    );
+  }
+
+  if (action === "manage") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 6h14" />
+        <path d="M5 12h14" />
+        <path d="M5 18h14" />
+        <path d="M8 4v4" />
+        <path d="M16 10v4" />
+        <path d="M11 16v4" />
+      </svg>
+    );
+  }
+
+  if (action === "settings") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+        <path d="M19 12a7.6 7.6 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a7.3 7.3 0 0 0-1.8-1l-.4-2.7h-4l-.4 2.7a7.3 7.3 0 0 0-1.8 1l-2.5-1-2 3.5 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a7.3 7.3 0 0 0 1.8 1l.4 2.7h4l.4-2.7a7.3 7.3 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" />
       </svg>
     );
   }
