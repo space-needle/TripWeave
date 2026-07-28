@@ -4193,13 +4193,6 @@ function TripStoryExplorer({
                           handleTimelineKey(event, stop.id, day.id)
                         }
                       >
-                        <span className="timeline-stop-time">
-                          {formatTimelineStopTime(
-                            stop.startsAt,
-                            stop.startsAtLocal ?? null,
-                            timezoneId,
-                          )}
-                        </span>
                         <div className="timeline-stop-card">
                           <div className="timeline-stop-heading">
                             <button
@@ -4220,6 +4213,16 @@ function TripStoryExplorer({
                                   {displayStopTitle(stop)}
                                 </span>
                               </span>
+                              <time
+                                className="timeline-stop-time"
+                                dateTime={stop.startsAt}
+                              >
+                                {formatTimelineStopTime(
+                                  stop.startsAt,
+                                  stop.startsAtLocal ?? null,
+                                  timezoneId,
+                                )}
+                              </time>
                               <small>
                                 {stop.mediaCount} photos ·{" "}
                                 {stop.contributorCount} travelers

@@ -1814,11 +1814,11 @@ button.needs-update {
 .timeline-stop {
   position: relative;
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
   border: 0;
   border-radius: 0;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 8px;
 }
 
 .timeline-stop-stack {
@@ -1835,7 +1835,7 @@ button.needs-update {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  margin-left: 98px;
+  margin-left: 42px;
   border: 1px solid #c8ddd6;
   border-radius: 12px;
   background: #f5fbf8;
@@ -1891,17 +1891,21 @@ button.needs-update {
 
 .timeline-stop::before {
   position: absolute;
-  top: 10px;
-  bottom: -18px;
+  top: 50%;
+  bottom: calc(-50% - 10px);
   left: 5px;
   width: 2px;
   content: "";
   background: #e9a085;
 }
 
+.timeline-stop-stack:last-child .timeline-stop::before {
+  display: none;
+}
+
 .timeline-stop::after {
   position: absolute;
-  top: 9px;
+  top: 50%;
   left: 0;
   width: 12px;
   aspect-ratio: 1;
@@ -1910,6 +1914,7 @@ button.needs-update {
   content: "";
   background: #e87856;
   box-shadow: 0 0 0 1px #e87856;
+  transform: translateY(-50%);
 }
 
 .timeline-stop:focus-visible {
@@ -1923,12 +1928,12 @@ button.needs-update {
 }
 
 .timeline-stop-time {
-  color: var(--text);
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
   font-size: 0.82rem;
-  font-weight: 800;
-  line-height: 1.2;
-  padding-top: 22px;
-  white-space: nowrap;
+  font-weight: 750;
+  line-height: 1.25;
 }
 
 .timeline-stop-button span,
@@ -1991,6 +1996,7 @@ button.needs-update {
 
 .timeline-stop-card {
   display: grid;
+  grid-column: 2;
   gap: 9px;
   min-width: 0;
   border: 1px solid var(--border);
@@ -3179,11 +3185,11 @@ button.thumb-frame:focus-visible {
   }
 
   .timeline-stop {
-    grid-template-columns: 70px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
   }
 
   .timeline-area-heading {
-    margin-left: 92px;
+    margin-left: 40px;
   }
 }
 
