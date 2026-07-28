@@ -5481,20 +5481,42 @@ function StoryMapCanvas({
       (map.getSource("trip-areas") as GeoJSONSource | undefined)?.setData(
         mapDataRef.current.areaCollection,
       );
-      map.addLayer({
-        id: "area-visits-fill",
-        type: "fill",
-        source: "trip-areas",
-        paint: {
-          "fill-color": "#267563",
-          "fill-opacity": [
-            "case",
-            ["==", ["get", "expanded"], true],
-            0.18,
-            0.08,
-          ],
+      for (const { id, level, expandedOpacity, defaultOpacity } of [
+        {
+          id: "area-visits-glow-outer",
+          level: "outer",
+          expandedOpacity: 0.05,
+          defaultOpacity: 0.025,
         },
-      });
+        {
+          id: "area-visits-glow-middle",
+          level: "middle",
+          expandedOpacity: 0.1,
+          defaultOpacity: 0.045,
+        },
+        {
+          id: "area-visits-glow-core",
+          level: "core",
+          expandedOpacity: 0.18,
+          defaultOpacity: 0.08,
+        },
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "fill",
+          source: "trip-areas",
+          filter: ["==", ["get", "glowLevel"], level],
+          paint: {
+            "fill-color": "#267563",
+            "fill-opacity": [
+              "case",
+              ["==", ["get", "expanded"], true],
+              expandedOpacity,
+              defaultOpacity,
+            ],
+          },
+        });
+      }
       map.addLayer({
         id: "routes-confirmed",
         type: "line",
@@ -6048,6 +6070,7 @@ type AreaVisitFeature = {
     title: string;
     selected: boolean;
     expanded: boolean;
+    glowLevel: "outer" | "middle" | "core";
   };
   geometry: {
     type: "Polygon";
@@ -6093,25 +6116,34 @@ function areaVisitCollection(
       const coordinates = area.stops
         .map((stop) => stopCoordinates.get(stop.id) ?? null)
         .filter((coordinate) => coordinate !== null);
-      const polygon = areaPolygonForCoordinates(coordinates);
-      if (!polygon) {
-        continue;
+      for (const { glowLevel, scale } of [
+        { glowLevel: "outer", scale: 1.9 },
+        { glowLevel: "middle", scale: 1.42 },
+        { glowLevel: "core", scale: 1 },
+      ] as const) {
+        const polygon = areaPolygonForCoordinates(coordinates, scale);
+        if (!polygon) {
+          continue;
+        }
+        features.push({
+          type: "Feature",
+          id: `${area.id}:${glowLevel}`,
+          properties: {
+            id: area.id,
+            dayId,
+            title: area.title ?? `Area ${area.sortOrder}`,
+            selected: area.stops.some(
+              (stop) => stop.id === state.selectedStopId,
+            ),
+            expanded: area.id === expandedAreaId,
+            glowLevel,
+          },
+          geometry: {
+            type: "Polygon",
+            coordinates: [polygon],
+          },
+        });
       }
-      features.push({
-        type: "Feature",
-        id: area.id,
-        properties: {
-          id: area.id,
-          dayId,
-          title: area.title ?? `Area ${area.sortOrder}`,
-          selected: area.stops.some((stop) => stop.id === state.selectedStopId),
-          expanded: area.id === expandedAreaId,
-        },
-        geometry: {
-          type: "Polygon",
-          coordinates: [polygon],
-        },
-      });
     }
   }
   return {
@@ -6122,6 +6154,7 @@ function areaVisitCollection(
 
 function areaPolygonForCoordinates(
   coordinates: [number, number][],
+  scale = 1,
 ): number[][] | null {
   if (coordinates.length === 0) {
     return null;
@@ -6143,10 +6176,12 @@ function areaPolygonForCoordinates(
     (maxLongitude - minLongitude) / 2,
     0.0011 / latitudeScale,
   );
-  const paddedLatitudeRadius =
+  const basePaddedLatitudeRadius =
     latitudeRadius + Math.max(latitudeRadius * 0.45, 0.0006);
-  const paddedLongitudeRadius =
+  const basePaddedLongitudeRadius =
     longitudeRadius + Math.max(longitudeRadius * 0.45, 0.0006 / latitudeScale);
+  const paddedLatitudeRadius = basePaddedLatitudeRadius * scale;
+  const paddedLongitudeRadius = basePaddedLongitudeRadius * scale;
   const ring = Array.from({ length: 24 }, (_, index) => {
     const angle = (index / 24) * Math.PI * 2;
     return [
