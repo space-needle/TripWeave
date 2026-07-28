@@ -4993,19 +4993,23 @@ function syncStoryMapMarkerSelection(
   markers: Marker[],
   selectedDayId: string | null,
   selectedStopId: string | null,
+  selectedAreaId: string | null = null,
 ) {
   let selectedMarkerAnchor: HTMLElement | null = null;
   for (const marker of markers) {
     const markerAnchor = marker.getElement();
     const dayMarker = markerAnchor.querySelector(".photo-day-marker");
     const stopMarker = markerAnchor.querySelector(".photo-stop-marker");
+    const areaMarker = markerAnchor.querySelector(".photo-area-marker");
     const isSelected =
       (dayMarker !== null && markerAnchor.dataset.dayId === selectedDayId) ||
-      (stopMarker !== null && markerAnchor.dataset.stopId === selectedStopId);
+      (stopMarker !== null && markerAnchor.dataset.stopId === selectedStopId) ||
+      (areaMarker !== null && markerAnchor.dataset.areaId === selectedAreaId);
     markerAnchor.classList.toggle("selected", isSelected);
     markerAnchor.style.zIndex = isSelected ? "30" : "";
     dayMarker?.classList.toggle("active", isSelected);
     stopMarker?.classList.toggle("active", isSelected);
+    areaMarker?.classList.toggle("active", isSelected);
     if (isSelected) {
       selectedMarkerAnchor = markerAnchor;
     }
@@ -5042,17 +5046,55 @@ function StoryMapCanvas({
   const mapRef = useRef<MapLibreMap | null>(null);
   const selectedMarkers = useRef<Marker[]>([]);
   const stopPhotoMarkers = useRef<Marker[]>([]);
+  const [expandedAreaId, setExpandedAreaId] = useState<string | null>(null);
   const previousFocusRef = useRef<{
     selectedStopId: string | null;
     viewMode: ViewMode;
   }>({ selectedStopId: null, viewMode: "TRIP_OVERVIEW" });
   const stateRef = useRef(state);
+  const selectedAreaIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
   const dayColorMap = useMemo(() => storyDayColorMap(model), [model]);
+  const areaMembershipByStopId = useMemo(
+    () => areaMembershipMap(areaVisitsByDay),
+    [areaVisitsByDay],
+  );
+  const selectedAreaId = state.selectedStopId
+    ? (areaMembershipByStopId.get(state.selectedStopId)?.area.id ?? null)
+    : null;
+  useEffect(() => {
+    selectedAreaIdRef.current = selectedAreaId;
+  }, [selectedAreaId]);
+  const activeMapAreaVisits =
+    state.selectedDayId && ["STOP", "MOMENT"].includes(state.viewMode)
+      ? (areaVisitsByDay[state.selectedDayId] ?? null)
+      : null;
+  const visibleStopIdSet = useMemo(() => {
+    if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
+      return null;
+    }
+    const visibleStopIds = new Set<string>();
+    for (const stop of model.stops) {
+      if (stop.dayId !== state.selectedDayId) {
+        continue;
+      }
+      const areaMembership = areaMembershipByStopId.get(stop.id);
+      if (!areaMembership || areaMembership.area.id === expandedAreaId) {
+        visibleStopIds.add(stop.id);
+      }
+    }
+    return visibleStopIds;
+  }, [
+    areaMembershipByStopId,
+    expandedAreaId,
+    model.stops,
+    state.selectedDayId,
+    state.viewMode,
+  ]);
   const routeCollection = useMemo(
     () => ({
       type: "FeatureCollection" as const,
@@ -5087,6 +5129,7 @@ function StoryMapCanvas({
     () => ({
       type: "FeatureCollection" as const,
       features: model.stops
+        .filter((stop) => !visibleStopIdSet || visibleStopIdSet.has(stop.id))
         .map((stop) => {
           const coordinates = stopDisplayCoordinates.get(stop.id) ?? null;
           return coordinates
@@ -5108,13 +5151,17 @@ function StoryMapCanvas({
         })
         .filter((feature) => feature !== null),
     }),
-    [dayColorMap, model.stops, stopDisplayCoordinates],
+    [dayColorMap, model.stops, stopDisplayCoordinates, visibleStopIdSet],
   );
   const mediaCollection = useMemo(
     () => ({
       type: "FeatureCollection" as const,
       features: model.media
-        .filter((item) => item.coordinates)
+        .filter(
+          (item) =>
+            item.coordinates &&
+            (!visibleStopIdSet || visibleStopIdSet.has(item.stopId)),
+        )
         .map((item) => ({
           type: "Feature" as const,
           id: item.id,
@@ -5133,11 +5180,17 @@ function StoryMapCanvas({
           },
         })),
     }),
-    [dayColorMap, model.media, state.selectedMediaId],
+    [dayColorMap, model.media, state.selectedMediaId, visibleStopIdSet],
   );
   const areaCollection = useMemo(
-    () => areaVisitCollection(areaVisitsByDay, stopDisplayCoordinates, state),
-    [areaVisitsByDay, state, stopDisplayCoordinates],
+    () =>
+      areaVisitCollection(
+        areaVisitsByDay,
+        stopDisplayCoordinates,
+        state,
+        expandedAreaId,
+      ),
+    [areaVisitsByDay, expandedAreaId, state, stopDisplayCoordinates],
   );
   const hasMapData =
     routeCollection.features.length > 0 ||
@@ -5195,10 +5248,11 @@ function StoryMapCanvas({
       model.stops
         .filter(
           (stop) =>
-            state.viewMode !== "STOP" ||
+            !["STOP", "MOMENT"].includes(state.viewMode) ||
             !state.selectedDayId ||
             stop.dayId === state.selectedDayId,
         )
+        .filter((stop) => !visibleStopIdSet || visibleStopIdSet.has(stop.id))
         .map((stop) => {
           const coordinates = stopDisplayCoordinates.get(stop.id) ?? null;
           const stopMedia = model.media.filter(
@@ -5223,8 +5277,54 @@ function StoryMapCanvas({
       state.selectedDayId,
       state.viewMode,
       stopDisplayCoordinates,
+      visibleStopIdSet,
     ],
   );
+  const areaMarkerData = useMemo(() => {
+    if (!activeMapAreaVisits) {
+      return [];
+    }
+    return activeMapAreaVisits.areas
+      .filter((area) => area.id !== expandedAreaId)
+      .map((area) => {
+        const areaStopIds = new Set(area.stops.map((stop) => stop.id));
+        const coordinates = centerOfCoordinates(
+          area.stops
+            .map((stop) => stopDisplayCoordinates.get(stop.id) ?? null)
+            .filter((coordinate) => coordinate !== null),
+        );
+        const areaMedia = model.media.filter((item) =>
+          areaStopIds.has(item.stopId),
+        );
+        const featuredMedia =
+          areaMedia.find((item) => item.thumbnailUrl) ?? areaMedia[0] ?? null;
+        const firstStopId =
+          model.stops.find(
+            (stop) =>
+              stop.dayId === activeMapAreaVisits.dayId &&
+              areaStopIds.has(stop.id),
+          )?.id ?? area.stops[0]?.id;
+        return {
+          area,
+          coordinates,
+          featuredMedia,
+          firstStopId,
+          color:
+            dayColorMap.get(activeMapAreaVisits.dayId) ?? storyDayColors[0],
+          selected: area.id === selectedAreaId,
+          stopCount: area.stops.length,
+        };
+      })
+      .filter((item) => item.coordinates && item.firstStopId);
+  }, [
+    activeMapAreaVisits,
+    dayColorMap,
+    expandedAreaId,
+    model.media,
+    model.stops,
+    selectedAreaId,
+    stopDisplayCoordinates,
+  ]);
   const orderedDayMarkerData = useMemo(
     () =>
       [...dayMarkerData].sort((left, right) => {
@@ -5243,8 +5343,39 @@ function StoryMapCanvas({
       }),
     [state.selectedStopId, stopMarkerData],
   );
+  const orderedAreaMarkerData = useMemo(
+    () =>
+      [...areaMarkerData].sort(
+        (left, right) => Number(left.selected) - Number(right.selected),
+      ),
+    [areaMarkerData],
+  );
   const showDayMarkers =
     state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
+
+  useEffect(() => {
+    if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
+      setExpandedAreaId(null);
+      return;
+    }
+    if (!expandedAreaId) {
+      return;
+    }
+    if (!state.selectedStopId) {
+      return;
+    }
+    const selectedStopArea =
+      areaMembershipByStopId.get(state.selectedStopId)?.area.id ?? null;
+    if (selectedStopArea !== expandedAreaId) {
+      setExpandedAreaId(null);
+    }
+  }, [
+    areaMembershipByStopId,
+    expandedAreaId,
+    state.selectedDayId,
+    state.selectedStopId,
+    state.viewMode,
+  ]);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) {
@@ -5305,26 +5436,10 @@ function StoryMapCanvas({
           "fill-color": "#267563",
           "fill-opacity": [
             "case",
-            ["==", ["get", "selected"], true],
-            0.2,
-            0.12,
+            ["==", ["get", "expanded"], true],
+            0.18,
+            0.08,
           ],
-        },
-      });
-      map.addLayer({
-        id: "area-visits-outline",
-        type: "line",
-        source: "trip-areas",
-        paint: {
-          "line-color": [
-            "case",
-            ["==", ["get", "selected"], true],
-            "#174a40",
-            "#267563",
-          ],
-          "line-width": ["case", ["==", ["get", "selected"], true], 2.4, 1.4],
-          "line-dasharray": [2, 1.2],
-          "line-opacity": 0.78,
         },
       });
       map.addLayer({
@@ -5448,6 +5563,7 @@ function StoryMapCanvas({
             stopPhotoMarkers.current,
             stateRef.current.selectedDayId,
             stateRef.current.selectedStopId,
+            selectedAreaIdRef.current,
           ),
         );
       });
@@ -5550,11 +5666,74 @@ function StoryMapCanvas({
         stopPhotoMarkers.current,
         state.selectedDayId,
         state.selectedStopId,
+        selectedAreaId,
       );
       return () => {
         stopPhotoMarkers.current.forEach((marker) => marker.remove());
         stopPhotoMarkers.current = [];
       };
+    }
+    for (const {
+      area,
+      coordinates,
+      featuredMedia,
+      firstStopId,
+      color,
+      stopCount,
+    } of orderedAreaMarkerData) {
+      if (!coordinates || !firstStopId) {
+        continue;
+      }
+      const title = area.title ?? `Area ${area.sortOrder}`;
+      const markerAnchor = document.createElement("div");
+      markerAnchor.className = "photo-map-marker-anchor";
+      markerAnchor.dataset.dayId = area.dayId;
+      markerAnchor.dataset.areaId = area.id;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "photo-area-marker";
+      element.setAttribute(
+        "aria-label",
+        `Show ${stopCount} stops in ${title}, area ${area.sortOrder}`,
+      );
+      element.style.setProperty("--stop-color", color);
+      const bubble = document.createElement("span");
+      bubble.className = "photo-area-marker-image";
+      if (featuredMedia?.thumbnailUrl) {
+        const image = document.createElement("img");
+        image.src = featuredMedia.thumbnailUrl;
+        image.alt = "";
+        image.loading = "lazy";
+        bubble.appendChild(image);
+        const orderBadge = document.createElement("small");
+        orderBadge.className = "photo-area-marker-order";
+        orderBadge.textContent = `A${area.sortOrder}`;
+        bubble.appendChild(orderBadge);
+      } else {
+        const fallback = document.createElement("span");
+        fallback.textContent = `A${area.sortOrder}`;
+        bubble.appendChild(fallback);
+      }
+      const label = document.createElement("strong");
+      label.className = "photo-area-marker-label";
+      label.textContent = `${title} · ${stopCount} stop${
+        stopCount === 1 ? "" : "s"
+      }`;
+      element.appendChild(bubble);
+      element.appendChild(label);
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setExpandedAreaId(area.id);
+        onStateChange(
+          selectStoryStop(stateRef.current, firstStopId, area.dayId),
+        );
+      });
+      markerAnchor.appendChild(element);
+      stopPhotoMarkers.current.push(
+        new maplibregl.Marker({ anchor: "center", element: markerAnchor })
+          .setLngLat(coordinates)
+          .addTo(map),
+      );
     }
     for (const {
       stop,
@@ -5619,6 +5798,7 @@ function StoryMapCanvas({
       stopPhotoMarkers.current,
       state.selectedDayId,
       state.selectedStopId,
+      selectedAreaId,
     );
     return () => {
       stopPhotoMarkers.current.forEach((marker) => marker.remove());
@@ -5628,7 +5808,9 @@ function StoryMapCanvas({
     onDayMarkerClick,
     onStopMarkerClick,
     orderedDayMarkerData,
+    orderedAreaMarkerData,
     orderedStopMarkerData,
+    selectedAreaId,
     showDayMarkers,
     state.selectedDayId,
     state.selectedStopId,
@@ -5639,8 +5821,9 @@ function StoryMapCanvas({
       stopPhotoMarkers.current,
       state.selectedDayId,
       state.selectedStopId,
+      selectedAreaId,
     );
-  }, [state.selectedDayId, state.selectedStopId]);
+  }, [selectedAreaId, state.selectedDayId, state.selectedStopId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5810,6 +5993,7 @@ type AreaVisitFeature = {
     dayId: string;
     title: string;
     selected: boolean;
+    expanded: boolean;
   };
   geometry: {
     type: "Polygon";
@@ -5817,19 +6001,41 @@ type AreaVisitFeature = {
   };
 };
 
+function areaMembershipMap(
+  areaVisitsByDay: Record<string, AreaVisitsResponse>,
+): Map<string, { area: AreaVisitResponse; dayId: string }> {
+  const memberships = new Map<
+    string,
+    { area: AreaVisitResponse; dayId: string }
+  >();
+  for (const [dayId, areaVisits] of Object.entries(areaVisitsByDay)) {
+    for (const area of areaVisits.areas) {
+      for (const stop of area.stops) {
+        memberships.set(stop.id, { area, dayId });
+      }
+    }
+  }
+  return memberships;
+}
+
 function areaVisitCollection(
   areaVisitsByDay: Record<string, AreaVisitsResponse>,
   stopCoordinates: Map<string, [number, number]>,
   state: StoryMapState,
+  expandedAreaId: string | null,
 ) {
   const activeDayId =
     state.viewMode === "TRIP_OVERVIEW" ? null : state.selectedDayId;
+  const showExpandedAreaOnly = ["STOP", "MOMENT"].includes(state.viewMode);
   const features: AreaVisitFeature[] = [];
   for (const [dayId, areaVisits] of Object.entries(areaVisitsByDay)) {
     if (activeDayId && dayId !== activeDayId) {
       continue;
     }
     for (const area of areaVisits.areas) {
+      if (showExpandedAreaOnly && area.id !== expandedAreaId) {
+        continue;
+      }
       const coordinates = area.stops
         .map((stop) => stopCoordinates.get(stop.id) ?? null)
         .filter((coordinate) => coordinate !== null);
@@ -5845,6 +6051,7 @@ function areaVisitCollection(
           dayId,
           title: area.title ?? `Area ${area.sortOrder}`,
           selected: area.stops.some((stop) => stop.id === state.selectedStopId),
+          expanded: area.id === expandedAreaId,
         },
         geometry: {
           type: "Polygon",

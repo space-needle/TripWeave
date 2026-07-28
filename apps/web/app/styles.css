@@ -1452,7 +1452,8 @@ button.needs-update {
 }
 
 .photo-map-marker-anchor > .photo-day-marker,
-.photo-map-marker-anchor > .photo-stop-marker {
+.photo-map-marker-anchor > .photo-stop-marker,
+.photo-map-marker-anchor > .photo-area-marker {
   position: absolute;
   top: 0;
   left: 0;
@@ -1619,6 +1620,120 @@ button.needs-update {
 .photo-stop-marker.active .photo-stop-marker-label {
   border-color: color-mix(in srgb, var(--stop-color, var(--accent)) 45%, #fff);
   color: var(--accent-strong);
+}
+
+.photo-area-marker {
+  position: relative;
+  min-width: 98px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: zoom-in;
+  padding: 0;
+  filter: drop-shadow(0 14px 28px rgb(23 32 42 / 22%));
+}
+
+.photo-area-marker::before {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  z-index: -1;
+  width: 86px;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  content: "";
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--stop-color, var(--accent)) 38%, transparent) 0%,
+    color-mix(in srgb, var(--stop-color, var(--accent)) 18%, transparent) 48%,
+    transparent 76%
+  );
+  transform: translate(-50%, -50%);
+}
+
+.photo-area-marker-image {
+  position: relative;
+  width: 56px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: var(--stop-color, var(--accent));
+  color: #fff;
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--stop-color, var(--accent)) 72%, #fff),
+    0 0 0 14px
+      color-mix(in srgb, var(--stop-color, var(--accent)) 18%, transparent),
+    0 14px 30px rgb(23 32 42 / 24%);
+}
+
+.photo-area-marker-image img,
+.photo-area-marker-image > span {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.photo-area-marker-image img {
+  display: block;
+  object-fit: cover;
+}
+
+.photo-area-marker-image > span {
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.photo-area-marker-order {
+  position: absolute;
+  right: -14px;
+  bottom: -5px;
+  min-width: 28px;
+  min-height: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--text);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.photo-area-marker-label {
+  max-width: 136px;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in srgb, var(--stop-color, var(--accent)) 32%, #fff);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 94%);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.15;
+  padding: 4px 9px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-area-marker.active .photo-area-marker-image {
+  box-shadow:
+    0 0 0 6px var(--stop-color, var(--accent)),
+    0 0 0 15px rgb(255 255 255 / 72%),
+    0 0 0 24px
+      color-mix(in srgb, var(--stop-color, var(--accent)) 24%, transparent),
+    0 18px 36px rgb(23 32 42 / 28%);
 }
 
 .photo-day-marker {
