@@ -641,3 +641,154 @@ def test_incremental_reconstruction_adds_new_media_without_replacing_story(
             ).scalar_one()
             == 1
         )
+
+
+def test_full_rebuild_preserves_media_under_locked_stops(
+    migrated_database: Engine,
+) -> None:
+    user = factories.user_row(email="owner-full-rebuild@example.com")
+    trip = factories.trip_row(
+        created_by=cast(UUID, user["id"]),
+        timezone_id="America/Los_Angeles",
+    )
+    owner_member = factories.member_row(
+        trip_id=cast(UUID, trip["id"]), user_id=cast(UUID, user["id"])
+    )
+    owner_member["role"] = "owner"
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO users (id, email, password_hash, display_name)
+                VALUES (:id, :email, :password_hash, :display_name)
+                """
+            ),
+            user,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trips (id, title, timezone_id, created_by)
+                VALUES (:id, :title, :timezone_id, :created_by)
+                """
+            ),
+            trip,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trip_members (id, trip_id, user_id, role, display_name)
+                VALUES (:id, :trip_id, :user_id, :role, :display_name)
+                """
+            ),
+            owner_member,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="locked-stop-photo.jpg",
+            captured_at="2026-07-02T16:00:00+00:00",
+            latitude=37.0000,
+            longitude=-122.0000,
+            sha256="9" * 64,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
+            filename="other-stop-photo.jpg",
+            captured_at="2026-07-02T18:00:00+00:00",
+            latitude=37.0100,
+            longitude=-122.0100,
+            sha256="a" * 64,
+        )
+
+    with Session(migrated_database) as session:
+        db_trip = session.get(orm.Trip, trip["id"])
+        assert db_trip is not None
+        initial = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        assert initial.stops == 2
+
+        locked_stop_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM stops
+                WHERE trip_id = :trip_id
+                ORDER BY starts_at_utc
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        session.execute(
+            text(
+                """
+                UPDATE stops
+                SET user_locked = true,
+                    source = 'user_correction'
+                WHERE id = :stop_id
+                """
+            ),
+            {"stop_id": locked_stop_id},
+        )
+        session.commit()
+
+        rebuilt = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        assert rebuilt.days == 1
+
+        latest_run_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM reconstruction_runs
+                WHERE trip_id = :trip_id
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        locked_stop_visible_media_count = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM moment_media mm
+                JOIN moments mo ON mo.id = mm.moment_id
+                WHERE mo.stop_id = :stop_id
+                    AND (mm.reconstruction_run_id = :run_id OR mm.user_locked = true)
+                    AND (mo.reconstruction_run_id = :run_id OR mo.user_locked = true)
+                """
+            ),
+            {"stop_id": locked_stop_id, "run_id": latest_run_id},
+        ).scalar_one()
+        visible_stop_count = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM stops
+                WHERE trip_id = :trip_id
+                    AND (reconstruction_run_id = :run_id OR user_locked = true)
+                """
+            ),
+            {"trip_id": trip["id"], "run_id": latest_run_id},
+        ).scalar_one()
+        duplicate_locked_media_stop_count = session.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT mo.stop_id)
+                FROM moment_media mm
+                JOIN moments mo ON mo.id = mm.moment_id
+                JOIN media_items mi ON mi.id = mm.media_item_id
+                WHERE mi.original_filename = 'locked-stop-photo.jpg'
+                    AND (mm.reconstruction_run_id = :run_id OR mm.user_locked = true)
+                    AND (mo.reconstruction_run_id = :run_id OR mo.user_locked = true)
+                """
+            ),
+            {"run_id": latest_run_id},
+        ).scalar_one()
+
+        assert locked_stop_visible_media_count == 1
+        assert visible_stop_count == 2
+        assert duplicate_locked_media_stop_count == 1

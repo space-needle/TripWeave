@@ -27,6 +27,7 @@ from tripweave.ports.geocoder import Geocoder
 
 ALGORITHM_VERSION = "reconstruction_v1"
 STOP_RADIUS_METERS = 150
+EMPTY_LOCKED_STOP_MERGE_RADIUS_METERS = 300
 STOP_GAP_MINUTES = 60
 MOMENT_GAP_MINUTES = 15
 MISSING_GPS_BRACKET_MINUTES = 30
@@ -88,6 +89,16 @@ class StopCluster:
         return sum(self.longitudes) / len(self.longitudes)
 
 
+@dataclass(frozen=True, slots=True)
+class LockedMomentSnapshot:
+    stop_id: UUID
+    position: int
+    title: str | None
+    starts_at_utc: datetime
+    ends_at_utc: datetime
+    media_ids: tuple[UUID, ...]
+
+
 def reconstruct_trip(
     *,
     db: Session,
@@ -140,18 +151,30 @@ def reconstruct_trip(
         db.commit()
         return summary
 
+    locked_snapshots = locked_stop_moment_snapshots(db, trip.id)
+    locked_media_ids = {
+        media_id for snapshot in locked_snapshots for media_id in snapshot.media_ids
+    }
+    rebuild_usable = [point for point in usable if point.id not in locked_media_ids]
+    rebuild_missing_time = [point for point in missing_time if point.id not in locked_media_ids]
+
     delete_unlocked_outputs(db, trip.id)
-    review_count = add_unknown_time_reviews(db, run, trip.id, missing_time)
+    review_count = add_unknown_time_reviews(db, run, trip.id, rebuild_missing_time)
     gps_points = [
-        point for point in usable if point.latitude is not None and point.longitude is not None
+        point
+        for point in rebuild_usable
+        if point.latitude is not None and point.longitude is not None
     ]
     clusters = cluster_stops(gps_points)
     created = persist_clusters(db, run, trip.id, clusters, geocoder)
-    review_count += assign_missing_gps(db, run, trip.id, usable, gps_points)
-    moments = persist_moments(db, run, created, usable)
-    legs = persist_legs(db, run, created, usable)
+    review_count += assign_missing_gps(db, run, trip.id, rebuild_usable, gps_points)
+    restored_days = restore_locked_stop_moments(db, run, locked_snapshots, media_points)
+    moments = persist_moments(db, run, created, rebuild_usable)
+    legs = persist_legs(db, run, created, rebuild_usable)
     merge_visible_trip_days_by_date(db, trip.id, run)
     merge_empty_locked_stops_with_generated_media(db, trip.id, run)
+    for day_id in restored_days:
+        rebuild_day_legs(db, run, day_id)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
     area_visit_summaries = persist_area_visits_for_trip(db=db, trip_id=trip.id, run=run)
@@ -378,6 +401,123 @@ def unassigned_media_points(
     return [
         point for point in usable if point.id not in assigned_ids and point.id not in reviewed_ids
     ]
+
+
+def locked_stop_moment_snapshots(db: Session, trip_id: UUID) -> list[LockedMomentSnapshot]:
+    moments = list(
+        db.scalars(
+            select(orm.Moment)
+            .join(orm.Stop, orm.Stop.id == orm.Moment.stop_id)
+            .where(
+                orm.Moment.trip_id == trip_id,
+                orm.Stop.user_locked.is_(True),
+            )
+            .order_by(orm.Moment.stop_id, orm.Moment.position, orm.Moment.starts_at_utc)
+        )
+    )
+    snapshots: list[LockedMomentSnapshot] = []
+    for moment in moments:
+        media_ids = tuple(
+            db.scalars(
+                select(orm.MomentMedia.media_item_id)
+                .where(orm.MomentMedia.moment_id == moment.id)
+                .order_by(orm.MomentMedia.position, orm.MomentMedia.id)
+            )
+        )
+        if not media_ids:
+            continue
+        snapshots.append(
+            LockedMomentSnapshot(
+                stop_id=moment.stop_id,
+                position=moment.position,
+                title=moment.title,
+                starts_at_utc=moment.starts_at_utc,
+                ends_at_utc=moment.ends_at_utc,
+                media_ids=media_ids,
+            )
+        )
+    return snapshots
+
+
+def restore_locked_stop_moments(
+    db: Session,
+    run: orm.ReconstructionRun,
+    snapshots: list[LockedMomentSnapshot],
+    media_points: list[MediaPoint],
+) -> set[UUID]:
+    media_by_id = {point.id: point for point in media_points}
+    restored_day_ids: set[UUID] = set()
+    for snapshot in snapshots:
+        stop = db.get(orm.Stop, snapshot.stop_id)
+        if stop is None or not stop.user_locked:
+            continue
+        missing_media_ids = [
+            media_id
+            for media_id in snapshot.media_ids
+            if media_id in media_by_id
+            and not media_is_assigned_to_stop(db, media_id=media_id, stop_id=stop.id)
+        ]
+        if not missing_media_ids:
+            continue
+        moment = orm.Moment(
+            trip_id=stop.trip_id,
+            stop_id=stop.id,
+            title=snapshot.title,
+            position=snapshot.position,
+            starts_at_utc=snapshot.starts_at_utc,
+            ends_at_utc=snapshot.ends_at_utc,
+            **generated(run, 0.85),
+        )
+        db.add(moment)
+        db.flush()
+        for position, media_id in enumerate(missing_media_ids, start=1):
+            point = media_by_id[media_id]
+            db.add(
+                orm.MomentMedia(
+                    trip_id=stop.trip_id,
+                    moment_id=moment.id,
+                    media_item_id=media_id,
+                    position=position,
+                    **generated(run, 0.85),
+                )
+            )
+            if (
+                db.execute(
+                    select(orm.MomentParticipant).where(
+                        orm.MomentParticipant.moment_id == moment.id,
+                        orm.MomentParticipant.trip_member_id == point.contributor_member_id,
+                    )
+                ).scalar_one_or_none()
+                is None
+            ):
+                db.add(
+                    orm.MomentParticipant(
+                        trip_id=stop.trip_id,
+                        moment_id=moment.id,
+                        trip_member_id=point.contributor_member_id,
+                        **generated(run, 0.85),
+                    )
+                )
+        restored_day_ids.add(stop.trip_day_id)
+    for day_id in restored_day_ids:
+        renumber_day_stops(db, day_id)
+        for stop in db.scalars(select(orm.Stop).where(orm.Stop.trip_day_id == day_id)):
+            renumber_stop_moments(db, stop.id)
+    return restored_day_ids
+
+
+def media_is_assigned_to_stop(db: Session, *, media_id: UUID, stop_id: UUID) -> bool:
+    return bool(
+        db.scalar(
+            select(
+                exists().where(
+                    orm.MomentMedia.media_item_id == media_id,
+                    orm.MomentMedia.moment_id == orm.Moment.id,
+                    orm.Moment.stop_id == stop_id,
+                )
+            )
+        )
+    )
 
 
 def find_incremental_stop(db: Session, trip_id: UUID, point: MediaPoint) -> orm.Stop | None:
@@ -850,11 +990,32 @@ def best_empty_locked_stop_target(
             source_latitude,
             source_longitude,
         )
-        if distance > STOP_RADIUS_METERS:
+        if distance > EMPTY_LOCKED_STOP_MERGE_RADIUS_METERS:
+            continue
+        if distance > STOP_RADIUS_METERS and not stop_names_match(db, target, source):
             continue
         if best is None or distance < best[0]:
             best = (distance, target)
     return best[1] if best is not None else None
+
+
+def stop_names_match(db: Session, left: orm.Stop, right: orm.Stop) -> bool:
+    left_names = normalized_stop_names(db, left)
+    right_names = normalized_stop_names(db, right)
+    return bool(left_names & right_names)
+
+
+def normalized_stop_names(db: Session, stop: orm.Stop) -> set[str]:
+    names = {normalize_match_name(stop.title)}
+    place = db.get(orm.Place, stop.place_id)
+    if place is not None:
+        names.add(normalize_match_name(place.name))
+    names.discard("")
+    return names
+
+
+def normalize_match_name(value: str | None) -> str:
+    return " ".join(value.lower().strip().split()) if value else ""
 
 
 def merge_stop_into_target(db: Session, source: orm.Stop, target: orm.Stop) -> None:
