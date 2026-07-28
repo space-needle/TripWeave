@@ -286,6 +286,7 @@ function OwnerWorkspace() {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const selectedTripIdRef = useRef<string | null>(null);
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -309,6 +310,9 @@ function OwnerWorkspace() {
     useState<ReconstructionResponse | null>(null);
   const [storyProjection, setStoryProjection] =
     useState<ReconstructionResponse | null>(null);
+  const [storyDataTripId, setStoryDataTripId] = useState<string | null>(null);
+  const [isStoryProjectionLoading, setIsStoryProjectionLoading] =
+    useState(false);
   const [reconstructionError, setReconstructionError] = useState("");
   const [reviewIndex, setReviewIndex] = useState(0);
   const [storyState, setStoryState] = useState<StoryMapState>(() =>
@@ -339,7 +343,15 @@ function OwnerWorkspace() {
   );
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
-  const storyForExplorer = reconstruction ?? storyProjection;
+  const selectedTripHasStoryData =
+    selectedTrip !== null && storyDataTripId === selectedTrip.id;
+  const storyForExplorer = selectedTripHasStoryData
+    ? (reconstruction ?? storyProjection)
+    : null;
+  const isStoryExplorerLoading =
+    selectedTrip !== null &&
+    isStoryProjectionLoading &&
+    !selectedTripHasStoryData;
   const storyUpdate = storyForExplorer?.storyUpdate ?? null;
   const storyUpdateNeeded = Boolean(storyUpdate?.needsUpdate);
   const storyUpdateLabel = storyUpdate
@@ -381,6 +393,11 @@ function OwnerWorkspace() {
     selectedTrip && ["owner", "editor"].includes(selectedTrip.role),
   );
 
+  const setSelectedTripSelection = useCallback((tripId: string | null) => {
+    selectedTripIdRef.current = tripId;
+    setSelectedTripId(tripId);
+  }, []);
+
   const loadTrips = useCallback(
     async (preferredTripId: string | null = null) => {
       const result = await api.trips();
@@ -391,11 +408,15 @@ function OwnerWorkspace() {
           ? preferredTripId
           : (result.trips[0]?.id ?? null);
       const nextTrip = result.trips.find((trip) => trip.id === next) ?? null;
-      setSelectedTripId(next);
+      setSelectedTripSelection(next);
       setSettingsForm(nextTrip ? fromTrip(nextTrip) : emptyTripForm);
+      setReconstruction(null);
+      setStoryProjection(null);
+      setStoryDataTripId(null);
+      setIsStoryProjectionLoading(Boolean(next));
       setStoryState(initialStoryMapState());
     },
-    [],
+    [setSelectedTripSelection],
   );
 
   const loadUploadSessions = useCallback(async (tripId: string | null) => {
@@ -424,20 +445,52 @@ function OwnerWorkspace() {
   const loadReconstruction = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setReconstruction(null);
+      setStoryProjection(null);
+      setStoryDataTripId(null);
+      setIsStoryProjectionLoading(false);
       return;
     }
-    const result = await api.reconstruction(tripId);
-    setReconstruction(result);
-    setStoryProjection(result);
+    if (selectedTripIdRef.current === tripId) {
+      setIsStoryProjectionLoading(true);
+    }
+    try {
+      const result = await api.reconstruction(tripId);
+      if (selectedTripIdRef.current !== tripId) {
+        return;
+      }
+      setReconstruction(result);
+      setStoryProjection(result);
+      setStoryDataTripId(tripId);
+    } finally {
+      if (selectedTripIdRef.current === tripId) {
+        setIsStoryProjectionLoading(false);
+      }
+    }
   }, []);
 
   const loadStoryProjection = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setStoryProjection(null);
+      setStoryDataTripId(null);
+      setIsStoryProjectionLoading(false);
       return;
     }
-    const result = await api.storyDraftProjection(tripId);
-    setStoryProjection(result);
+    if (selectedTripIdRef.current === tripId) {
+      setIsStoryProjectionLoading(true);
+    }
+    try {
+      const result = await api.storyDraftProjection(tripId);
+      if (selectedTripIdRef.current !== tripId) {
+        return;
+      }
+      setReconstruction(null);
+      setStoryProjection(result);
+      setStoryDataTripId(tripId);
+    } finally {
+      if (selectedTripIdRef.current === tripId) {
+        setIsStoryProjectionLoading(false);
+      }
+    }
   }, []);
 
   const loadCollaboration = useCallback(async (tripId: string | null) => {
@@ -463,10 +516,14 @@ function OwnerWorkspace() {
   }, []);
 
   function selectTrip(trip: TripResponse) {
-    setSelectedTripId(trip.id);
+    setSelectedTripSelection(trip.id);
     setSettingsForm(fromTrip(trip));
     setReconstruction(null);
     setStoryProjection(null);
+    setStoryDataTripId(null);
+    setIsStoryProjectionLoading(true);
+    setStoryState(initialStoryMapState());
+    setReconstructionError("");
     void loadUploadSessions(trip.id);
     void loadMedia(trip.id);
     void loadStoryProjection(trip.id);
@@ -487,14 +544,17 @@ function OwnerWorkspace() {
     const remaining = trips.filter((trip) => trip.id !== tripId);
     const nextTrip = remaining[0] ?? null;
     setTrips(remaining);
-    setSelectedTripId(nextTrip?.id ?? null);
+    setSelectedTripSelection(nextTrip?.id ?? null);
     setSettingsForm(nextTrip ? fromTrip(nextTrip) : emptyTripForm);
+    setReconstruction(null);
+    setStoryProjection(null);
+    setStoryDataTripId(null);
+    setStoryState(initialStoryMapState());
+    setIsStoryProjectionLoading(Boolean(nextTrip));
     if (!nextTrip) {
       setUploadSessions([]);
       setMedia([]);
       setSimilarityGroups([]);
-      setReconstruction(null);
-      setStoryProjection(null);
       setInvitations([]);
       setMembers([]);
       setPublications(null);
@@ -676,10 +736,15 @@ function OwnerWorkspace() {
       await api.logout();
       setUser(null);
       setTrips([]);
-      setSelectedTripId(null);
+      setSelectedTripSelection(null);
       setUploadSessions([]);
       setMedia([]);
       setSimilarityGroups([]);
+      setReconstruction(null);
+      setStoryProjection(null);
+      setStoryDataTripId(null);
+      setIsStoryProjectionLoading(false);
+      setStoryState(initialStoryMapState());
       setInvitations([]);
       setMembers([]);
       setPublications(null);
@@ -1737,6 +1802,7 @@ function OwnerWorkspace() {
                 <TripStoryExplorer
                   reconstruction={storyForExplorer}
                   tripId={selectedTrip.id}
+                  isLoading={isStoryExplorerLoading}
                   state={storyState}
                   onStateChange={setStoryState}
                   onMergeStops={
@@ -2601,6 +2667,7 @@ function hasConfiguredMapStyle(): boolean {
 function TripStoryExplorer({
   reconstruction,
   tripId,
+  isLoading = false,
   state,
   onStateChange,
   initialAreaVisitsByDay,
@@ -2620,6 +2687,7 @@ function TripStoryExplorer({
 }: {
   reconstruction: ReconstructionResponse | null;
   tripId?: string;
+  isLoading?: boolean;
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
   initialAreaVisitsByDay?: Record<string, AreaVisitsResponse>;
@@ -3035,6 +3103,14 @@ function TripStoryExplorer({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [closePhotoRoll, isPhotoRollVisible]);
+
+  if (isLoading) {
+    return (
+      <div className="story-empty" aria-busy="true">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   if (!reconstruction?.latestRun) {
     return (
