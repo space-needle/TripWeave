@@ -1722,6 +1722,61 @@ button.needs-update {
   padding-left: 0;
 }
 
+.timeline-day-list {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+}
+
+.timeline-day-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+  scroll-padding-inline: 8px;
+  scrollbar-width: none;
+}
+
+.timeline-day-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.timeline-day-strip button {
+  flex: 0 0 86px;
+  min-height: 70px;
+  display: grid;
+  gap: 3px;
+  place-items: center;
+  border-color: var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.timeline-day-strip button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.timeline-day-strip span {
+  color: inherit;
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.timeline-day-strip strong {
+  color: inherit;
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .timeline-day.active {
   border-left-color: transparent;
 }
@@ -2948,6 +3003,8 @@ button.thumb-frame:focus-visible {
 
   .story-mobile-pane-timeline {
     border-radius: 18px;
+    max-height: calc(100vh - 104px);
+    overflow: hidden;
   }
 
   .story-mobile-pane-timeline .story-map-panel,
@@ -2957,14 +3014,30 @@ button.thumb-frame:focus-visible {
   }
 
   .story-mobile-pane-timeline .story-side-panel {
+    min-height: 0;
     border-top: 0;
     border-radius: 18px;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .story-mobile-pane-timeline .story-timeline {
+    grid-template-rows: auto minmax(0, 1fr);
     min-height: 0;
-    padding-bottom: 118px;
+    max-height: calc(100vh - 104px);
+    overflow: hidden;
+    padding: 16px 0 0;
+  }
+
+  .story-mobile-pane-timeline .screen-reader-map-summary,
+  .story-mobile-pane-timeline .timeline-day-strip {
+    margin-inline: 16px;
+  }
+
+  .story-mobile-pane-timeline .timeline-day-list {
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
 
   .public-story-shell {
