@@ -161,6 +161,7 @@ class EditOperationType(StrEnum):
     RENAME_AREA_VISIT = "rename_area_visit"
     ADD_AREA_VISIT_STOP = "add_area_visit_stop"
     REMOVE_AREA_VISIT_STOP = "remove_area_visit_stop"
+    DELETE_AREA_VISIT = "delete_area_visit"
     SET_DAY_NOTE = "set_day_note"
     SET_STOP_NOTE = "set_stop_note"
     MOVE_STOP_ON_MAP = "move_stop_on_map"

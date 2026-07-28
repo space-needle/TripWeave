@@ -1839,6 +1839,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if not isinstance(current, datetime) or current != expected_updated_at:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stale edit target")
 
+    def expected_area_not_deleted(area: orm.AreaVisit) -> None:
+        if area.deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Area is deleted")
+
     def latest_run_for_trip(db: DbSession, trip_id: UUID) -> orm.ReconstructionRun:
         run = db.execute(
             select(orm.ReconstructionRun)
@@ -1894,6 +1898,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             "areaVisitId": str(area.id),
             "title": area.title,
             "userLocked": area.user_locked,
+            "deletedAt": json_value(area.deleted_at),
             "stopIds": [str(stop.id) for _, stop, _, _ in area_visit_membership_rows(db, area.id)],
         }
 
@@ -2641,6 +2646,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             }
             model, label, key = model_by_type[operation_type]
             record = get_trip_record(db, model, payload_uuid(data, key), trip_id, label)
+            if isinstance(record, orm.AreaVisit):
+                expected_area_not_deleted(record)
             expected_fresh(record, payload.expected_updated_at)
             before = record_values(record, ["title", "user_locked"])
             title_field = "title"
@@ -2656,6 +2663,34 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             after = record_values(record, ["title", "user_locked"])
             target_type, target_id = label, record.id
 
+        elif operation_type == EditOperationType.DELETE_AREA_VISIT.value:
+            area = get_trip_record(
+                db,
+                orm.AreaVisit,
+                payload_uuid(data, "areaVisitId"),
+                trip_id,
+                "area_visit",
+            )
+            expected_fresh(area, payload.expected_updated_at)
+            if area.deleted_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Area is already deleted",
+                )
+            before = area_visit_snapshot(db, area)
+            now = datetime.now(UTC)
+            area.deleted_at = now
+            lock_record(area)
+            rows = area_visit_membership_rows(db, area.id)
+            for area_membership, stop, _, _ in rows:
+                area_membership.membership_source = ReconstructionSource.USER_CORRECTION.value
+                area_membership.confidence = 1.0
+                area_membership.user_locked = True
+                area_membership.updated_at = now
+                lock_record(stop)
+            after = area_visit_snapshot(db, area)
+            target_type, target_id = "area_visit", area.id
+
         elif operation_type == EditOperationType.ADD_AREA_VISIT_STOP.value:
             area = get_trip_record(
                 db,
@@ -2665,6 +2700,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 "area_visit",
             )
             stop = get_trip_record(db, orm.Stop, payload_uuid(data, "stopId"), trip_id, "stop")
+            expected_area_not_deleted(area)
             expected_fresh(area, payload.expected_updated_at)
             if stop.trip_day_id != area.trip_day_id:
                 raise HTTPException(
@@ -2718,6 +2754,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 "area_visit",
             )
             stop_id = payload_uuid(data, "stopId")
+            expected_area_not_deleted(area)
             expected_fresh(area, payload.expected_updated_at)
             rows = area_visit_membership_rows(db, area.id)
             if len(rows) <= 1:
@@ -4244,6 +4281,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .where(
                     orm.AreaVisit.trip_id == trip_id,
                     orm.AreaVisit.trip_day_id == day_id,
+                    orm.AreaVisit.deleted_at.is_(None),
                     or_(active_generated, orm.AreaVisit.user_locked.is_(True)),
                 )
                 .order_by(

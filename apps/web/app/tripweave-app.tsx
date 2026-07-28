@@ -1265,6 +1265,23 @@ function OwnerWorkspace() {
     }
   }
 
+  async function deleteAreaVisit(areaVisitId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "delete_area_visit",
+        payload: { areaVisitId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function publishTrip() {
     if (!selectedTrip) {
       return;
@@ -1622,6 +1639,9 @@ function OwnerWorkspace() {
                   }
                   onRemoveAreaVisitStop={
                     canOrganizeSelectedTrip ? removeAreaVisitStop : undefined
+                  }
+                  onDeleteAreaVisit={
+                    canOrganizeSelectedTrip ? deleteAreaVisit : undefined
                   }
                   onRenameAreaVisit={
                     canOrganizeSelectedTrip ? renameAreaVisit : undefined
@@ -2472,6 +2492,7 @@ function TripStoryExplorer({
   onStateChange,
   initialAreaVisitsByDay,
   onAddAreaVisitStop,
+  onDeleteAreaVisit,
   onMergeStops,
   onRemoveAreaVisitStop,
   onRenameAreaVisit,
@@ -2489,6 +2510,7 @@ function TripStoryExplorer({
   onStateChange: (state: StoryMapState) => void;
   initialAreaVisitsByDay?: Record<string, AreaVisitsResponse>;
   onAddAreaVisitStop?: (areaVisitId: string, stopId: string) => Promise<void>;
+  onDeleteAreaVisit?: (areaVisitId: string) => Promise<void>;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
   onRemoveAreaVisitStop?: (
     areaVisitId: string,
@@ -3186,6 +3208,24 @@ function TripStoryExplorer({
     }
   }
 
+  async function deleteArea(area: AreaVisitResponse) {
+    if (!onDeleteAreaVisit) {
+      return;
+    }
+    const key = `delete:${area.id}`;
+    setSavingAreaActionKey(key);
+    setAreaEditError("");
+    try {
+      await onDeleteAreaVisit(area.id);
+      setEditingAreaId(null);
+      setAreaTitleDraft("");
+    } catch (error) {
+      setAreaEditError(messageFrom(error));
+    } finally {
+      setSavingAreaActionKey(null);
+    }
+  }
+
   function startRenamingStop(
     stop: ReconstructionResponse["days"][number]["stops"][number],
   ) {
@@ -3693,7 +3733,8 @@ function TripStoryExplorer({
                 const canEditArea =
                   onRenameAreaVisit ||
                   onAddAreaVisitStop ||
-                  onRemoveAreaVisitStop;
+                  onRemoveAreaVisitStop ||
+                  onDeleteAreaVisit;
                 const areaEdges = areaContext
                   ? areaEditableEdges(day, areaContext.area)
                   : null;
@@ -3873,6 +3914,23 @@ function TripStoryExplorer({
                                     Remove {displayStopPosition(areaStop)}
                                   </button>
                                 ))}
+                              </div>
+                            ) : null}
+                            {onDeleteAreaVisit ? (
+                              <div className="timeline-area-delete-tools">
+                                <button
+                                  type="button"
+                                  className="timeline-tool-button danger"
+                                  disabled={
+                                    savingAreaActionKey ===
+                                    `delete:${areaContext.area.id}`
+                                  }
+                                  onClick={() =>
+                                    void deleteArea(areaContext.area)
+                                  }
+                                >
+                                  Delete area
+                                </button>
                               </div>
                             ) : null}
                             {areaEditError ? (

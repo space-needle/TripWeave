@@ -260,6 +260,7 @@ def delete_existing_generated_area_visits(
             orm.AreaVisit.trip_day_id == day_id,
             orm.AreaVisit.reconstruction_run_id == reconstruction_run_id,
             orm.AreaVisit.user_locked.is_(False),
+            orm.AreaVisit.deleted_at.is_(None),
         )
     )
 

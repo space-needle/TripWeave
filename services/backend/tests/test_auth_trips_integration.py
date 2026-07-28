@@ -1138,6 +1138,43 @@ def test_organizer_can_rename_area_visit_and_adjust_membership(
     ]
     assert [stop["id"] for stop in after_remove["standaloneStops"]] == [standalone_stop_id]
 
+    deleted = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "delete_area_visit",
+            "payload": {"areaVisitId": area_id},
+        },
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["targetType"] == "area_visit"
+    after_delete = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
+    assert after_delete["areas"] == []
+    assert [stop["id"] for stop in after_delete["standaloneStops"]] == [
+        stop["id"] for stop in area["stops"]
+    ] + [standalone_stop_id]
+
+    rerun = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert rerun.status_code == 200, rerun.text
+    after_rerun = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
+    assert after_rerun["areas"] == []
+    with engine.connect() as connection:
+        deleted_at = connection.execute(
+            text(
+                """
+                SELECT deleted_at
+                FROM area_visits
+                WHERE id = CAST(:area_id AS uuid)
+                  AND user_locked = true
+                """
+            ),
+            {"area_id": area_id},
+        ).scalar_one()
+    assert deleted_at is not None
+
     url = get_test_database_url()
     assert url is not None
     invitation = create_invitation(client, csrf_token, trip_id)

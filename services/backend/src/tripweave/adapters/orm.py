@@ -881,6 +881,7 @@ class AreaVisit(Base, GeneratedRecordMixin):
     diagnostics: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AreaVisitStop(Base, TimestampMixin):

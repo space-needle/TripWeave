@@ -327,6 +327,7 @@ def build_manifest(
         select(orm.AreaVisit, area_lat, area_lon)
         .where(
             orm.AreaVisit.trip_id == trip.id,
+            orm.AreaVisit.deleted_at.is_(None),
             or_(
                 orm.AreaVisit.reconstruction_run_id == run.id,
                 orm.AreaVisit.user_locked.is_(True),
