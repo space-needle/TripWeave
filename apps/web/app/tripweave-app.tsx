@@ -3960,6 +3960,9 @@ function TripStoryExplorer({
                   const stopMedia = orderedStopMedia(stop);
                   const areaContext = areaForStop(day, stop.id);
                   const isFirstAreaStop = areaContext?.stops[0]?.id === stop.id;
+                  const isLastAreaStop =
+                    areaContext?.stops[areaContext.stops.length - 1]?.id ===
+                    stop.id;
                   const canEditArea =
                     onRenameAreaVisit ||
                     onAddAreaVisitStop ||
@@ -3974,7 +3977,9 @@ function TripStoryExplorer({
                     <div
                       className={
                         areaContext
-                          ? "timeline-stop-stack in-area"
+                          ? `timeline-stop-stack in-area ${
+                              isFirstAreaStop ? "area-start" : ""
+                            } ${isLastAreaStop ? "area-end" : ""}`
                           : "timeline-stop-stack"
                       }
                       key={stop.id}
