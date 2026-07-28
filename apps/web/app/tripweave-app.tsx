@@ -2768,6 +2768,9 @@ function TripStoryExplorer({
   const [savingAreaActionKey, setSavingAreaActionKey] = useState<string | null>(
     null,
   );
+  const [expandedMapAreaId, setExpandedMapAreaId] = useState<string | null>(
+    null,
+  );
   const displayMobilePane = mobilePane === "photos" ? "map" : mobilePane;
   const stopLabelById = useMemo(
     () => new Map(filteredModel.stops.map((stop) => [stop.id, stop.label])),
@@ -3127,6 +3130,7 @@ function TripStoryExplorer({
     if (viewMode === "PLAYBACK") {
       onStateChange(startPlayback(state));
     } else if (viewMode === "TRIP_OVERVIEW") {
+      setExpandedMapAreaId(null);
       onStateChange({
         ...state,
         viewMode,
@@ -3137,6 +3141,7 @@ function TripStoryExplorer({
         mapControlMode: "STORY_CONTROLLED",
       });
     } else if (viewMode === "DAY") {
+      setExpandedMapAreaId(null);
       const dayId = state.selectedDayId ?? filteredModel.stops[0]?.dayId;
       if (dayId) {
         onStateChange(selectStoryDay(state, dayId));
@@ -3246,6 +3251,7 @@ function TripStoryExplorer({
   function showDayStops(dayId: string) {
     const firstStop = filteredModel.stops.find((stop) => stop.dayId === dayId);
     skipNextTimelineSelectionRef.current = true;
+    setExpandedMapAreaId(null);
     onStateChange({
       ...state,
       viewMode: "STOP",
@@ -3551,6 +3557,10 @@ function TripStoryExplorer({
           : summaryNavigator.nextIndex
       ];
     if (nextStop && activeDay) {
+      const nextAreaContext = areaForStop(activeDay, nextStop.id);
+      if (nextAreaContext?.area.id !== expandedMapAreaId) {
+        setExpandedMapAreaId(null);
+      }
       onStateChange(selectStoryStop(state, nextStop.id, activeDay.id));
     }
   }
@@ -3569,6 +3579,23 @@ function TripStoryExplorer({
     activeDay && selectedStopDetail
       ? activeDay.stops.findIndex((stop) => stop.id === selectedStopDetail.id)
       : -1;
+  const selectedAreaContext =
+    activeDay && selectedStopDetail
+      ? areaForStop(activeDay, selectedStopDetail.id)
+      : null;
+  const isSelectedAreaExpanded =
+    Boolean(selectedAreaContext) &&
+    selectedAreaContext?.area.id === expandedMapAreaId;
+  const isCollapsedAreaSelected =
+    Boolean(selectedAreaContext) && !isSelectedAreaExpanded;
+  const selectedAreaStopIndexes =
+    activeDay && selectedAreaContext
+      ? selectedAreaContext.stops
+          .map((stop) =>
+            activeDay.stops.findIndex((dayStop) => dayStop.id === stop.id),
+          )
+          .filter((index) => index >= 0)
+      : [];
   const summaryNavigator = (() => {
     if (!activeDay) {
       return null;
@@ -3579,6 +3606,18 @@ function TripStoryExplorer({
         return null;
       }
       const currentIndex = selectedStopIndex >= 0 ? selectedStopIndex : -1;
+      if (isCollapsedAreaSelected && selectedAreaStopIndexes.length > 0) {
+        const firstAreaIndex = Math.min(...selectedAreaStopIndexes);
+        const lastAreaIndex = Math.max(...selectedAreaStopIndexes);
+        return {
+          type: "stop" as const,
+          label: `${firstAreaIndex + 1}/${total}`,
+          previousDisabled: firstAreaIndex <= 0,
+          nextDisabled: lastAreaIndex >= total - 1,
+          previousIndex: firstAreaIndex - 1,
+          nextIndex: lastAreaIndex + 1,
+        };
+      }
       return {
         type: "stop" as const,
         label: currentIndex >= 0 ? `${currentIndex + 1}/${total}` : "All",
@@ -3602,10 +3641,14 @@ function TripStoryExplorer({
     };
   })();
   const selectedStopTitle = selectedStopDetail
-    ? displayStopTitle(selectedStopDetail)
+    ? isCollapsedAreaSelected && selectedAreaContext
+      ? displayAreaTitle(selectedAreaContext.area)
+      : displayStopTitle(selectedStopDetail)
     : (selectedStop?.label ?? null);
   const selectedStopSummary = selectedStopDetail
-    ? `${selectedStopDetail.mediaCount} photos · ${selectedStopDetail.contributorCount} travelers`
+    ? isCollapsedAreaSelected && selectedAreaContext
+      ? areaSummary(selectedAreaContext.stops)
+      : `${selectedStopDetail.mediaCount} photos · ${selectedStopDetail.contributorCount} travelers`
     : activeDay
       ? `${activeDay.stops.length} stops · ${activeDay.stops.reduce(
           (total, stop) => total + stop.mediaCount,
@@ -3613,7 +3656,9 @@ function TripStoryExplorer({
         )} photos`
       : "Select a stop on the map to see its note here.";
   const selectedNote =
-    selectedStopDetail?.note?.trim() || activeDay?.note?.trim() || "";
+    (isCollapsedAreaSelected ? "" : selectedStopDetail?.note?.trim()) ||
+    activeDay?.note?.trim() ||
+    "";
   const activeTimelineDay = activeDay ?? story.days[0] ?? null;
   const timelineDays = activeTimelineDay ? [activeTimelineDay] : [];
 
@@ -3626,6 +3671,7 @@ function TripStoryExplorer({
           model={filteredModel}
           state={state}
           areaVisitsByDay={areaVisitsByDay}
+          expandedAreaId={expandedMapAreaId}
           activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
           canOpenActiveDayPhotos={
             Boolean(onOpenPhotos) &&
@@ -3635,6 +3681,7 @@ function TripStoryExplorer({
           }
           onOpenActiveDayPhotos={onOpenPhotos}
           onStateChange={onStateChange}
+          onExpandedAreaChange={setExpandedMapAreaId}
           onDayMarkerClick={showDayStops}
           onStopMarkerClick={openStopPhotos}
           reducedMotion={reducedMotion}
@@ -3642,11 +3689,13 @@ function TripStoryExplorer({
         <div className="story-selected-stop-summary" aria-live="polite">
           <div>
             <span>
-              {selectedStop
-                ? "Selected stop"
-                : activeDay
-                  ? "Selected day"
-                  : "Map note"}
+              {isCollapsedAreaSelected
+                ? "Selected area"
+                : selectedStop
+                  ? "Selected stop"
+                  : activeDay
+                    ? "Selected day"
+                    : "Map note"}
             </span>
             <strong>
               {selectedStopTitle
@@ -5023,10 +5072,12 @@ function StoryMapCanvas({
   model,
   state,
   areaVisitsByDay,
+  expandedAreaId,
   activeDayLabel,
   canOpenActiveDayPhotos,
   onOpenActiveDayPhotos,
   onStateChange,
+  onExpandedAreaChange,
   onDayMarkerClick,
   onStopMarkerClick,
   reducedMotion,
@@ -5034,10 +5085,12 @@ function StoryMapCanvas({
   model: ReturnType<typeof buildStoryModel>;
   state: StoryMapState;
   areaVisitsByDay: Record<string, AreaVisitsResponse>;
+  expandedAreaId: string | null;
   activeDayLabel: string | null;
   canOpenActiveDayPhotos?: boolean;
   onOpenActiveDayPhotos?: () => void;
   onStateChange: (state: StoryMapState) => void;
+  onExpandedAreaChange: (areaId: string | null) => void;
   onDayMarkerClick: (dayId: string) => void;
   onStopMarkerClick: (stopId: string, dayId: string) => void;
   reducedMotion: boolean;
@@ -5046,7 +5099,6 @@ function StoryMapCanvas({
   const mapRef = useRef<MapLibreMap | null>(null);
   const selectedMarkers = useRef<Marker[]>([]);
   const stopPhotoMarkers = useRef<Marker[]>([]);
-  const [expandedAreaId, setExpandedAreaId] = useState<string | null>(null);
   const previousFocusRef = useRef<{
     selectedStopId: string | null;
     viewMode: ViewMode;
@@ -5355,7 +5407,7 @@ function StoryMapCanvas({
 
   useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
-      setExpandedAreaId(null);
+      onExpandedAreaChange(null);
       return;
     }
     if (!expandedAreaId) {
@@ -5367,11 +5419,12 @@ function StoryMapCanvas({
     const selectedStopArea =
       areaMembershipByStopId.get(state.selectedStopId)?.area.id ?? null;
     if (selectedStopArea !== expandedAreaId) {
-      setExpandedAreaId(null);
+      onExpandedAreaChange(null);
     }
   }, [
     areaMembershipByStopId,
     expandedAreaId,
+    onExpandedAreaChange,
     state.selectedDayId,
     state.selectedStopId,
     state.viewMode,
@@ -5723,7 +5776,7 @@ function StoryMapCanvas({
       element.appendChild(label);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
-        setExpandedAreaId(area.id);
+        onExpandedAreaChange(area.id);
         onStateChange(
           selectStoryStop(stateRef.current, firstStopId, area.dayId),
         );
@@ -5806,6 +5859,7 @@ function StoryMapCanvas({
     };
   }, [
     onDayMarkerClick,
+    onExpandedAreaChange,
     onStopMarkerClick,
     orderedDayMarkerData,
     orderedAreaMarkerData,
