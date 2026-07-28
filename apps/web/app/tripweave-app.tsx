@@ -5681,7 +5681,6 @@ function StoryMapCanvas({
       {activeDayLabel && ["STOP", "MOMENT"].includes(state.viewMode) ? (
         <div className="map-active-day" aria-live="polite">
           <div>
-            <span>Selected day</span>
             <strong>{activeDayLabel}</strong>
           </div>
           {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
