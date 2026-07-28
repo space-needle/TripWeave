@@ -75,6 +75,7 @@ type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
 type MobileWorkspaceTab = "story" | "timeline" | "photos" | "share" | "more";
 type StoryMobilePane = "map" | "timeline" | "photos";
+type StoryHeaderIconAction = StoryMobilePane | "story" | "share" | "more";
 
 type TripForm = {
   title: string;
@@ -1409,7 +1410,7 @@ function OwnerWorkspace() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell owner-workspace-shell">
       <header className="app-header workspace-header">
         <div>
           <strong>TripWeave</strong>
@@ -1422,24 +1423,34 @@ function OwnerWorkspace() {
 
       {tripError ? <p className="error">{tripError}</p> : null}
 
-      <nav className="mobile-workspace-tabs" aria-label="Trip sections">
+      <nav className="mobile-trip-actions" aria-label="Trip sections">
         {(
           [
-            ["story", "Story"],
-            ["timeline", "Timeline"],
-            ["photos", "Photos"],
-            ["share", "Share"],
-            ["more", "More"],
-          ] as Array<[MobileWorkspaceTab, string]>
-        ).map(([tab, label]) => (
+            ["story", "Story", "story"],
+            ["timeline", "Timeline", "timeline"],
+            ["photos", "Photos", "photos"],
+            ["share", "Share", "share"],
+            ["more", "More", "more"],
+          ] as Array<[MobileWorkspaceTab, string, StoryHeaderIconAction]>
+        ).map(([tab, label, icon]) => (
           <button
             type="button"
+            aria-label={label}
             aria-pressed={mobileTab === tab}
             className={mobileTab === tab ? "active" : ""}
+            disabled={
+              (!selectedTrip && tab !== "more") ||
+              (tab === "share" &&
+                !["owner", "editor"].includes(selectedTrip?.role ?? ""))
+            }
             key={tab}
-            onClick={() => setMobileTab(tab)}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTab(tab);
+            }}
+            title={label}
           >
-            {label}
+            <StoryHeaderIcon action={icon} />
           </button>
         ))}
       </nav>
@@ -1569,7 +1580,7 @@ function OwnerWorkspace() {
                 {canOrganizeSelectedTrip ? (
                   <div className="trip-stage-header-actions">
                     <button
-                      className="story-photo-icon-button"
+                      className="story-photo-icon-button desktop-story-photo-button"
                       type="button"
                       aria-label="Browse selected day photos"
                       title="Browse selected day photos"
@@ -1675,6 +1686,7 @@ function OwnerWorkspace() {
                       setMobileTab("timeline");
                     }
                   }}
+                  onOpenPhotos={openOwnerStoryPhotos}
                   timezoneId={selectedTrip.timezoneId}
                 />
               ) : null}
@@ -2500,6 +2512,7 @@ function TripStoryExplorer({
   onSetDayNote,
   onSetStopNote,
   onSplitStop,
+  onOpenPhotos,
   mobilePane = "map",
   onMobilePaneChange,
   timezoneId,
@@ -2521,6 +2534,7 @@ function TripStoryExplorer({
   onSetDayNote?: (dayId: string, note: string) => Promise<void>;
   onSetStopNote?: (stopId: string, note: string) => Promise<void>;
   onSplitStop?: (stopId: string, afterMediaItemId: string) => Promise<void>;
+  onOpenPhotos?: () => void;
   mobilePane?: StoryMobilePane;
   onMobilePaneChange?: (pane: StoryMobilePane) => void;
   timezoneId: string;
@@ -3434,6 +3448,13 @@ function TripStoryExplorer({
           state={state}
           areaVisitsByDay={areaVisitsByDay}
           activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
+          canOpenActiveDayPhotos={
+            Boolean(onOpenPhotos) &&
+            Boolean(
+              activeDay?.stops.some((stop) => stop.mediaCount > 0) ?? false,
+            )
+          }
+          onOpenActiveDayPhotos={onOpenPhotos}
           onStateChange={onStateChange}
           onDayMarkerClick={showDayStops}
           onStopMarkerClick={openStopPhotos}
@@ -4777,6 +4798,8 @@ function StoryMapCanvas({
   state,
   areaVisitsByDay,
   activeDayLabel,
+  canOpenActiveDayPhotos,
+  onOpenActiveDayPhotos,
   onStateChange,
   onDayMarkerClick,
   onStopMarkerClick,
@@ -4786,6 +4809,8 @@ function StoryMapCanvas({
   state: StoryMapState;
   areaVisitsByDay: Record<string, AreaVisitsResponse>;
   activeDayLabel: string | null;
+  canOpenActiveDayPhotos?: boolean;
+  onOpenActiveDayPhotos?: () => void;
   onStateChange: (state: StoryMapState) => void;
   onDayMarkerClick: (dayId: string) => void;
   onStopMarkerClick: (stopId: string, dayId: string) => void;
@@ -5517,8 +5542,20 @@ function StoryMapCanvas({
       <div className="story-map" ref={mapNode} aria-hidden="true" />
       {activeDayLabel && ["STOP", "MOMENT"].includes(state.viewMode) ? (
         <div className="map-active-day" aria-live="polite">
-          <span>Selected day</span>
-          <strong>{activeDayLabel}</strong>
+          <div>
+            <span>Selected day</span>
+            <strong>{activeDayLabel}</strong>
+          </div>
+          {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
+            <button
+              type="button"
+              aria-label="Browse selected day photos"
+              title="Browse selected day photos"
+              onClick={onOpenActiveDayPhotos}
+            >
+              <StoryHeaderIcon action="photos" />
+            </button>
+          ) : null}
         </div>
       ) : null}
       {canReturnToDayMode && state.selectedDayId ? (
@@ -6355,8 +6392,8 @@ function isAreaVisitsResponse(value: unknown): value is AreaVisitsResponse {
   );
 }
 
-function StoryHeaderIcon({ action }: { action: StoryMobilePane }) {
-  if (action === "map") {
+function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
+  if (action === "map" || action === "story") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M9 5 3.8 7.1v12L9 17l6 2 5.2-2.1v-12L15 7 9 5Z" />
@@ -6372,6 +6409,26 @@ function StoryHeaderIcon({ action }: { action: StoryMobilePane }) {
         <path d="M5 7.5h14v11H5z" />
         <path d="m8 15 2.5-3 2 2.2 1.5-1.7 2.2 2.5" />
         <path d="M8.5 10h.01" />
+      </svg>
+    );
+  }
+
+  if (action === "share") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M12 3v12" />
+        <path d="m7.5 7.5 4.5-4.5 4.5 4.5" />
+        <path d="M6 11v8h12v-8" />
+      </svg>
+    );
+  }
+
+  if (action === "more") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 12h.01" />
+        <path d="M12 12h.01" />
+        <path d="M19 12h.01" />
       </svg>
     );
   }
