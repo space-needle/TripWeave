@@ -2308,6 +2308,24 @@ button.needs-update {
   line-height: 1.35;
 }
 
+.timeline-merge-target {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d78363;
+  border-radius: 10px;
+  background: #fff7f3;
+  padding: 9px;
+}
+
+.timeline-merge-target p {
+  margin: 0;
+  color: #7d2c1a;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
 .timeline-stop-rename {
   flex: 1 0 100%;
   display: grid;

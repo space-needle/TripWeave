@@ -3590,6 +3590,7 @@ function TripStoryExplorer({
       setPendingMergeKey(null);
       setMergePickerStopId(null);
       setEditToolsStopId(null);
+      setEditingNoteKey(null);
     } catch (error) {
       setMergeStopError(`Could not merge stops. ${messageFrom(error)}`);
     } finally {
@@ -4103,6 +4104,24 @@ function TripStoryExplorer({
                       stop,
                       forkGroups,
                     );
+                    const mergeCandidateIds = new Set(
+                      mergeCandidates.map((candidate) => candidate.id),
+                    );
+                    const mergeSourceStop = mergePickerStopId
+                      ? (day.stops.find(
+                          (candidate) => candidate.id === mergePickerStopId,
+                        ) ?? null)
+                      : null;
+                    const canMergeHere =
+                      Boolean(onMergeStops) &&
+                      mergeSourceStop !== null &&
+                      mergeSourceStop.id !== stop.id &&
+                      mergeCandidateIds.has(mergeSourceStop.id);
+                    const mergeHereKey = mergeSourceStop
+                      ? `${mergeSourceStop.id}:${stop.id}`
+                      : null;
+                    const isPendingMergeHere =
+                      Boolean(mergeHereKey) && pendingMergeKey === mergeHereKey;
                     const stopMedia = orderedStopMedia(stop);
                     const areaContext = areaForStop(day, stop.id);
                     const isFirstAreaStop =
@@ -4587,13 +4606,19 @@ function TripStoryExplorer({
                                             : "Merge"
                                         }
                                         onClick={() => {
-                                          setMergePickerStopId(
+                                          const nextMergeSourceId =
                                             mergePickerStopId === stop.id
                                               ? null
-                                              : stop.id,
+                                              : stop.id;
+                                          setMergePickerStopId(
+                                            nextMergeSourceId,
                                           );
                                           setPendingMergeKey(null);
                                           setMergeStopError("");
+                                          if (nextMergeSourceId) {
+                                            setSplitStopId(null);
+                                            setSplitStopError("");
+                                          }
                                         }}
                                       >
                                         {mergePickerStopId === stop.id
@@ -4637,6 +4662,51 @@ function TripStoryExplorer({
                                     {mergeStopError ? (
                                       <p className="error">{mergeStopError}</p>
                                     ) : null}
+                                  </div>
+                                ) : null}
+                                {canMergeHere && mergeSourceStop ? (
+                                  <div className="timeline-merge-target">
+                                    <p>
+                                      Merge{" "}
+                                      {displayStopPosition(mergeSourceStop)}{" "}
+                                      into {displayStopPosition(stop)}
+                                    </p>
+                                    <div className="timeline-inline-actions">
+                                      <button
+                                        type="button"
+                                        className={
+                                          isPendingMergeHere
+                                            ? "timeline-tool-button pending"
+                                            : "timeline-tool-button"
+                                        }
+                                        disabled={
+                                          mergeHereKey !== null &&
+                                          mergingStopKey === mergeHereKey
+                                        }
+                                        onClick={() =>
+                                          void mergeTimelineStop(
+                                            mergeSourceStop.id,
+                                            stop.id,
+                                            day.id,
+                                          )
+                                        }
+                                      >
+                                        {isPendingMergeHere
+                                          ? "Confirm merge"
+                                          : "Merge here"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="timeline-tool-button"
+                                        onClick={() => {
+                                          setMergePickerStopId(null);
+                                          setPendingMergeKey(null);
+                                          setMergeStopError("");
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
                                   </div>
                                 ) : null}
                                 {onMergeStops &&
