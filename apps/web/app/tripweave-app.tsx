@@ -5330,35 +5330,28 @@ function StoryMapCanvas({
     state.selectedDayId,
     state.viewMode,
   ]);
-  const routeCollection = useMemo(
-    () => ({
-      type: "FeatureCollection" as const,
-      features: model.legs
-        .filter(
-          (leg) =>
-            leg.geometry &&
-            (state.viewMode !== "STOP" ||
-              !state.selectedDayId ||
-              leg.dayId === state.selectedDayId),
-        )
-        .map((leg) => ({
-          type: "Feature" as const,
-          id: leg.id,
-          properties: {
-            id: leg.id,
-            dayId: leg.dayId,
-            dayColor: dayColorMap.get(leg.dayId) ?? storyDayColors[0],
-            routeSource: leg.routeSource,
-            isForked: leg.isForked,
-          },
-          geometry: leg.geometry,
-        })),
-    }),
-    [dayColorMap, model.legs, state.selectedDayId, state.viewMode],
-  );
   const stopDisplayCoordinates = useMemo(
     () => stopDisplayCoordinateMap(model),
     [model],
+  );
+  const routeCollection = useMemo(
+    () =>
+      storyRouteCollection(
+        model,
+        dayColorMap,
+        state,
+        areaVisitsByDay,
+        expandedAreaId,
+        stopDisplayCoordinates,
+      ),
+    [
+      areaVisitsByDay,
+      dayColorMap,
+      expandedAreaId,
+      model,
+      state,
+      stopDisplayCoordinates,
+    ],
   );
   const stopCollection = useMemo(
     () => ({
@@ -6283,6 +6276,100 @@ function areaMembershipMap(
     }
   }
   return memberships;
+}
+
+function storyRouteCollection(
+  model: ReturnType<typeof buildStoryModel>,
+  dayColorMap: Map<string, string>,
+  state: StoryMapState,
+  areaVisitsByDay: Record<string, AreaVisitsResponse>,
+  expandedAreaId: string | null,
+  stopCoordinates: Map<string, [number, number]>,
+) {
+  const activeStopMode =
+    ["STOP", "MOMENT"].includes(state.viewMode) && state.selectedDayId;
+  const activeAreaVisits = activeStopMode
+    ? (areaVisitsByDay[state.selectedDayId ?? ""] ?? null)
+    : null;
+  const collapsedAreaByStopId = new Map<string, AreaVisitResponse>();
+  const collapsedAreaCenters = new Map<string, [number, number]>();
+
+  for (const area of activeAreaVisits?.areas ?? []) {
+    if (area.id === expandedAreaId) {
+      continue;
+    }
+    const coordinates = area.stops
+      .map((stop) => stopCoordinates.get(stop.id) ?? null)
+      .filter((coordinate) => coordinate !== null);
+    const center = centerOfCoordinates(coordinates);
+    if (!center) {
+      continue;
+    }
+    collapsedAreaCenters.set(area.id, center);
+    for (const stop of area.stops) {
+      collapsedAreaByStopId.set(stop.id, area);
+    }
+  }
+
+  return {
+    type: "FeatureCollection" as const,
+    features: model.legs
+      .filter(
+        (leg) =>
+          leg.geometry &&
+          (!activeStopMode ||
+            !state.selectedDayId ||
+            leg.dayId === state.selectedDayId),
+      )
+      .map((leg) => {
+        if (!leg.geometry) {
+          return null;
+        }
+        const fromArea = collapsedAreaByStopId.get(leg.fromStopId) ?? null;
+        const toArea = collapsedAreaByStopId.get(leg.toStopId) ?? null;
+        if (fromArea && toArea && fromArea.id === toArea.id) {
+          return null;
+        }
+        const fromCoordinate =
+          (fromArea
+            ? collapsedAreaCenters.get(fromArea.id)
+            : stopCoordinates.get(leg.fromStopId)) ??
+          lngLatCoordinate(leg.geometry.coordinates[0]);
+        const toCoordinate =
+          (toArea
+            ? collapsedAreaCenters.get(toArea.id)
+            : stopCoordinates.get(leg.toStopId)) ??
+          lngLatCoordinate(
+            leg.geometry.coordinates[leg.geometry.coordinates.length - 1],
+          );
+        if (!fromCoordinate || !toCoordinate) {
+          return null;
+        }
+        const isAreaEdge = Boolean(fromArea || toArea);
+        return {
+          type: "Feature" as const,
+          id: isAreaEdge
+            ? `${leg.id}:area:${fromArea?.id ?? leg.fromStopId}:${
+                toArea?.id ?? leg.toStopId
+              }`
+            : leg.id,
+          properties: {
+            id: leg.id,
+            dayId: leg.dayId,
+            dayColor: dayColorMap.get(leg.dayId) ?? storyDayColors[0],
+            routeSource: isAreaEdge ? "area_collapsed" : leg.routeSource,
+            isForked: isAreaEdge ? false : leg.isForked,
+          },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: isAreaEdge
+              ? [fromCoordinate, toCoordinate]
+              : leg.geometry.coordinates,
+          },
+        };
+      })
+      .filter((feature) => feature !== null),
+  };
 }
 
 function areaVisitCollection(
