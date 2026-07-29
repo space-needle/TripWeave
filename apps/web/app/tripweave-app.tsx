@@ -6121,7 +6121,13 @@ function StoryMapCanvas({
     if (!map || state.mapControlMode !== "STORY_CONTROLLED") {
       return;
     }
-    const coordinates = focusCoordinates(model, state, stopDisplayCoordinates);
+    const coordinates = focusCoordinates(
+      model,
+      state,
+      stopDisplayCoordinates,
+      areaVisitsByDay,
+      expandedAreaId,
+    );
     if (coordinates.length === 0) {
       return;
     }
@@ -6188,7 +6194,14 @@ function StoryMapCanvas({
         duration: reducedMotion ? 0 : 700,
       });
     }
-  }, [model, reducedMotion, state, stopDisplayCoordinates]);
+  }, [
+    areaVisitsByDay,
+    expandedAreaId,
+    model,
+    reducedMotion,
+    state,
+    stopDisplayCoordinates,
+  ]);
 
   return (
     <div
@@ -6534,6 +6547,8 @@ function focusCoordinates(
   model: ReturnType<typeof buildStoryModel>,
   state: StoryMapState,
   stopCoordinates: Map<string, [number, number]>,
+  areaVisitsByDay: Record<string, AreaVisitsResponse>,
+  expandedAreaId: string | null,
 ): [number, number][] {
   if (state.viewMode === "TRIP_OVERVIEW" || state.viewMode === "DAY") {
     return [
@@ -6558,6 +6573,16 @@ function focusCoordinates(
       .map((item) => item.coordinates as [number, number]);
   }
   if (state.selectedStopId) {
+    const selectedCollapsedAreaCoordinate = collapsedAreaCoordinateForStop(
+      state.selectedStopId,
+      state.selectedDayId,
+      areaVisitsByDay,
+      expandedAreaId,
+      stopCoordinates,
+    );
+    if (selectedCollapsedAreaCoordinate) {
+      return [selectedCollapsedAreaCoordinate];
+    }
     const stop = model.stops.find((item) => item.id === state.selectedStopId);
     const stopCoordinate = stop ? (stopCoordinates.get(stop.id) ?? null) : null;
     if (stopCoordinate) {
@@ -6591,6 +6616,32 @@ function focusCoordinates(
       .filter((item) => item.coordinates)
       .map((item) => item.coordinates as [number, number]),
   ];
+}
+
+function collapsedAreaCoordinateForStop(
+  stopId: string,
+  dayId: string | null,
+  areaVisitsByDay: Record<string, AreaVisitsResponse>,
+  expandedAreaId: string | null,
+  stopCoordinates: Map<string, [number, number]>,
+): [number, number] | null {
+  if (!dayId) {
+    return null;
+  }
+  for (const area of areaVisitsByDay[dayId]?.areas ?? []) {
+    if (area.id === expandedAreaId) {
+      continue;
+    }
+    if (!area.stops.some((stop) => stop.id === stopId)) {
+      continue;
+    }
+    return centerOfCoordinates(
+      area.stops
+        .map((stop) => stopCoordinates.get(stop.id) ?? null)
+        .filter((coordinate) => coordinate !== null),
+    );
+  }
+  return null;
 }
 
 function dayStopCoordinates(
