@@ -3399,6 +3399,46 @@ function TripStoryExplorer({
     return match ? { base: match[1], suffix: match[2] } : null;
   }
 
+  function mergeCandidateStops(
+    day: ReconstructionDayResponse,
+    stop: ReconstructionStopResponse,
+    forkGroups: Map<string, ReconstructionStopResponse[]>,
+  ): ReconstructionStopResponse[] {
+    const candidateIds = new Set<string>();
+    for (const leg of model.legs) {
+      if (leg.dayId !== day.id) {
+        continue;
+      }
+      if (leg.fromStopId === stop.id) {
+        candidateIds.add(leg.toStopId);
+      }
+      if (leg.toStopId === stop.id) {
+        candidateIds.add(leg.fromStopId);
+      }
+    }
+    const position = timelineForkPosition(stop);
+    const forkSiblings = position ? forkGroups.get(position.base) : undefined;
+    for (const sibling of forkSiblings ?? []) {
+      if (sibling.id !== stop.id) {
+        candidateIds.add(sibling.id);
+      }
+    }
+    if (candidateIds.size === 0) {
+      const stopIndex = day.stops.findIndex(
+        (candidate) => candidate.id === stop.id,
+      );
+      for (const neighbor of [
+        day.stops[stopIndex - 1],
+        day.stops[stopIndex + 1],
+      ]) {
+        if (neighbor) {
+          candidateIds.add(neighbor.id);
+        }
+      }
+    }
+    return day.stops.filter((candidate) => candidateIds.has(candidate.id));
+  }
+
   function startEditingArea(area: AreaVisitResponse) {
     setEditingAreaId(area.id);
     setAreaTitleDraft(displayAreaTitle(area));
@@ -4058,8 +4098,10 @@ function TripStoryExplorer({
                       onSetStopNote ||
                       onMergeStops ||
                       onSplitStop;
-                    const mergeCandidates = day.stops.filter(
-                      (candidate) => candidate.id !== stop.id,
+                    const mergeCandidates = mergeCandidateStops(
+                      day,
+                      stop,
+                      forkGroups,
                     );
                     const stopMedia = orderedStopMedia(stop);
                     const areaContext = areaForStop(day, stop.id);
