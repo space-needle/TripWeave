@@ -1915,6 +1915,10 @@ button.needs-update {
   padding: 0 0 0 8px;
 }
 
+.timeline-day.has-branches .timeline-stop {
+  grid-template-columns: 46px minmax(0, 1fr);
+}
+
 .timeline-stop-stack {
   position: relative;
   display: grid;
@@ -1932,6 +1936,10 @@ button.needs-update {
   border-left: 1px solid #c8ddd6;
   content: "";
   background: #f5fbf8;
+}
+
+.timeline-day.has-branches .timeline-stop-stack.in-area::before {
+  left: 54px;
 }
 
 .timeline-stop-stack.in-area.area-start::before {
@@ -1969,6 +1977,10 @@ button.needs-update {
   border-bottom: 1px solid #d8e7e1;
   color: var(--text);
   padding: 12px 12px 10px;
+}
+
+.timeline-day.has-branches .timeline-area-heading {
+  margin-left: 54px;
 }
 
 .timeline-area-heading-main {
@@ -2043,6 +2055,55 @@ button.needs-update {
   background: #e87856;
   box-shadow: 0 0 0 1px #e87856;
   transform: translateY(-50%);
+}
+
+.timeline-branch-lane {
+  display: none;
+}
+
+.timeline-day.has-branches .timeline-stop-branch::after {
+  left: 30px;
+  background: #2fa7a2;
+  box-shadow: 0 0 0 1px #2fa7a2;
+}
+
+.timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane {
+  position: absolute;
+  top: -50%;
+  bottom: calc(-50% - 10px);
+  left: 35px;
+  z-index: 0;
+  display: block;
+  width: 2px;
+  background: #77c7c2;
+}
+
+.timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::before,
+.timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::after {
+  position: absolute;
+  left: -29px;
+  width: 29px;
+  height: 22px;
+  border-color: #77c7c2;
+  content: "";
+}
+
+.timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::before {
+  top: 0;
+  border-top: 2px solid;
+  border-right: 2px solid;
+  border-radius: 0 12px 0 0;
+}
+
+.timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::after {
+  bottom: 0;
+  border-right: 2px solid;
+  border-bottom: 2px solid;
+  border-radius: 0 0 12px 0;
+}
+
+.timeline-stop-stack:last-child .timeline-stop-branch .timeline-branch-lane {
+  bottom: 50%;
 }
 
 .timeline-stop:focus-visible {
@@ -3323,12 +3384,24 @@ button.thumb-frame:focus-visible {
     grid-template-columns: 22px minmax(0, 1fr);
   }
 
+  .timeline-day.has-branches .timeline-stop {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
   .timeline-stop-stack.in-area::before {
     left: 30px;
   }
 
+  .timeline-day.has-branches .timeline-stop-stack.in-area::before {
+    left: 52px;
+  }
+
   .timeline-area-heading {
     margin-left: 30px;
+  }
+
+  .timeline-day.has-branches .timeline-area-heading {
+    margin-left: 52px;
   }
 }
 
