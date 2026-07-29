@@ -6023,12 +6023,30 @@ function StoryMapCanvas({
       <div className="story-map" ref={mapNode} aria-hidden="true" />
       {activeDayLabel && ["STOP", "MOMENT"].includes(state.viewMode) ? (
         <div className="map-active-day" aria-live="polite">
+          {canReturnToDayMode && state.selectedDayId ? (
+            <button
+              type="button"
+              className="map-active-day-back"
+              aria-label="Back to day view"
+              title="Back to day view"
+              onClick={() =>
+                onStateChange(
+                  selectStoryDay(state, state.selectedDayId as string),
+                )
+              }
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          ) : null}
           <div>
             <strong>{activeDayLabel}</strong>
           </div>
           {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
             <button
               type="button"
+              className="map-active-day-photos"
               aria-label="Browse selected day photos"
               title="Browse selected day photos"
               onClick={onOpenActiveDayPhotos}
@@ -6037,17 +6055,6 @@ function StoryMapCanvas({
             </button>
           ) : null}
         </div>
-      ) : null}
-      {canReturnToDayMode && state.selectedDayId ? (
-        <button
-          type="button"
-          className="map-day-return"
-          onClick={() =>
-            onStateChange(selectStoryDay(state, state.selectedDayId as string))
-          }
-        >
-          Day view
-        </button>
       ) : null}
       {!hasMapData ? (
         <div className="map-empty-state">
