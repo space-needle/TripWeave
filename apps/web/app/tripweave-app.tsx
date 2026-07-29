@@ -4,6 +4,7 @@ import {
   ChangeEvent,
   DragEvent,
   FormEvent,
+  Fragment,
   KeyboardEvent,
   useCallback,
   useEffect,
@@ -2751,6 +2752,7 @@ function TripStoryExplorer({
   const [splitStopId, setSplitStopId] = useState<string | null>(null);
   const [splitStopError, setSplitStopError] = useState("");
   const [splittingStopKey, setSplittingStopKey] = useState<string | null>(null);
+  const [pendingSplitKey, setPendingSplitKey] = useState<string | null>(null);
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
   const [photoProjectionCache, setPhotoProjectionCache] = useState<
     Record<string, StoryPhotoProjectionResponse>
@@ -3611,6 +3613,11 @@ function TripStoryExplorer({
       return;
     }
     const key = `${stopId}:${afterMediaItemId}`;
+    if (pendingSplitKey !== key) {
+      setPendingSplitKey(key);
+      setSplitStopError("");
+      return;
+    }
     setSplittingStopKey(key);
     setSplitStopError("");
     try {
@@ -3618,6 +3625,7 @@ function TripStoryExplorer({
       onStateChange(selectStoryStop(state, stopId, dayId));
       setSplitStopId(null);
       setEditToolsStopId(null);
+      setPendingSplitKey(null);
     } catch (error) {
       setSplitStopError(`Could not split stop. ${messageFrom(error)}`);
     } finally {
@@ -4429,6 +4437,7 @@ function TripStoryExplorer({
                                       setPendingMergeKey(null);
                                       setSplitStopId(null);
                                       setSplitStopError("");
+                                      setPendingSplitKey(null);
                                       setEditingNoteKey(
                                         nextStopId ? `stop:${stop.id}` : null,
                                       );
@@ -4647,6 +4656,7 @@ function TripStoryExplorer({
                                               : stop.id,
                                           );
                                           setSplitStopError("");
+                                          setPendingSplitKey(null);
                                         }}
                                       >
                                         {splitStopId === stop.id
@@ -4754,20 +4764,31 @@ function TripStoryExplorer({
                                   <div className="timeline-stop-split">
                                     <div className="timeline-stop-split-panel">
                                       <p>
-                                        Pick the last photo that should stay in{" "}
-                                        {displayStopTitle(stop)}.
+                                        Choose the photo boundary where this
+                                        stop should split.
                                       </p>
-                                      {stopMedia
-                                        .slice(0, -1)
-                                        .map((media, index) => {
+                                      <div className="timeline-split-boundary-row">
+                                        {stopMedia.map((media, index) => {
                                           const splitKey = `${stop.id}:${media.id}`;
+                                          const isPendingSplit =
+                                            pendingSplitKey === splitKey;
                                           return (
-                                            <div
-                                              className="timeline-stop-split-option"
-                                              key={media.id}
-                                            >
-                                              <div>
-                                                <strong>
+                                            <Fragment key={media.id}>
+                                              <div className="timeline-split-photo">
+                                                {media.thumbnailUrl ? (
+                                                  <img
+                                                    src={media.thumbnailUrl}
+                                                    alt={media.filename ?? ""}
+                                                    loading="lazy"
+                                                  />
+                                                ) : (
+                                                  <span>
+                                                    {media.contributor
+                                                      .slice(0, 1)
+                                                      .toUpperCase()}
+                                                  </span>
+                                                )}
+                                                <small>
                                                   {formatTimelineStopTime(
                                                     media.capturedAt ??
                                                       stop.endsAt,
@@ -4775,61 +4796,39 @@ function TripStoryExplorer({
                                                       null,
                                                     timezoneId,
                                                   )}
-                                                </strong>
-                                                <span>
-                                                  {index + 1} photos before
-                                                  split
-                                                </span>
-                                                <div
-                                                  className="timeline-stop-split-thumbs"
-                                                  aria-hidden="true"
-                                                >
-                                                  {stopMedia
-                                                    .slice(
-                                                      Math.max(0, index - 3),
-                                                      index + 1,
-                                                    )
-                                                    .map((item) =>
-                                                      item.thumbnailUrl ? (
-                                                        <img
-                                                          key={item.id}
-                                                          src={
-                                                            item.thumbnailUrl
-                                                          }
-                                                          alt=""
-                                                          loading="lazy"
-                                                        />
-                                                      ) : (
-                                                        <span key={item.id}>
-                                                          {item.contributor
-                                                            .slice(0, 1)
-                                                            .toUpperCase()}
-                                                        </span>
-                                                      ),
-                                                    )}
-                                                </div>
+                                                </small>
                                               </div>
-                                              <button
-                                                type="button"
-                                                className="timeline-tool-button"
-                                                aria-label="Split here"
-                                                title="Split here"
-                                                disabled={
-                                                  splittingStopKey === splitKey
-                                                }
-                                                onClick={() =>
-                                                  void splitStopAfterMedia(
-                                                    stop.id,
-                                                    media.id,
-                                                    day.id,
-                                                  )
-                                                }
-                                              >
-                                                Split here
-                                              </button>
-                                            </div>
+                                              {index < stopMedia.length - 1 ? (
+                                                <button
+                                                  type="button"
+                                                  className={
+                                                    isPendingSplit
+                                                      ? "timeline-split-boundary pending"
+                                                      : "timeline-split-boundary"
+                                                  }
+                                                  aria-label={`Split after photo ${index + 1}`}
+                                                  title="Split here"
+                                                  disabled={
+                                                    splittingStopKey ===
+                                                    splitKey
+                                                  }
+                                                  onClick={() =>
+                                                    void splitStopAfterMedia(
+                                                      stop.id,
+                                                      media.id,
+                                                      day.id,
+                                                    )
+                                                  }
+                                                >
+                                                  {isPendingSplit
+                                                    ? "Confirm"
+                                                    : "Split"}
+                                                </button>
+                                              ) : null}
+                                            </Fragment>
                                           );
                                         })}
+                                      </div>
                                       {splitStopError ? (
                                         <p className="error">
                                           {splitStopError}

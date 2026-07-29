@@ -2432,53 +2432,68 @@ button.needs-update {
   line-height: 1.35;
 }
 
-.timeline-stop-split-option {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-}
-
-.timeline-stop-split-option strong,
-.timeline-stop-split-option span {
-  display: block;
-}
-
-.timeline-stop-split-option strong {
-  color: var(--text);
-  font-size: 0.82rem;
-}
-
-.timeline-stop-split-option span {
-  color: var(--muted);
-  font-size: 0.74rem;
-}
-
-.timeline-stop-split-option button {
-  justify-self: end;
-}
-
-.timeline-stop-split-thumbs {
+.timeline-split-boundary-row {
   display: flex;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-padding-inline: 8px;
 }
 
-.timeline-stop-split-thumbs img,
-.timeline-stop-split-thumbs span {
-  width: 28px;
+.timeline-split-photo {
+  width: 74px;
+  display: grid;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.timeline-split-photo img,
+.timeline-split-photo > span {
+  width: 74px;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #dfe8e3;
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: 1rem;
   font-weight: 900;
   object-fit: cover;
+}
+
+.timeline-split-photo small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-split-boundary {
+  align-self: center;
+  min-width: 48px;
+  min-height: 32px;
+  flex: 0 0 auto;
+  border-color: #d78363;
+  border-radius: 999px;
+  background: #fff3ee;
+  color: #9f3a22;
+  font-size: 0.7rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.timeline-split-boundary.pending {
+  min-width: 64px;
+  border-color: #9f3a22;
+  background: #9f3a22;
+  color: #fff;
 }
 
 .timeline-stop.active .timeline-stop-card {
