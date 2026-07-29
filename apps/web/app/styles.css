@@ -3005,6 +3005,11 @@ button.thumb-frame:focus-visible {
     color: #fff;
   }
 
+  .mobile-trip-action-menu button.needs-update {
+    background: color-mix(in srgb, var(--warning) 18%, #fff);
+    color: #8a4b00;
+  }
+
   .mobile-trip-actions button:disabled,
   .mobile-trip-action-menu button:disabled {
     opacity: 0.38;

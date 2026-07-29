@@ -82,6 +82,7 @@ type StoryHeaderIconAction =
   | "story"
   | "share"
   | "more"
+  | "update"
   | "upload"
   | "manage"
   | "settings";
@@ -1571,6 +1572,29 @@ function OwnerWorkspace() {
       </nav>
       {mobileTripMenuOpen && canManageSelectedTrip ? (
         <nav className="mobile-trip-action-menu" aria-label="Trip actions">
+          <button
+            type="button"
+            aria-label="Update story"
+            className={storyUpdateNeeded ? "needs-update" : ""}
+            disabled={isBusy}
+            aria-busy={isReconstructingStory}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              void runReconstruction();
+            }}
+            title={
+              storyUpdate || isReconstructingStory
+                ? storyActionStatusLabel
+                : "Update story"
+            }
+          >
+            {isReconstructingStory ? (
+              <span className="button-spinner" aria-hidden="true" />
+            ) : (
+              <StoryHeaderIcon action="update" />
+            )}
+          </button>
           <button
             type="button"
             aria-label="Upload photos"
@@ -7275,6 +7299,17 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
         <path d="M12 3v12" />
         <path d="m7.5 7.5 4.5-4.5 4.5 4.5" />
         <path d="M6 11v8h12v-8" />
+      </svg>
+    );
+  }
+
+  if (action === "update") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M20 11a8 8 0 0 0-13.7-5.3L4 8" />
+        <path d="M4 4v4h4" />
+        <path d="M4 13a8 8 0 0 0 13.7 5.3L20 16" />
+        <path d="M20 20v-4h-4" />
       </svg>
     );
   }
