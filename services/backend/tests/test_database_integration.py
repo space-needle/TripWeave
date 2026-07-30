@@ -697,6 +697,16 @@ def test_full_rebuild_preserves_media_under_locked_stops(
             connection,
             trip_id=cast(UUID, trip["id"]),
             member_id=cast(UUID, owner_member["id"]),
+            filename="locked-stop-photo-2.jpg",
+            captured_at="2026-07-02T16:03:00+00:00",
+            latitude=37.0001,
+            longitude=-122.0001,
+            sha256="b" * 64,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, trip["id"]),
+            member_id=cast(UUID, owner_member["id"]),
             filename="other-stop-photo.jpg",
             captured_at="2026-07-02T18:00:00+00:00",
             latitude=37.0100,
@@ -788,7 +798,131 @@ def test_full_rebuild_preserves_media_under_locked_stops(
             ),
             {"run_id": latest_run_id},
         ).scalar_one()
+        locked_stop_participant_count = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM moment_participants mp
+                JOIN moments mo ON mo.id = mp.moment_id
+                WHERE mo.stop_id = :stop_id
+                    AND (mp.reconstruction_run_id = :run_id OR mp.user_locked = true)
+                    AND (mo.reconstruction_run_id = :run_id OR mo.user_locked = true)
+                """
+            ),
+            {"stop_id": locked_stop_id, "run_id": latest_run_id},
+        ).scalar_one()
 
-        assert locked_stop_visible_media_count == 1
+        assert locked_stop_visible_media_count == 2
         assert visible_stop_count == 2
         assert duplicate_locked_media_stop_count == 1
+        assert locked_stop_participant_count == 1
+
+
+def test_full_rebuild_preserves_locked_area_visit_dependencies(
+    migrated_database: Engine,
+) -> None:
+    user = factories.user_row(email="owner-full-rebuild-area@example.com")
+    trip = factories.trip_row(
+        created_by=cast(UUID, user["id"]),
+        timezone_id="Asia/Seoul",
+    )
+    owner_member = factories.member_row(
+        trip_id=cast(UUID, trip["id"]), user_id=cast(UUID, user["id"])
+    )
+    owner_member["role"] = "owner"
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO users (id, email, password_hash, display_name)
+                VALUES (:id, :email, :password_hash, :display_name)
+                """
+            ),
+            user,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trips (id, title, timezone_id, created_by)
+                VALUES (:id, :title, :timezone_id, :created_by)
+                """
+            ),
+            trip,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trip_members (id, trip_id, user_id, role, display_name)
+                VALUES (:id, :trip_id, :user_id, :role, :display_name)
+                """
+            ),
+            owner_member,
+        )
+        for index, latitude in enumerate([35.0000, 35.0018, 35.0036], start=1):
+            insert_media(
+                connection,
+                trip_id=cast(UUID, trip["id"]),
+                member_id=cast(UUID, owner_member["id"]),
+                filename=f"locked-area-{index}.jpg",
+                captured_at=f"2026-06-08T09:{index * 10:02d}:00+00:00",
+                latitude=latitude,
+                longitude=127.0,
+                sha256=f"{index}" * 64,
+            )
+
+    with Session(migrated_database) as session:
+        db_trip = session.get(orm.Trip, trip["id"])
+        assert db_trip is not None
+        initial = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        assert initial.stops == 3
+
+        locked_membership = session.execute(
+            text(
+                """
+                SELECT avs.id, avs.area_visit_id, avs.stop_id, av.trip_day_id
+                FROM area_visit_stops avs
+                JOIN area_visits av ON av.id = avs.area_visit_id
+                WHERE avs.trip_id = :trip_id
+                ORDER BY avs.sort_order
+                LIMIT 1
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).one()
+        session.execute(
+            text(
+                """
+                UPDATE area_visit_stops
+                SET user_locked = true,
+                    membership_source = 'user_correction'
+                WHERE id = :membership_id
+                """
+            ),
+            {"membership_id": locked_membership.id},
+        )
+        session.commit()
+
+        rebuilt = reconstruct_trip(db=session, trip=db_trip, geocoder=ManualGeocoder())
+        assert rebuilt.days == 1
+
+        locked_dependency_state = session.execute(
+            text(
+                """
+                SELECT
+                    avs.user_locked AS membership_locked,
+                    av.user_locked AS area_locked,
+                    s.user_locked AS stop_locked,
+                    td.user_locked AS day_locked
+                FROM area_visit_stops avs
+                JOIN area_visits av ON av.id = avs.area_visit_id
+                JOIN stops s ON s.id = avs.stop_id
+                JOIN trip_days td ON td.id = av.trip_day_id
+                WHERE avs.id = :membership_id
+                """
+            ),
+            {"membership_id": locked_membership.id},
+        ).one()
+        assert locked_dependency_state.membership_locked is True
+        assert locked_dependency_state.area_locked is True
+        assert locked_dependency_state.stop_locked is True
+        assert locked_dependency_state.day_locked is True

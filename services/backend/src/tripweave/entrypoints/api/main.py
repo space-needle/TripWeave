@@ -1946,6 +1946,23 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             day = db.get(orm.TripDay, record.trip_day_id)
             if day is not None:
                 lock_record(day)
+        elif isinstance(record, orm.AreaVisit):
+            day = db.get(orm.TripDay, record.trip_day_id)
+            if day is not None:
+                lock_record(day)
+            if record.place_id is not None:
+                place = db.get(orm.Place, record.place_id)
+                if place is not None:
+                    lock_record(place)
+        elif isinstance(record, orm.AreaVisitStop):
+            area = db.get(orm.AreaVisit, record.area_visit_id)
+            stop = db.get(orm.Stop, record.stop_id)
+            if area is not None:
+                lock_record(area)
+                lock_reconstruction_parents(db, area)
+            if stop is not None:
+                lock_record(stop)
+                lock_reconstruction_parents(db, stop)
 
     def route_line_wkt(db: DbSession, from_stop_id: UUID, to_stop_id: UUID) -> str | None:
         return db.execute(
@@ -2681,6 +2698,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             now = datetime.now(UTC)
             area.deleted_at = now
             lock_record(area)
+            lock_reconstruction_parents(db, area)
             rows = area_visit_membership_rows(db, area.id)
             for area_membership, stop, _, _ in rows:
                 area_membership.membership_source = ReconstructionSource.USER_CORRECTION.value
@@ -2688,6 +2706,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 area_membership.user_locked = True
                 area_membership.updated_at = now
                 lock_record(stop)
+                lock_reconstruction_parents(db, stop)
             after = area_visit_snapshot(db, area)
             target_type, target_id = "area_visit", area.id
 
@@ -2741,7 +2760,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 )
             )
             db.flush()
+            lock_record(stop)
+            lock_reconstruction_parents(db, stop)
             recalculate_area_visit(db, area)
+            lock_reconstruction_parents(db, area)
             after = area_visit_snapshot(db, area)
             target_type, target_id = "area_visit", area.id
 
@@ -2772,9 +2794,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     detail="Area stop not found",
                 )
             before = area_visit_snapshot(db, area)
+            removed_stop = next((stop for _, stop, _, _ in rows if stop.id == stop_id), None)
             db.delete(membership)
             db.flush()
+            if removed_stop is not None:
+                lock_record(removed_stop)
+                lock_reconstruction_parents(db, removed_stop)
             recalculate_area_visit(db, area)
+            lock_reconstruction_parents(db, area)
             after = area_visit_snapshot(db, area)
             target_type, target_id = "area_visit", area.id
 

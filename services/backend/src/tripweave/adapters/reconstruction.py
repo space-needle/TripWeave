@@ -158,6 +158,7 @@ def reconstruct_trip(
     rebuild_usable = [point for point in usable if point.id not in locked_media_ids]
     rebuild_missing_time = [point for point in missing_time if point.id not in locked_media_ids]
 
+    preserve_locked_area_visit_dependencies(db, trip.id)
     delete_unlocked_outputs(db, trip.id)
     review_count = add_unknown_time_reviews(db, run, trip.id, rebuild_missing_time)
     gps_points = [
@@ -470,6 +471,7 @@ def restore_locked_stop_moments(
         )
         db.add(moment)
         db.flush()
+        participant_member_ids: set[UUID] = set()
         for position, media_id in enumerate(missing_media_ids, start=1):
             point = media_by_id[media_id]
             db.add(
@@ -481,6 +483,9 @@ def restore_locked_stop_moments(
                     **generated(run, 0.85),
                 )
             )
+            if point.contributor_member_id in participant_member_ids:
+                continue
+            participant_member_ids.add(point.contributor_member_id)
             if (
                 db.execute(
                     select(orm.MomentParticipant).where(
@@ -1138,13 +1143,25 @@ def delete_unlocked_outputs(db: Session, trip_id: UUID) -> None:
         orm.ReviewItem,
         orm.TripLeg,
         orm.AreaVisitStop,
-        orm.AreaVisit,
         orm.MomentParticipant,
         orm.MomentMedia,
         orm.Moment,
-        orm.Stop,
     ):
         db.execute(delete(model).where(model.trip_id == trip_id, model.user_locked.is_(False)))
+    db.execute(
+        delete(orm.AreaVisit).where(
+            orm.AreaVisit.trip_id == trip_id,
+            orm.AreaVisit.user_locked.is_(False),
+            ~exists().where(orm.AreaVisitStop.area_visit_id == orm.AreaVisit.id),
+        )
+    )
+    db.execute(
+        delete(orm.Stop).where(
+            orm.Stop.trip_id == trip_id,
+            orm.Stop.user_locked.is_(False),
+            ~exists().where(orm.AreaVisitStop.stop_id == orm.Stop.id),
+        )
+    )
     db.execute(
         delete(orm.Place).where(
             orm.Place.trip_id == trip_id,
@@ -1158,8 +1175,76 @@ def delete_unlocked_outputs(db: Session, trip_id: UUID) -> None:
             orm.TripDay.user_locked.is_(False),
             ~exists().where(orm.Stop.trip_day_id == orm.TripDay.id),
             ~exists().where(orm.TripLeg.trip_day_id == orm.TripDay.id),
+            ~exists().where(orm.AreaVisit.trip_day_id == orm.TripDay.id),
         )
     )
+
+
+def preserve_locked_area_visit_dependencies(db: Session, trip_id: UUID) -> None:
+    now = datetime.now(UTC)
+    locked_areas = list(
+        db.scalars(
+            select(orm.AreaVisit).where(
+                orm.AreaVisit.trip_id == trip_id,
+                orm.AreaVisit.user_locked.is_(True),
+            )
+        )
+    )
+    for area in locked_areas:
+        mark_generated_user_locked(area, now)
+        lock_area_visit_parents(db, area, now)
+
+    rows = db.execute(
+        select(orm.AreaVisitStop, orm.AreaVisit, orm.Stop)
+        .join(orm.AreaVisit, orm.AreaVisit.id == orm.AreaVisitStop.area_visit_id)
+        .join(orm.Stop, orm.Stop.id == orm.AreaVisitStop.stop_id)
+        .where(
+            orm.AreaVisitStop.trip_id == trip_id,
+            or_(orm.AreaVisitStop.user_locked.is_(True), orm.AreaVisit.user_locked.is_(True)),
+        )
+    ).all()
+    for membership, area, stop in rows:
+        mark_area_visit_stop_user_locked(membership, now)
+        mark_generated_user_locked(area, now)
+        mark_generated_user_locked(stop, now)
+        lock_area_visit_parents(db, area, now)
+        lock_stop_parents(db, stop, now)
+
+
+def mark_generated_user_locked(
+    record: orm.AreaVisit | orm.Stop | orm.TripDay | orm.Place,
+    now: datetime,
+) -> None:
+    record.source = ReconstructionSource.USER_CORRECTION.value
+    record.confidence = 1.0
+    record.user_locked = True
+    record.updated_at = now
+
+
+def mark_area_visit_stop_user_locked(membership: orm.AreaVisitStop, now: datetime) -> None:
+    membership.membership_source = ReconstructionSource.USER_CORRECTION.value
+    membership.confidence = 1.0
+    membership.user_locked = True
+    membership.updated_at = now
+
+
+def lock_area_visit_parents(db: Session, area: orm.AreaVisit, now: datetime) -> None:
+    day = db.get(orm.TripDay, area.trip_day_id)
+    if day is not None:
+        mark_generated_user_locked(day, now)
+    if area.place_id is not None:
+        place = db.get(orm.Place, area.place_id)
+        if place is not None:
+            mark_generated_user_locked(place, now)
+
+
+def lock_stop_parents(db: Session, stop: orm.Stop, now: datetime) -> None:
+    day = db.get(orm.TripDay, stop.trip_day_id)
+    place = db.get(orm.Place, stop.place_id)
+    if day is not None:
+        mark_generated_user_locked(day, now)
+    if place is not None:
+        mark_generated_user_locked(place, now)
 
 
 def load_media_points(db: Session, trip: orm.Trip) -> list[MediaPoint]:
