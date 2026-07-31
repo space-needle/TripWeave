@@ -2807,6 +2807,7 @@ function TripStoryExplorer({
   const timelineRef = useRef<HTMLElement | null>(null);
   const latestStateRef = useRef(state);
   const skipNextTimelineSelectionRef = useRef(false);
+  const suppressNextTimelineAutoScrollRef = useRef(false);
   const timelinePaneFocusStopRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
@@ -3102,6 +3103,10 @@ function TripStoryExplorer({
     if (displayMobilePane !== "timeline" || !state.selectedStopId) {
       return;
     }
+    if (suppressNextTimelineAutoScrollRef.current) {
+      suppressNextTimelineAutoScrollRef.current = false;
+      return;
+    }
     const element = activeStopRefs.current[state.selectedStopId];
     if (!element) {
       return;
@@ -3165,6 +3170,7 @@ function TripStoryExplorer({
           stopId !== currentState.selectedStopId &&
           ["STOP", "MOMENT"].includes(currentState.viewMode)
         ) {
+          suppressNextTimelineAutoScrollRef.current = true;
           onStateChange(selectStoryStop(currentState, stopId, dayId));
         }
       },
