@@ -623,6 +623,61 @@ button.is-updating {
   gap: 9px;
 }
 
+.story-auto-update-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 10px 12px;
+}
+
+.story-auto-update-notice > span {
+  width: 10px;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.story-auto-update-notice > .button-spinner {
+  width: 16px;
+  background: transparent;
+  color: var(--accent-strong);
+  margin-right: 0;
+}
+
+.story-auto-update-notice strong,
+.story-auto-update-notice small {
+  display: block;
+}
+
+.story-auto-update-notice strong {
+  font-size: 0.9rem;
+}
+
+.story-auto-update-notice small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.story-auto-update-notice.active {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, #fff);
+}
+
+.story-auto-update-notice.queued {
+  border-color: #e8d0a1;
+  background: #fff8e8;
+}
+
+.story-auto-update-notice.queued > span {
+  background: #c98313;
+}
+
 .upload-summary {
   display: flex;
   justify-content: space-between;

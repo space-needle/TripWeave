@@ -719,6 +719,39 @@ function OwnerWorkspace() {
     };
   }, [hasProcessingMedia, loadStoryProjection, selectedTrip?.id]);
 
+  useEffect(() => {
+    if (!selectedTrip?.id || !storyUpdateNeeded || isReconstructingStory) {
+      return;
+    }
+    const tripId = selectedTrip.id;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    async function pollStoryUpdate() {
+      try {
+        await loadStoryProjection(tripId);
+      } catch (error) {
+        if (!cancelled) {
+          setReconstructionError(messageFrom(error));
+        }
+      }
+      if (!cancelled) {
+        timeout = setTimeout(pollStoryUpdate, 8000);
+      }
+    }
+    timeout = setTimeout(pollStoryUpdate, 8000);
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [
+    isReconstructingStory,
+    loadStoryProjection,
+    selectedTrip?.id,
+    storyUpdateNeeded,
+  ]);
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
@@ -1943,6 +1976,13 @@ function OwnerWorkspace() {
                   <p>JPEG and HEIC</p>
                 </div>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
+                <StoryAutoUpdateNotice
+                  canUpdateStory={canOrganizeSelectedTrip}
+                  hasProcessingMedia={hasProcessingMedia}
+                  hasStory={Boolean(storyForExplorer?.latestRun)}
+                  isUpdating={isReconstructingStory}
+                  storyUpdate={storyUpdate}
+                />
                 <UploadFileList
                   files={selectedUploadFiles}
                   progress={uploadProgress}
@@ -6888,6 +6928,81 @@ function TripFields({
       </div>
     </>
   );
+}
+
+function StoryAutoUpdateNotice({
+  canUpdateStory,
+  hasProcessingMedia,
+  hasStory,
+  isUpdating,
+  storyUpdate,
+}: {
+  canUpdateStory: boolean;
+  hasProcessingMedia: boolean;
+  hasStory: boolean;
+  isUpdating: boolean;
+  storyUpdate: {
+    needsUpdate: boolean;
+    unassignedReadyMediaCount: number;
+  } | null;
+}) {
+  if (isUpdating) {
+    return (
+      <section className="story-auto-update-notice active" aria-live="polite">
+        <span className="button-spinner" aria-hidden="true" />
+        <div>
+          <strong>Updating story</strong>
+          <small>Map and timeline are rebuilding now.</small>
+        </div>
+      </section>
+    );
+  }
+
+  if (hasProcessingMedia) {
+    return (
+      <section className="story-auto-update-notice" aria-live="polite">
+        <span aria-hidden="true" />
+        <div>
+          <strong>Preparing photos</strong>
+          <small>
+            Story will update automatically after processing finishes.
+          </small>
+        </div>
+      </section>
+    );
+  }
+
+  if (storyUpdate?.needsUpdate) {
+    const count = storyUpdate.unassignedReadyMediaCount;
+    if (!hasStory) {
+      return (
+        <section className="story-auto-update-notice queued" aria-live="polite">
+          <span aria-hidden="true" />
+          <div>
+            <strong>Story setup needed</strong>
+            <small>
+              {canUpdateStory
+                ? "Run Update Story once. Future uploads will update automatically."
+                : "An organizer needs to run the first story update."}
+            </small>
+          </div>
+        </section>
+      );
+    }
+    return (
+      <section className="story-auto-update-notice queued" aria-live="polite">
+        <span aria-hidden="true" />
+        <div>
+          <strong>
+            {count} ready photo{count === 1 ? "" : "s"} waiting
+          </strong>
+          <small>Story update is queued automatically.</small>
+        </div>
+      </section>
+    );
+  }
+
+  return null;
 }
 
 function UploadFileList({
