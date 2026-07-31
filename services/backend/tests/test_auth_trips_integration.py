@@ -1679,7 +1679,20 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
             {"id": media_item_id},
         ).one()
         asset_count = connection.execute(text("SELECT count(*) FROM media_assets")).scalar_one()
-        job_state = connection.execute(text("SELECT state FROM processing_jobs")).scalar_one()
+        job_state = connection.execute(
+            text("SELECT state FROM processing_jobs WHERE job_type = 'ingest_media'")
+        ).scalar_one()
+        auto_job = connection.execute(
+            text(
+                """
+                SELECT state, target_id, run_after
+                FROM processing_jobs
+                WHERE job_type = 'reconstruct_trip'
+                  AND idempotency_key = :idempotency_key
+                """
+            ),
+            {"idempotency_key": f"auto-reconstruct-trip:{trip['id']}"},
+        ).one()
 
     assert state.processing_state == "ready"
     assert state.original_retention_state == "deleted"
@@ -1692,6 +1705,9 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
     )
     assert asset_count == 2
     assert job_state == "succeeded"
+    assert auto_job.state == "pending"
+    assert str(auto_job.target_id) == trip["id"]
+    assert auto_job.run_after > datetime.now(UTC)
 
     retry = client.post(f"/media/{media_item_id}/retry", headers={"x-csrf-token": csrf_token})
     assert retry.status_code == 409
@@ -1708,6 +1724,7 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
             job_type=job.job_type,
             target_type=job.target_type,
             target_id=job.target_id,
+            idempotency_key=job.idempotency_key,
             attempts=1,
             max_attempts=3,
         ),

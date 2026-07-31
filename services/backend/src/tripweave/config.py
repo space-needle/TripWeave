@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     worker_lock_timeout_seconds: int = Field(
         default=300, ge=1, alias="TRIPWEAVE_WORKER_LOCK_TIMEOUT_SECONDS"
     )
+    auto_story_update_delay_seconds: int = Field(
+        default=60, ge=1, alias="TRIPWEAVE_AUTO_STORY_UPDATE_DELAY_SECONDS"
+    )
     session_cookie_name: str = Field(default="tripweave_session", alias="TRIPWEAVE_SESSION_COOKIE")
     guest_session_cookie_name: str = Field(
         default="tripweave_guest_session", alias="TRIPWEAVE_GUEST_SESSION_COOKIE"

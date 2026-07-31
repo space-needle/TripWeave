@@ -22,7 +22,11 @@ from tripweave.adapters.database import check_database, create_database_engine
 from tripweave.adapters.geocoder_factory import create_geocoder
 from tripweave.adapters.local_blob_store import BlobNotFoundError
 from tripweave.adapters.publication import PublicationError, publish_story_version
-from tripweave.adapters.reconstruction import reconstruct_trip
+from tripweave.adapters.reconstruction import (
+    has_visible_story,
+    latest_reconstruction_run,
+    reconstruct_trip,
+)
 from tripweave.adapters.worker_heartbeat import write_heartbeat
 from tripweave.application.media_processing import (
     MediaProcessingError,
@@ -38,6 +42,7 @@ from tripweave.domain.enums import (
     ProcessingJobType,
     ProcessingState,
     ProcessingTargetType,
+    ReviewItemStatus,
     TimeSource,
 )
 from tripweave.domain.storage import BlobRef
@@ -61,6 +66,7 @@ class ClaimedJob:
     job_type: str
     target_type: str
     target_id: UUID
+    idempotency_key: str
     attempts: int
     max_attempts: int
 
@@ -170,7 +176,7 @@ def claim_job(db: Session, settings: Settings, worker_id: str) -> ClaimedJob | N
                 error_code = NULL,
                 error_message = NULL
             WHERE id = (SELECT id FROM candidate)
-            RETURNING id, job_type, target_type, target_id, attempts, max_attempts
+            RETURNING id, job_type, target_type, target_id, idempotency_key, attempts, max_attempts
             """
             ),
             {"now": now, "locked_before": locked_before, "worker_id": worker_id},
@@ -186,6 +192,7 @@ def claim_job(db: Session, settings: Settings, worker_id: str) -> ClaimedJob | N
         job_type=str(row["job_type"]),
         target_type=str(row["target_type"]),
         target_id=row["target_id"],
+        idempotency_key=str(row["idempotency_key"]),
         attempts=int(row["attempts"]),
         max_attempts=int(row["max_attempts"]),
     )
@@ -216,7 +223,12 @@ def handle_job(
             and job.target_type == ProcessingTargetType.TRIP.value
         ):
             with session_factory() as db:
-                reconstruct_queued_trip(db, job.target_id, geocoder)
+                reconstruct_queued_trip(
+                    db,
+                    job.target_id,
+                    geocoder,
+                    auto_incremental=job.idempotency_key.startswith("auto-reconstruct-trip:"),
+                )
                 complete_job(db, job.id)
         elif (
             job.job_type == ProcessingJobType.PUBLICATION.value
@@ -299,14 +311,90 @@ def ingest_media(
     )
     apply_processed_media(db, blob_store, media_item, processed)
     discard_temporary_original(blob_store, media_item)
+    enqueue_auto_story_update(db, settings, media_item.trip_id)
     db.commit()
 
 
-def reconstruct_queued_trip(db: Session, trip_id: UUID, geocoder: Geocoder) -> None:
+def reconstruct_queued_trip(
+    db: Session,
+    trip_id: UUID,
+    geocoder: Geocoder,
+    *,
+    auto_incremental: bool = False,
+) -> None:
     trip = db.get(orm.Trip, trip_id)
     if trip is None:
         raise MediaProcessingError("trip_not_found", "Trip was not found")
+    if auto_incremental and not should_auto_incremental_reconstruct(db, trip_id):
+        logger.info(
+            "auto story update skipped",
+            extra={"service": "worker", "trip_id": str(trip_id)},
+        )
+        return
     reconstruct_trip(db=db, trip=trip, geocoder=geocoder)
+
+
+def enqueue_auto_story_update(db: Session, settings: Settings, trip_id: UUID) -> None:
+    now = datetime.now(UTC)
+    idempotency_key = f"auto-reconstruct-trip:{trip_id}"
+    run_after = now + timedelta(seconds=settings.auto_story_update_delay_seconds)
+    job = db.execute(
+        select(orm.ProcessingJob).where(orm.ProcessingJob.idempotency_key == idempotency_key)
+    ).scalar_one_or_none()
+    if job is None:
+        db.add(
+            orm.ProcessingJob(
+                job_type=ProcessingJobType.RECONSTRUCT_TRIP.value,
+                target_type=ProcessingTargetType.TRIP.value,
+                target_id=trip_id,
+                idempotency_key=idempotency_key,
+                run_after=run_after,
+                priority=200,
+            )
+        )
+        return
+    if job.state == ProcessingJobState.RUNNING.value:
+        job.run_after = run_after
+        return
+    job.state = ProcessingJobState.PENDING.value
+    job.target_id = trip_id
+    job.attempts = 0
+    job.run_after = run_after
+    job.locked_at = None
+    job.locked_by = None
+    job.error_code = None
+    job.error_message = None
+    job.started_at = None
+    job.finished_at = None
+
+
+def should_auto_incremental_reconstruct(db: Session, trip_id: UUID) -> bool:
+    latest_run = latest_reconstruction_run(db, trip_id)
+    if latest_run is None or not has_visible_story(db, trip_id, latest_run):
+        return False
+    assigned_media_ids = select(orm.MomentMedia.media_item_id).where(
+        orm.MomentMedia.trip_id == trip_id
+    )
+    open_review_media_ids = select(orm.ReviewItem.media_item_id).where(
+        orm.ReviewItem.trip_id == trip_id,
+        orm.ReviewItem.media_item_id.is_not(None),
+        orm.ReviewItem.status == ReviewItemStatus.OPEN.value,
+    )
+    unassigned_ready_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(orm.MediaItem)
+            .where(
+                orm.MediaItem.trip_id == trip_id,
+                orm.MediaItem.deleted_at.is_(None),
+                orm.MediaItem.processing_state == ProcessingState.READY.value,
+                orm.MediaItem.id.notin_(assigned_media_ids),
+                orm.MediaItem.id.notin_(open_review_media_ids),
+            )
+        )
+        or 0
+    )
+    return unassigned_ready_count > 0
 
 
 def apply_processed_media(
@@ -466,9 +554,16 @@ def assets_complete(db: Session, media_item_id: UUID) -> bool:
 
 def complete_job(db: Session, job_id: UUID) -> None:
     job = db.get(orm.ProcessingJob, job_id)
+    now = datetime.now(UTC)
     if job is not None:
-        job.state = ProcessingJobState.SUCCEEDED.value
-        job.finished_at = datetime.now(UTC)
+        if job.idempotency_key.startswith("auto-reconstruct-trip:") and job.run_after > now:
+            job.state = ProcessingJobState.PENDING.value
+            job.attempts = 0
+            job.started_at = None
+            job.finished_at = None
+        else:
+            job.state = ProcessingJobState.SUCCEEDED.value
+            job.finished_at = now
         job.locked_at = None
         job.locked_by = None
     db.commit()
