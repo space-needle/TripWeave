@@ -423,6 +423,12 @@ button.needs-update {
   color: #9f3a22;
 }
 
+button.is-updating {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, #fff);
+  color: var(--accent-strong);
+}
+
 .trip-management {
   display: grid;
   gap: 10px;
@@ -3010,9 +3016,19 @@ button.thumb-frame:focus-visible {
     color: #8a4b00;
   }
 
+  .mobile-trip-action-menu button.is-updating {
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+    color: var(--accent-strong);
+  }
+
   .mobile-trip-actions button:disabled,
   .mobile-trip-action-menu button:disabled {
     opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .mobile-trip-action-menu .button-spinner {
+    margin-right: 0;
   }
 
   .mobile-trip-actions svg,

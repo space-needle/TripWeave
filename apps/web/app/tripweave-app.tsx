@@ -369,6 +369,12 @@ function OwnerWorkspace() {
   const storyActionStatusLabel = isReconstructingStory
     ? "Rebuilding map and timeline..."
     : storyUpdateLabel;
+  const isStoryActionDisabled = isBusy || isReconstructingStory;
+  const storyActionTitle = isReconstructingStory
+    ? "Updating story..."
+    : storyUpdate
+      ? storyActionStatusLabel
+      : "Update story";
 
   const selectedUploadFiles = useMemo(
     () => uploadSessions.flatMap((session) => session.files),
@@ -1059,7 +1065,7 @@ function OwnerWorkspace() {
   }
 
   async function runReconstruction() {
-    if (!selectedTrip) {
+    if (!selectedTrip || isStoryActionDisabled) {
       return;
     }
     setReconstructionError("");
@@ -1574,20 +1580,24 @@ function OwnerWorkspace() {
         <nav className="mobile-trip-action-menu" aria-label="Trip actions">
           <button
             type="button"
-            aria-label="Update story"
-            className={storyUpdateNeeded ? "needs-update" : ""}
-            disabled={isBusy}
+            aria-label={
+              isReconstructingStory ? "Updating story" : "Update story"
+            }
+            className={
+              isReconstructingStory
+                ? "is-updating"
+                : storyUpdateNeeded
+                  ? "needs-update"
+                  : ""
+            }
+            disabled={isStoryActionDisabled}
             aria-busy={isReconstructingStory}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
               setMobileTripMenuOpen(false);
               void runReconstruction();
             }}
-            title={
-              storyUpdate || isReconstructingStory
-                ? storyActionStatusLabel
-                : "Update story"
-            }
+            title={storyActionTitle}
           >
             {isReconstructingStory ? (
               <span className="button-spinner" aria-hidden="true" />
@@ -1669,8 +1679,9 @@ function OwnerWorkspace() {
                 className={storyUpdateNeeded ? "needs-update" : undefined}
                 type="button"
                 onClick={runReconstruction}
-                disabled={isBusy}
+                disabled={isStoryActionDisabled}
                 aria-busy={isReconstructingStory}
+                title={storyActionTitle}
               >
                 {isReconstructingStory ? (
                   <span className="button-spinner" aria-hidden="true" />
@@ -1780,12 +1791,17 @@ function OwnerWorkspace() {
                       <div className="story-action-stack">
                         <button
                           className={
-                            storyUpdateNeeded ? "needs-update" : undefined
+                            isReconstructingStory
+                              ? "is-updating"
+                              : storyUpdateNeeded
+                                ? "needs-update"
+                                : undefined
                           }
                           type="button"
                           onClick={runReconstruction}
-                          disabled={isBusy}
+                          disabled={isStoryActionDisabled}
                           aria-busy={isReconstructingStory}
+                          title={storyActionTitle}
                         >
                           {isReconstructingStory ? (
                             <span
