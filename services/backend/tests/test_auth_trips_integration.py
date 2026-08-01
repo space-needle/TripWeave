@@ -1047,6 +1047,97 @@ def test_reconstruction_automatically_persists_area_visits(
     assert membership_count == 4
 
 
+def test_hiding_media_prunes_empty_story_stop_and_repairs_legs(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "prune-owner@example.com")
+    trip = create_trip(client, csrf_token, "Prune Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text("SELECT id FROM trip_members WHERE trip_id = CAST(:trip_id AS uuid)"),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    media_ids = [
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"prune-{index}.jpg",
+            captured_at=datetime(2026, 6, 8, 9 + (index * 2), 0, tzinfo=UTC),
+            latitude=35.0 + index,
+            longitude=127.0,
+            sha256=str(index + 1) * 64,
+        )
+        for index in range(3)
+    ]
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    body = reconstructed.json()
+    assert len(body["days"][0]["stops"]) == 3
+
+    hidden = client.patch(
+        f"/media/{media_ids[1]}",
+        headers={"x-csrf-token": csrf_token},
+        json={"includeInStory": False},
+    )
+
+    assert hidden.status_code == 200, hidden.text
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction")
+    assert refreshed.status_code == 200
+    stops = refreshed.json()["days"][0]["stops"]
+    assert [stop["position"] for stop in stops] == [1, 2]
+    remaining_media_ids = [
+        media["id"] for stop in stops for moment in stop["moments"] for media in moment["media"]
+    ]
+    assert remaining_media_ids == [media_ids[0], media_ids[2]]
+
+    with engine.connect() as connection:
+        moment_media_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM moment_media
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).scalar_one()
+        stop_count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM stops
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).scalar_one()
+        leg = connection.execute(
+            text(
+                """
+                SELECT from_stop.position, to_stop.position
+                FROM trip_legs leg
+                JOIN stops from_stop ON from_stop.id = leg.from_stop_id
+                JOIN stops to_stop ON to_stop.id = leg.to_stop_id
+                WHERE leg.trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).one()
+
+    assert moment_media_count == 2
+    assert stop_count == 2
+    assert leg == (1, 2)
+
+
 def test_organizer_can_rename_area_visit_and_adjust_membership(
     client: TestClient,
     engine: Engine,

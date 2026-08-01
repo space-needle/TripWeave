@@ -30,9 +30,17 @@ from tripweave.adapters.local_blob_store import (
     InvalidGrantError,
 )
 from tripweave.adapters.publication import PublicationError, blob_ref_from_manifest, load_manifest
-from tripweave.adapters.reconstruction import MOMENT_GAP_MINUTES, reconstruct_trip
+from tripweave.adapters.reconstruction import (
+    MOMENT_GAP_MINUTES,
+    rebuild_day_legs,
+    reconstruct_trip,
+)
+from tripweave.adapters.reconstruction import (
+    renumber_day_stops as renumber_day_stops_generated,
+)
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
+from tripweave.application.area_visits import MIN_AREA_STOPS
 from tripweave.application.auth import (
     PasswordService,
     constant_time_equal,
@@ -1929,6 +1937,252 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             }
         lock_record(area)
 
+    def recalculate_generated_area_visit(db: DbSession, area: orm.AreaVisit) -> None:
+        rows = area_visit_membership_rows(db, area.id)
+        if not rows:
+            return
+        now = datetime.now(UTC)
+        for sort_order, (membership, _, _, _) in enumerate(rows, start=1):
+            membership.sort_order = sort_order
+            membership.updated_at = now
+        stops = [stop for _, stop, _, _ in rows]
+        area.starts_at_utc = min(stop.starts_at_utc for stop in stops)
+        area.ends_at_utc = max(stop.ends_at_utc for stop in stops)
+        located = [
+            (float(latitude), float(longitude))
+            for _, _, latitude, longitude in rows
+            if latitude is not None and longitude is not None
+        ]
+        if located:
+            center_latitude = sum(latitude for latitude, _ in located) / len(located)
+            center_longitude = sum(longitude for _, longitude in located) / len(located)
+            area.center = f"SRID=4326;POINT({center_longitude} {center_latitude})"
+            area.bounds = {
+                "min_latitude": min(latitude for latitude, _ in located),
+                "min_longitude": min(longitude for _, longitude in located),
+                "max_latitude": max(latitude for latitude, _ in located),
+                "max_longitude": max(longitude for _, longitude in located),
+            }
+        area.updated_at = now
+
+    def media_is_story_visible(media: orm.MediaItem) -> bool:
+        return (
+            media.deleted_at is None
+            and media.processing_state == ProcessingState.READY.value
+            and media.include_in_story
+            and media.visibility == MediaVisibility.STORY.value
+        )
+
+    def latest_succeeded_run_for_trip(db: DbSession, trip_id: UUID) -> orm.ReconstructionRun | None:
+        return db.execute(
+            select(orm.ReconstructionRun)
+            .where(
+                orm.ReconstructionRun.trip_id == trip_id,
+                orm.ReconstructionRun.state == "succeeded",
+            )
+            .order_by(orm.ReconstructionRun.created_at.desc(), orm.ReconstructionRun.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+    def story_visible_media_count_for_moment(db: DbSession, moment_id: UUID) -> int:
+        return int(
+            db.scalar(
+                select(func.count())
+                .select_from(orm.MomentMedia)
+                .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+                .where(
+                    orm.MomentMedia.moment_id == moment_id,
+                    orm.MediaItem.deleted_at.is_(None),
+                    orm.MediaItem.processing_state == ProcessingState.READY.value,
+                    orm.MediaItem.include_in_story.is_(True),
+                    orm.MediaItem.visibility == MediaVisibility.STORY.value,
+                )
+            )
+            or 0
+        )
+
+    def story_visible_media_count_for_stop(db: DbSession, stop_id: UUID) -> int:
+        return int(
+            db.scalar(
+                select(func.count())
+                .select_from(orm.MomentMedia)
+                .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+                .join(orm.MediaItem, orm.MediaItem.id == orm.MomentMedia.media_item_id)
+                .where(
+                    orm.Moment.stop_id == stop_id,
+                    orm.MediaItem.deleted_at.is_(None),
+                    orm.MediaItem.processing_state == ProcessingState.READY.value,
+                    orm.MediaItem.include_in_story.is_(True),
+                    orm.MediaItem.visibility == MediaVisibility.STORY.value,
+                )
+            )
+            or 0
+        )
+
+    def refresh_moment_participants(db: DbSession, moment: orm.Moment) -> None:
+        contributor_ids = set(
+            db.scalars(
+                select(orm.MediaItem.contributor_member_id)
+                .join(orm.MomentMedia, orm.MomentMedia.media_item_id == orm.MediaItem.id)
+                .where(
+                    orm.MomentMedia.moment_id == moment.id,
+                    orm.MediaItem.deleted_at.is_(None),
+                    orm.MediaItem.processing_state == ProcessingState.READY.value,
+                    orm.MediaItem.include_in_story.is_(True),
+                    orm.MediaItem.visibility == MediaVisibility.STORY.value,
+                )
+            )
+        )
+        participant_rows = list(
+            db.scalars(
+                select(orm.MomentParticipant).where(orm.MomentParticipant.moment_id == moment.id)
+            )
+        )
+        for participant in participant_rows:
+            if participant.trip_member_id not in contributor_ids and not participant.user_locked:
+                db.delete(participant)
+
+    def can_prune_stop(db: DbSession, stop: orm.Stop) -> bool:
+        if stop.user_locked:
+            return False
+        locked_moment_count = db.scalar(
+            select(func.count()).where(
+                orm.Moment.stop_id == stop.id,
+                orm.Moment.user_locked.is_(True),
+            )
+        )
+        if int(locked_moment_count or 0) > 0:
+            return False
+        locked_leg_count = db.scalar(
+            select(func.count()).where(
+                or_(orm.TripLeg.from_stop_id == stop.id, orm.TripLeg.to_stop_id == stop.id),
+                orm.TripLeg.user_locked.is_(True),
+            )
+        )
+        if int(locked_leg_count or 0) > 0:
+            return False
+        locked_area_count = db.scalar(
+            select(func.count())
+            .select_from(orm.AreaVisitStop)
+            .join(orm.AreaVisit, orm.AreaVisit.id == orm.AreaVisitStop.area_visit_id)
+            .where(
+                orm.AreaVisitStop.stop_id == stop.id,
+                or_(orm.AreaVisitStop.user_locked.is_(True), orm.AreaVisit.user_locked.is_(True)),
+            )
+        )
+        return int(locked_area_count or 0) == 0
+
+    def cleanup_area_visits_after_prune(db: DbSession, area_ids: set[UUID]) -> None:
+        for area_id in area_ids:
+            area = db.get(orm.AreaVisit, area_id)
+            if area is None or area.deleted_at is not None:
+                continue
+            membership_count = int(
+                db.scalar(select(func.count()).where(orm.AreaVisitStop.area_visit_id == area.id))
+                or 0
+            )
+            if area.user_locked:
+                continue
+            locked_membership_count = int(
+                db.scalar(
+                    select(func.count()).where(
+                        orm.AreaVisitStop.area_visit_id == area.id,
+                        orm.AreaVisitStop.user_locked.is_(True),
+                    )
+                )
+                or 0
+            )
+            if membership_count < MIN_AREA_STOPS and locked_membership_count == 0:
+                db.delete(area)
+                continue
+            if membership_count:
+                recalculate_generated_area_visit(db, area)
+
+    def cleanup_empty_generated_day(db: DbSession, trip_day_id: UUID) -> None:
+        trip_day = db.get(orm.TripDay, trip_day_id)
+        if trip_day is None or trip_day.user_locked:
+            return
+        stop_count = int(
+            db.scalar(select(func.count()).where(orm.Stop.trip_day_id == trip_day_id)) or 0
+        )
+        leg_count = int(
+            db.scalar(select(func.count()).where(orm.TripLeg.trip_day_id == trip_day_id)) or 0
+        )
+        area_count = int(
+            db.scalar(
+                select(func.count()).where(
+                    orm.AreaVisit.trip_day_id == trip_day_id,
+                    orm.AreaVisit.deleted_at.is_(None),
+                )
+            )
+            or 0
+        )
+        if stop_count == 0 and leg_count == 0 and area_count == 0:
+            db.delete(trip_day)
+
+    def prune_media_from_story(db: DbSession, media: orm.MediaItem) -> None:
+        moment_links = list(
+            db.scalars(
+                select(orm.MomentMedia).where(
+                    orm.MomentMedia.trip_id == media.trip_id,
+                    orm.MomentMedia.media_item_id == media.id,
+                )
+            )
+        )
+        if not moment_links:
+            return
+
+        affected_moment_ids = {link.moment_id for link in moment_links}
+        affected_stop_ids: set[UUID] = set()
+        affected_day_ids: set[UUID] = set()
+        affected_area_ids: set[UUID] = set()
+        for link in moment_links:
+            db.delete(link)
+        db.flush()
+
+        for moment_id in affected_moment_ids:
+            moment = db.get(orm.Moment, moment_id)
+            if moment is None:
+                continue
+            affected_stop_ids.add(moment.stop_id)
+            if story_visible_media_count_for_moment(db, moment.id) == 0 and not moment.user_locked:
+                db.execute(
+                    delete(orm.MomentParticipant).where(
+                        orm.MomentParticipant.moment_id == moment.id
+                    )
+                )
+                db.delete(moment)
+            else:
+                refresh_moment_participants(db, moment)
+        db.flush()
+
+        for stop_id in affected_stop_ids:
+            stop = db.get(orm.Stop, stop_id)
+            if stop is None:
+                continue
+            affected_day_ids.add(stop.trip_day_id)
+            area_ids_for_stop = set(
+                db.scalars(
+                    select(orm.AreaVisitStop.area_visit_id).where(
+                        orm.AreaVisitStop.stop_id == stop.id
+                    )
+                )
+            )
+            affected_area_ids.update(area_ids_for_stop)
+            if story_visible_media_count_for_stop(db, stop.id) == 0 and can_prune_stop(db, stop):
+                db.delete(stop)
+        db.flush()
+
+        cleanup_area_visits_after_prune(db, affected_area_ids)
+        db.flush()
+
+        run = latest_succeeded_run_for_trip(db, media.trip_id)
+        for day_id in affected_day_ids:
+            renumber_day_stops_generated(db, day_id)
+            if run is not None:
+                rebuild_day_legs(db, run, day_id)
+            cleanup_empty_generated_day(db, day_id)
+
     def lock_reconstruction_parents(db: DbSession, record: object) -> None:
         if isinstance(record, orm.Moment):
             stop = db.get(orm.Stop, record.stop_id)
@@ -2862,6 +3116,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             media.include_in_story = False
             media.user_locked = True
             media.updated_at = datetime.now(UTC)
+            prune_media_from_story(db, media)
             after = record_values(media, ["include_in_story", "user_locked"])
             target_type, target_id = "media_item", media.id
 
@@ -3756,6 +4011,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if not is_owner_editor and not is_contributor_owner:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
 
+        previous_include_in_story = media_item.include_in_story
+        previous_deleted_at = media_item.deleted_at
+
         if is_contributor_owner and not is_owner_editor:
             if payload.visibility is not None:
                 media_item.visibility = payload.visibility
@@ -3786,6 +4044,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 media_item.include_in_story = payload.include_in_story
 
         media_item.updated_at = datetime.now(UTC)
+        if (
+            previous_include_in_story
+            and previous_deleted_at is None
+            and not media_is_story_visible(media_item)
+        ):
+            prune_media_from_story(db, media_item)
         invalidate_story_draft_projection(db, media_item.trip_id)
         db.commit()
         rebuild_story_projections(db, media_item.trip_id)
