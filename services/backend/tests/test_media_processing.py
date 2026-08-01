@@ -51,6 +51,28 @@ def test_jpeg_with_exif_extracts_capture_time_and_camera() -> None:
     assert result.derivatives[0].asset_type == "thumbnail"
 
 
+def test_local_capture_time_is_not_offset_from_gps_timestamp() -> None:
+    exif = PilImage.Exif()
+    exif[306] = "2023:06:05 10:14:57"
+    exif[34853] = {
+        1: "N",
+        2: (IFDRational(37), IFDRational(0), IFDRational(0)),
+        3: "E",
+        4: (IFDRational(127), IFDRational(0), IFDRational(0)),
+        7: (IFDRational(20), IFDRational(0), IFDRational(0)),
+        29: "2023:06:05",
+    }
+
+    result = process(jpeg_bytes(exif=exif))
+
+    assert result.captured_at_local is not None
+    assert result.captured_at_local.isoformat() == "2023-06-05T10:14:57"
+    assert result.captured_at_utc is None
+    assert result.utc_offset_minutes is None
+    assert result.latitude == 37.0
+    assert result.longitude == 127.0
+
+
 def test_rotated_image_normalizes_derivative_orientation() -> None:
     exif = PilImage.Exif()
     exif[274] = 6

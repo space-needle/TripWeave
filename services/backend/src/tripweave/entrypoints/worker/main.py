@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from time import monotonic
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -411,7 +412,7 @@ def apply_processed_media(
     media_item.original_captured_at_local = processed.captured_at_local
     media_item.original_captured_at_utc = processed.captured_at_utc
     media_item.original_utc_offset_minutes = processed.utc_offset_minutes
-    media_item.effective_captured_at_utc = processed.captured_at_utc
+    media_item.effective_captured_at_utc = effective_capture_utc(db, media_item, processed)
     media_item.time_source = (
         TimeSource.ORIGINAL_METADATA.value
         if processed.captured_at_utc or processed.captured_at_local
@@ -478,6 +479,22 @@ def apply_processed_media(
         asset.byte_size = metadata.size_bytes
         asset.checksum = metadata.checksum
         asset.metadata_stripped = derivative.metadata_stripped
+
+
+def effective_capture_utc(
+    db: Session, media_item: orm.MediaItem, processed: ProcessedMedia
+) -> datetime | None:
+    if processed.captured_at_utc is not None:
+        return processed.captured_at_utc
+    if processed.captured_at_local is None:
+        return None
+    trip = db.get(orm.Trip, media_item.trip_id)
+    timezone_id = trip.timezone_id if trip is not None else "UTC"
+    try:
+        localized = processed.captured_at_local.replace(tzinfo=ZoneInfo(timezone_id))
+    except ZoneInfoNotFoundError:
+        localized = processed.captured_at_local.replace(tzinfo=UTC)
+    return localized.astimezone(UTC)
 
 
 def discard_temporary_original(blob_store: BlobStore, media_item: orm.MediaItem) -> None:

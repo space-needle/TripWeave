@@ -163,12 +163,8 @@ def extract_metadata(
     captured_at_local, captured_at_utc, utc_offset_minutes = capture_time(named_exif)
     if captured_at_utc is None:
         gps_utc = gps_time_utc(gps_info)
-        if gps_utc is not None:
+        if gps_utc is not None and captured_at_local is None:
             captured_at_utc = gps_utc
-            if captured_at_local is not None:
-                utc_offset_minutes = int(
-                    round((captured_at_local.replace(tzinfo=UTC) - gps_utc).total_seconds() / 60)
-                )
     orientation = safe_int(named_exif.get("Orientation"))
     camera_hints = {
         key: str(named_exif[key])
