@@ -1997,6 +1997,27 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         return membership_id is not None
 
+    def delete_stale_deleted_area_memberships(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        run_id: UUID,
+        stop_ids: list[UUID],
+    ) -> None:
+        if not stop_ids:
+            return
+        stale_membership_ids = (
+            select(orm.AreaVisitStop.id)
+            .join(orm.AreaVisit, orm.AreaVisit.id == orm.AreaVisitStop.area_visit_id)
+            .where(
+                orm.AreaVisitStop.trip_id == trip_id,
+                orm.AreaVisitStop.reconstruction_run_id == run_id,
+                orm.AreaVisitStop.stop_id.in_(stop_ids),
+                orm.AreaVisit.deleted_at.is_not(None),
+            )
+        )
+        db.execute(delete(orm.AreaVisitStop).where(orm.AreaVisitStop.id.in_(stale_membership_ids)))
+
     def validate_contiguous_area_stops(
         stops: list[orm.Stop],
         *,
@@ -3025,6 +3046,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Stop already belongs to an Area",
                 )
+            delete_stale_deleted_area_memberships(
+                db,
+                trip_id=trip_id,
+                run_id=run.id,
+                stop_ids=sorted_stop_ids,
+            )
             next_sort_order = (
                 db.scalar(
                     select(func.coalesce(func.max(orm.AreaVisit.sort_order), 0) + 1).where(
@@ -3144,12 +3171,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             lock_reconstruction_parents(db, area)
             rows = area_visit_membership_rows(db, area.id)
             for area_membership, stop, _, _ in rows:
-                area_membership.membership_source = ReconstructionSource.USER_CORRECTION.value
-                area_membership.confidence = 1.0
-                area_membership.user_locked = True
-                area_membership.updated_at = now
                 lock_record(stop)
                 lock_reconstruction_parents(db, stop)
+                db.delete(area_membership)
             after = area_visit_snapshot(db, area)
             target_type, target_id = "area_visit", area.id
 

@@ -1245,13 +1245,29 @@ def test_organizer_can_rename_area_visit_and_adjust_membership(
         stop["id"] for stop in area["stops"]
     ] + [standalone_stop_id]
 
+    recreated = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "create_area_visit",
+            "payload": {
+                "dayId": day_id,
+                "stopIds": [stop["id"] for stop in area["stops"]],
+                "title": "Recreated area",
+            },
+        },
+    )
+    assert recreated.status_code == 200, recreated.text
+    after_recreate = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
+    assert [area["title"] for area in after_recreate["areas"]] == ["Recreated area"]
+
     rerun = client.post(
         f"/trips/{trip_id}/reconstruction-runs",
         headers={"x-csrf-token": csrf_token},
     )
     assert rerun.status_code == 200, rerun.text
     after_rerun = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
-    assert after_rerun["areas"] == []
+    assert [area["title"] for area in after_rerun["areas"]] == ["Recreated area"]
     with engine.connect() as connection:
         deleted_at = connection.execute(
             text(
