@@ -1938,6 +1938,14 @@ button.is-updating {
   align-items: start;
 }
 
+.timeline-day-actions {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .timeline-day-button,
 .timeline-stop-button,
 .timeline-moment button {
@@ -2090,6 +2098,47 @@ button.is-updating {
   border-color: #d8e7e1;
   background: #fff;
   color: var(--accent-strong);
+}
+
+.timeline-area-selection-row,
+.timeline-area-create-sheet {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  border: 1px solid #c8ddd6;
+  border-radius: 8px;
+  background: #f5fbf8;
+  padding: 10px;
+}
+
+.timeline-area-selection-row {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  box-shadow: 0 10px 24px rgb(23 32 42 / 8%);
+}
+
+.timeline-area-selection-row strong {
+  margin-right: auto;
+  font-size: 0.88rem;
+}
+
+.timeline-area-create-sheet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.timeline-area-create-sheet label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.timeline-area-create-sheet input {
+  width: 100%;
 }
 
 .timeline-stop::before {
@@ -2263,6 +2312,20 @@ button.is-updating {
   margin-left: 10px;
   margin-right: 10px;
   box-shadow: 0 6px 16px rgb(23 32 42 / 5%);
+}
+
+.timeline-stop.area-selection-mode .timeline-stop-card {
+  border-color: #c8ddd6;
+}
+
+.timeline-stop.area-selected .timeline-stop-card {
+  border-color: var(--accent);
+  background: #f3fbf8;
+  box-shadow: 0 10px 26px rgb(25 120 90 / 14%);
+}
+
+.timeline-stop.area-selection-disabled .timeline-stop-card {
+  opacity: 0.58;
 }
 
 .timeline-stop-heading {

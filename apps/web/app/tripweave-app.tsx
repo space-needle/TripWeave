@@ -1350,6 +1350,27 @@ function OwnerWorkspace() {
     }
   }
 
+  async function createAreaVisit(
+    dayId: string,
+    stopIds: string[],
+    title: string,
+  ) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "create_area_visit",
+        payload: { dayId, stopIds, title },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
   async function addAreaVisitStop(areaVisitId: string, stopId: string) {
     if (!selectedTrip) {
       return;
@@ -1881,6 +1902,9 @@ function OwnerWorkspace() {
                   onStateChange={setStoryState}
                   onMergeStops={
                     canOrganizeSelectedTrip ? mergeStops : undefined
+                  }
+                  onCreateAreaVisit={
+                    canOrganizeSelectedTrip ? createAreaVisit : undefined
                   }
                   onAddAreaVisitStop={
                     canOrganizeSelectedTrip ? addAreaVisitStop : undefined
@@ -2752,6 +2776,7 @@ function TripStoryExplorer({
   state,
   onStateChange,
   initialAreaVisitsByDay,
+  onCreateAreaVisit,
   onAddAreaVisitStop,
   onDeleteAreaVisit,
   onMergeStops,
@@ -2772,6 +2797,11 @@ function TripStoryExplorer({
   state: StoryMapState;
   onStateChange: (state: StoryMapState) => void;
   initialAreaVisitsByDay?: Record<string, AreaVisitsResponse>;
+  onCreateAreaVisit?: (
+    dayId: string,
+    stopIds: string[],
+    title: string,
+  ) => Promise<void>;
   onAddAreaVisitStop?: (areaVisitId: string, stopId: string) => Promise<void>;
   onDeleteAreaVisit?: (areaVisitId: string) => Promise<void>;
   onMergeStops?: (sourceStopId: string, targetStopId: string) => Promise<void>;
@@ -2851,6 +2881,14 @@ function TripStoryExplorer({
   const [savingAreaActionKey, setSavingAreaActionKey] = useState<string | null>(
     null,
   );
+  const [areaSelectionDayId, setAreaSelectionDayId] = useState<string | null>(
+    null,
+  );
+  const [selectedAreaStopIds, setSelectedAreaStopIds] = useState<string[]>([]);
+  const [isAreaCreateSheetOpen, setIsAreaCreateSheetOpen] = useState(false);
+  const [newAreaTitleDraft, setNewAreaTitleDraft] = useState("");
+  const [createAreaError, setCreateAreaError] = useState("");
+  const [isCreatingArea, setIsCreatingArea] = useState(false);
   const [expandedMapAreaId, setExpandedMapAreaId] = useState<string | null>(
     null,
   );
@@ -3435,6 +3473,119 @@ function TripStoryExplorer({
         previous && standaloneStopIds.has(previous.id) ? previous : null,
       next: next && standaloneStopIds.has(next.id) ? next : null,
     };
+  }
+
+  function stopIsStandaloneForAreaSelection(
+    day: ReconstructionDayResponse,
+    stopId: string,
+  ): boolean {
+    const areaVisits = areaVisitsByDay[day.id];
+    if (!areaVisits) {
+      return false;
+    }
+    return areaVisits.standaloneStops.some((stop) => stop.id === stopId);
+  }
+
+  function cancelAreaSelection() {
+    setAreaSelectionDayId(null);
+    setSelectedAreaStopIds([]);
+    setIsAreaCreateSheetOpen(false);
+    setNewAreaTitleDraft("");
+    setCreateAreaError("");
+  }
+
+  function startAreaSelection(day: ReconstructionDayResponse) {
+    setAreaSelectionDayId(day.id);
+    setSelectedAreaStopIds([]);
+    setIsAreaCreateSheetOpen(false);
+    setNewAreaTitleDraft("");
+    setCreateAreaError("");
+    setEditToolsStopId(null);
+    setEditingAreaId(null);
+  }
+
+  function toggleAreaSelectionStop(
+    day: ReconstructionDayResponse,
+    stop: ReconstructionStopResponse,
+  ) {
+    if (areaSelectionDayId !== day.id) {
+      return;
+    }
+    if (!stopIsStandaloneForAreaSelection(day, stop.id)) {
+      setCreateAreaError("This stop already belongs to an area.");
+      return;
+    }
+    const selectedSet = new Set(selectedAreaStopIds);
+    const orderedIds = day.stops.map((dayStop) => dayStop.id);
+    const stopIndex = orderedIds.indexOf(stop.id);
+    if (selectedSet.has(stop.id)) {
+      const selectedIndexes = selectedAreaStopIds
+        .map((stopId) => orderedIds.indexOf(stopId))
+        .filter((index) => index >= 0);
+      if (
+        selectedIndexes.length > 1 &&
+        stopIndex !== Math.min(...selectedIndexes) &&
+        stopIndex !== Math.max(...selectedIndexes)
+      ) {
+        setCreateAreaError("Remove stops from either end of the selection.");
+        return;
+      }
+      selectedSet.delete(stop.id);
+    } else {
+      selectedSet.add(stop.id);
+    }
+    const nextIndexes = Array.from(selectedSet)
+      .map((stopId) => orderedIds.indexOf(stopId))
+      .filter((index) => index >= 0)
+      .sort((left, right) => left - right);
+    const isContiguous =
+      nextIndexes.length === 0 ||
+      nextIndexes.every(
+        (index, position) =>
+          position === 0 || index === nextIndexes[position - 1] + 1,
+      );
+    if (!isContiguous) {
+      setCreateAreaError("Select one contiguous run of stops.");
+      return;
+    }
+    setSelectedAreaStopIds(nextIndexes.map((index) => orderedIds[index]));
+    setCreateAreaError("");
+  }
+
+  function openCreateAreaSheet(day: ReconstructionDayResponse) {
+    if (selectedAreaStopIds.length < 3) {
+      setCreateAreaError("Select at least 3 stops.");
+      return;
+    }
+    const selectedIndexes = selectedAreaStopIds
+      .map((stopId) => day.stops.findIndex((stop) => stop.id === stopId))
+      .filter((index) => index >= 0);
+    const firstStop = day.stops[Math.min(...selectedIndexes)];
+    const lastStop = day.stops[Math.max(...selectedIndexes)];
+    setNewAreaTitleDraft(
+      firstStop && lastStop
+        ? `${displayStopTitle(firstStop)} to ${displayStopTitle(lastStop)}`
+        : "",
+    );
+    setIsAreaCreateSheetOpen(true);
+    setCreateAreaError("");
+  }
+
+  async function createSelectedArea(day: ReconstructionDayResponse) {
+    const title = newAreaTitleDraft.trim();
+    if (!onCreateAreaVisit || !title || selectedAreaStopIds.length < 3) {
+      return;
+    }
+    setIsCreatingArea(true);
+    setCreateAreaError("");
+    try {
+      await onCreateAreaVisit(day.id, selectedAreaStopIds, title);
+      cancelAreaSelection();
+    } catch (error) {
+      setCreateAreaError(messageFrom(error));
+    } finally {
+      setIsCreatingArea(false);
+    }
   }
 
   function timelineBranchInfo(
@@ -4132,17 +4283,41 @@ function TripStoryExplorer({
                       <span>{storyDayLabel(day)}</span>
                       <small>{day.date}</small>
                     </button>
-                    {onSetDayNote ? (
-                      <button
-                        type="button"
-                        className="timeline-note-button"
-                        onClick={() =>
-                          startEditingNote(`day:${day.id}`, day.note)
-                        }
-                      >
-                        {day.note ? "Edit note" : "Add note"}
-                      </button>
-                    ) : null}
+                    <div className="timeline-day-actions">
+                      {onCreateAreaVisit ? (
+                        areaSelectionDayId === day.id ? (
+                          <button
+                            type="button"
+                            className="timeline-note-button"
+                            onClick={cancelAreaSelection}
+                          >
+                            Cancel area
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="timeline-note-button"
+                            disabled={
+                              day.stops.length < 3 || !areaVisitsByDay[day.id]
+                            }
+                            onClick={() => startAreaSelection(day)}
+                          >
+                            Create area
+                          </button>
+                        )
+                      ) : null}
+                      {onSetDayNote ? (
+                        <button
+                          type="button"
+                          className="timeline-note-button"
+                          onClick={() =>
+                            startEditingNote(`day:${day.id}`, day.note)
+                          }
+                        >
+                          {day.note ? "Edit note" : "Add note"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   {editingNoteKey === `day:${day.id}` ? (
                     <form
@@ -4186,13 +4361,82 @@ function TripStoryExplorer({
                   ) : day.note ? (
                     <p className="timeline-note-preview">{day.note}</p>
                   ) : null}
+                  {areaSelectionDayId === day.id ? (
+                    <div className="timeline-area-selection-row">
+                      <strong>
+                        {selectedAreaStopIds.length} stops selected
+                      </strong>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={cancelAreaSelection}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedAreaStopIds.length < 3}
+                        onClick={() => openCreateAreaSheet(day)}
+                      >
+                        Create area
+                      </button>
+                    </div>
+                  ) : null}
+                  {areaSelectionDayId === day.id && isAreaCreateSheetOpen ? (
+                    <form
+                      className="timeline-area-create-sheet"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void createSelectedArea(day);
+                      }}
+                    >
+                      <label>
+                        Area name
+                        <input
+                          autoFocus
+                          value={newAreaTitleDraft}
+                          onChange={(event) =>
+                            setNewAreaTitleDraft(event.target.value)
+                          }
+                          maxLength={255}
+                          required
+                        />
+                      </label>
+                      <div className="button-row">
+                        <button
+                          type="submit"
+                          disabled={isCreatingArea || !newAreaTitleDraft.trim()}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            setIsAreaCreateSheetOpen(false);
+                            setNewAreaTitleDraft("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                  {areaSelectionDayId === day.id && createAreaError ? (
+                    <p className="error">{createAreaError}</p>
+                  ) : null}
                   {day.stops.map((stop) => {
                     const isEditingTools = editToolsStopId === stop.id;
+                    const isAreaSelectionMode = areaSelectionDayId === day.id;
+                    const isAreaStopSelected =
+                      isAreaSelectionMode &&
+                      selectedAreaStopIds.includes(stop.id);
                     const canEditStop =
-                      onRenameStop ||
-                      onSetStopNote ||
-                      onMergeStops ||
-                      onSplitStop;
+                      !isAreaSelectionMode &&
+                      (onRenameStop ||
+                        onSetStopNote ||
+                        onMergeStops ||
+                        onSplitStop);
                     const mergeCandidates = mergeCandidateStops(
                       day,
                       stop,
@@ -4218,6 +4462,9 @@ function TripStoryExplorer({
                       Boolean(mergeHereKey) && pendingMergeKey === mergeHereKey;
                     const stopMedia = orderedStopMedia(stop);
                     const areaContext = areaForStop(day, stop.id);
+                    const canSelectForArea =
+                      isAreaSelectionMode &&
+                      stopIsStandaloneForAreaSelection(day, stop.id);
                     const isFirstAreaStop =
                       areaContext?.stops[0]?.id === stop.id;
                     const isLastAreaStop =
@@ -4392,26 +4639,33 @@ function TripStoryExplorer({
                                 ) : null}
                                 {onRemoveAreaVisitStop ? (
                                   <div className="timeline-area-member-tools">
-                                    {areaContext.stops.map((areaStop) => (
-                                      <button
-                                        type="button"
-                                        className="timeline-tool-button"
-                                        key={areaStop.id}
-                                        disabled={
-                                          areaContext.stops.length <= 1 ||
-                                          savingAreaActionKey ===
-                                            `remove:${areaContext.area.id}:${areaStop.id}`
-                                        }
-                                        onClick={() =>
-                                          void removeStopFromArea(
-                                            areaContext.area,
-                                            areaStop.id,
-                                          )
-                                        }
-                                      >
-                                        Remove {displayStopPosition(areaStop)}
-                                      </button>
-                                    ))}
+                                    {areaContext.stops
+                                      .filter(
+                                        (areaStop, index) =>
+                                          index === 0 ||
+                                          index ===
+                                            areaContext.stops.length - 1,
+                                      )
+                                      .map((areaStop) => (
+                                        <button
+                                          type="button"
+                                          className="timeline-tool-button"
+                                          key={areaStop.id}
+                                          disabled={
+                                            areaContext.stops.length <= 3 ||
+                                            savingAreaActionKey ===
+                                              `remove:${areaContext.area.id}:${areaStop.id}`
+                                          }
+                                          onClick={() =>
+                                            void removeStopFromArea(
+                                              areaContext.area,
+                                              areaStop.id,
+                                            )
+                                          }
+                                        >
+                                          Remove {displayStopPosition(areaStop)}
+                                        </button>
+                                      ))}
                                   </div>
                                 ) : null}
                                 {onDeleteAreaVisit ? (
@@ -4441,7 +4695,13 @@ function TripStoryExplorer({
                         <section
                           className={`timeline-stop ${
                             state.selectedStopId === stop.id ? "active" : ""
-                          } ${timelineBranch.stopClassName}`}
+                          } ${timelineBranch.stopClassName} ${
+                            isAreaSelectionMode ? "area-selection-mode" : ""
+                          } ${isAreaStopSelected ? "area-selected" : ""} ${
+                            isAreaSelectionMode && !canSelectForArea
+                              ? "area-selection-disabled"
+                              : ""
+                          }`}
                           data-day-id={day.id}
                           data-stop-id={stop.id}
                           ref={(element) => {
@@ -4449,7 +4709,10 @@ function TripStoryExplorer({
                           }}
                           tabIndex={canSelectTimelineStop() ? 0 : -1}
                           onFocus={() => {
-                            if (canSelectTimelineStop()) {
+                            if (
+                              !isAreaSelectionMode &&
+                              canSelectTimelineStop()
+                            ) {
                               onStateChange(
                                 selectStoryStop(state, stop.id, day.id),
                               );
@@ -4468,12 +4731,20 @@ function TripStoryExplorer({
                               <button
                                 type="button"
                                 className="timeline-stop-button"
-                                disabled={!canSelectTimelineStop()}
-                                onClick={() =>
-                                  onStateChange(
-                                    selectStoryStop(state, stop.id, day.id),
-                                  )
+                                disabled={
+                                  isAreaSelectionMode
+                                    ? !canSelectForArea
+                                    : !canSelectTimelineStop()
                                 }
+                                onClick={() => {
+                                  if (isAreaSelectionMode) {
+                                    toggleAreaSelectionStop(day, stop);
+                                  } else {
+                                    onStateChange(
+                                      selectStoryStop(state, stop.id, day.id),
+                                    );
+                                  }
+                                }}
                               >
                                 <span>
                                   <span className="timeline-stop-number">
@@ -4499,6 +4770,19 @@ function TripStoryExplorer({
                                 </small>
                               </button>
                               <div className="timeline-stop-actions">
+                                {isAreaSelectionMode ? (
+                                  <button
+                                    type="button"
+                                    className="timeline-tool-button"
+                                    disabled={!canSelectForArea}
+                                    aria-pressed={isAreaStopSelected}
+                                    onClick={() =>
+                                      toggleAreaSelectionStop(day, stop)
+                                    }
+                                  >
+                                    {isAreaStopSelected ? "Selected" : "Select"}
+                                  </button>
+                                ) : null}
                                 {canEditStop ? (
                                   <button
                                     type="button"

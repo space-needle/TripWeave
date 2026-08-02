@@ -1313,6 +1313,146 @@ def test_organizer_can_rename_area_visit_and_adjust_membership(
     assert outsider_denied.status_code == 404
 
 
+def test_organizer_can_create_manual_area_visit_from_contiguous_stops(
+    client: TestClient,
+    engine: Engine,
+    tmp_path: Path,
+) -> None:
+    csrf_token = register(client, "area-create-owner@example.com")
+    trip = create_trip(client, csrf_token, "Manual Area Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text("SELECT id FROM trip_members WHERE trip_id = CAST(:trip_id AS uuid)"),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+
+    for index, (minute, latitude) in enumerate(
+        [(10, 35.0000), (20, 35.0200), (30, 35.0400), (40, 35.0600)],
+        start=1,
+    ):
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"area-create-{index}.jpg",
+            captured_at=datetime(2026, 6, 8, 9, 0, tzinfo=UTC) + timedelta(minutes=minute),
+            latitude=latitude,
+            longitude=127.0,
+            sha256=f"{index + 10:064d}",
+        )
+
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    day_id = reconstructed.json()["days"][0]["id"]
+    stop_ids = [stop["id"] for stop in reconstructed.json()["days"][0]["stops"]]
+    areas = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert areas.status_code == 200
+    assert areas.json()["areas"] == []
+    assert [stop["id"] for stop in areas.json()["standaloneStops"]] == stop_ids
+
+    non_contiguous = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "create_area_visit",
+            "payload": {
+                "dayId": day_id,
+                "stopIds": [stop_ids[0], stop_ids[2], stop_ids[3]],
+                "title": "Skipped stop area",
+            },
+        },
+    )
+    assert non_contiguous.status_code == 409
+
+    created = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "create_area_visit",
+            "payload": {
+                "dayId": day_id,
+                "stopIds": stop_ids[:3],
+                "title": "Manual waterfront walk",
+            },
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["targetType"] == "area_visit"
+    assert created.json()["afterValues"]["stopIds"] == stop_ids[:3]
+
+    updated = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert updated.status_code == 200
+    area = updated.json()["areas"][0]
+    assert area["title"] == "Manual waterfront walk"
+    assert area["source"] == "user_correction"
+    assert area["algorithmVersion"] == "area_visit_v1"
+    assert area["userLocked"] is True
+    assert [stop["id"] for stop in area["stops"]] == stop_ids[:3]
+    assert [stop["id"] for stop in updated.json()["standaloneStops"]] == [stop_ids[3]]
+
+    already_grouped = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "create_area_visit",
+            "payload": {
+                "dayId": day_id,
+                "stopIds": stop_ids[1:],
+                "title": "Overlapping area",
+            },
+        },
+    )
+    assert already_grouped.status_code == 409
+
+    rerun = client.post(
+        f"/trips/{trip_id}/reconstruction-runs",
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert rerun.status_code == 200, rerun.text
+    after_rerun = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits")
+    assert after_rerun.status_code == 200
+    assert [area["title"] for area in after_rerun.json()["areas"]] == ["Manual waterfront walk"]
+
+    url = get_test_database_url()
+    assert url is not None
+    invitation = create_invitation(client, csrf_token, trip_id)
+    contributor_client = TestClient(
+        create_app(
+            settings=Settings(DATABASE_URL=PostgresDsn(url), TRIPWEAVE_BLOB_DIR=tmp_path),
+            engine=engine,
+        )
+    )
+    csrf_contributor = register(
+        contributor_client,
+        "area-create-contributor@example.com",
+        "Area Create Contributor",
+    )
+    accept_invitation(
+        contributor_client,
+        token_from_invite_url(str(invitation["inviteUrl"])),
+        csrf_contributor,
+    )
+    contributor_denied = contributor_client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_contributor},
+        json={
+            "operationType": "create_area_visit",
+            "payload": {
+                "dayId": day_id,
+                "stopIds": stop_ids[:3],
+                "title": "Contributor area",
+            },
+        },
+    )
+    assert contributor_denied.status_code == 404
+
+
 def test_low_confidence_area_visit_enters_review_inbox(
     client: TestClient,
     engine: Engine,

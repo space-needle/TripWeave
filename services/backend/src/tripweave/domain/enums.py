@@ -158,6 +158,7 @@ class EditOperationType(StrEnum):
     RENAME_DAY = "rename_day"
     RENAME_STOP = "rename_stop"
     RENAME_MOMENT = "rename_moment"
+    CREATE_AREA_VISIT = "create_area_visit"
     RENAME_AREA_VISIT = "rename_area_visit"
     ADD_AREA_VISIT_STOP = "add_area_visit_stop"
     REMOVE_AREA_VISIT_STOP = "remove_area_visit_stop"

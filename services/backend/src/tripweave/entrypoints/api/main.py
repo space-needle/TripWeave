@@ -40,6 +40,7 @@ from tripweave.adapters.reconstruction import (
 )
 from tripweave.adapters.transactions import create_session_factory
 from tripweave.adapters.worker_heartbeat import read_heartbeat
+from tripweave.application.area_visits import ALGORITHM_VERSION as AREA_VISIT_ALGORITHM_VERSION
 from tripweave.application.area_visits import MIN_AREA_STOPS
 from tripweave.application.auth import (
     PasswordService,
@@ -1811,6 +1812,36 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is invalid"
             ) from exc
 
+    def payload_uuid_list(payload: dict[str, object], key: str) -> list[UUID]:
+        value = payload.get(key)
+        if not isinstance(value, list) or not value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{key} is required"
+            )
+        parsed: list[UUID] = []
+        seen: set[UUID] = set()
+        for item in value:
+            if not isinstance(item, str):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{key} is invalid",
+                )
+            try:
+                item_id = UUID(item)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{key} is invalid",
+                ) from exc
+            if item_id in seen:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{key} contains duplicates",
+                )
+            seen.add(item_id)
+            parsed.append(item_id)
+        return parsed
+
     def payload_str(payload: dict[str, object], key: str) -> str:
         value = payload.get(key)
         if not isinstance(value, str) or not value:
@@ -1936,6 +1967,59 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 "max_longitude": max(longitude for _, longitude in located),
             }
         lock_record(area)
+
+    def active_area_membership_exists(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        run_id: UUID,
+        stop_ids: list[UUID],
+        exclude_area_id: UUID | None = None,
+    ) -> bool:
+        if not stop_ids:
+            return False
+        conditions = [
+            orm.AreaVisitStop.trip_id == trip_id,
+            orm.AreaVisitStop.stop_id.in_(stop_ids),
+            orm.AreaVisit.deleted_at.is_(None),
+            or_(
+                orm.AreaVisitStop.reconstruction_run_id == run_id,
+                orm.AreaVisitStop.user_locked.is_(True),
+            ),
+        ]
+        if exclude_area_id is not None:
+            conditions.append(orm.AreaVisitStop.area_visit_id != exclude_area_id)
+        membership_id = db.scalar(
+            select(orm.AreaVisitStop.id)
+            .join(orm.AreaVisit, orm.AreaVisit.id == orm.AreaVisitStop.area_visit_id)
+            .where(*conditions)
+            .limit(1)
+        )
+        return membership_id is not None
+
+    def validate_contiguous_area_stops(
+        stops: list[orm.Stop],
+        *,
+        expected_day_id: UUID,
+        minimum_count: int,
+    ) -> None:
+        if len(stops) < minimum_count:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Area must include at least {minimum_count} stops",
+            )
+        if any(stop.trip_day_id != expected_day_id for stop in stops):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Stops must be from the same day",
+            )
+        positions = [stop.position for stop in stops]
+        expected_positions = list(range(min(positions), max(positions) + 1))
+        if positions != expected_positions:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Area stops must be contiguous",
+            )
 
     def recalculate_generated_area_visit(db: DbSession, area: orm.AreaVisit) -> None:
         rows = area_visit_membership_rows(db, area.id)
@@ -2899,6 +2983,111 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             after = {"mergedIntoMomentId": str(moment_target.id)}
             target_type, target_id = "moment", moment_target.id
 
+        elif operation_type == EditOperationType.CREATE_AREA_VISIT.value:
+            day_id = payload_uuid(data, "dayId")
+            day = get_trip_record(db, orm.TripDay, day_id, trip_id, "day")
+            stop_ids = payload_uuid_list(data, "stopIds")
+            title = payload_str(data, "title").strip()
+            if len(title) > 255:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="title is too long",
+                )
+            stops = list(
+                db.scalars(
+                    select(orm.Stop)
+                    .where(
+                        orm.Stop.trip_id == trip_id,
+                        orm.Stop.id.in_(stop_ids),
+                        or_(
+                            orm.Stop.reconstruction_run_id == run.id,
+                            orm.Stop.user_locked.is_(True),
+                        ),
+                    )
+                    .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+                )
+            )
+            if len(stops) != len(stop_ids):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
+            validate_contiguous_area_stops(
+                stops,
+                expected_day_id=day.id,
+                minimum_count=MIN_AREA_STOPS,
+            )
+            sorted_stop_ids = [stop.id for stop in stops]
+            if active_area_membership_exists(
+                db,
+                trip_id=trip_id,
+                run_id=run.id,
+                stop_ids=sorted_stop_ids,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Stop already belongs to an Area",
+                )
+            next_sort_order = (
+                db.scalar(
+                    select(func.coalesce(func.max(orm.AreaVisit.sort_order), 0) + 1).where(
+                        orm.AreaVisit.trip_id == trip_id,
+                        orm.AreaVisit.trip_day_id == day.id,
+                        orm.AreaVisit.deleted_at.is_(None),
+                        or_(
+                            orm.AreaVisit.reconstruction_run_id == run.id,
+                            orm.AreaVisit.user_locked.is_(True),
+                        ),
+                    )
+                )
+                or 1
+            )
+            before = {
+                "dayId": str(day.id),
+                "stopIds": [],
+            }
+            area = orm.AreaVisit(
+                trip_id=trip_id,
+                trip_day_id=day.id,
+                place_id=stops[0].place_id,
+                title=title,
+                sort_order=next_sort_order,
+                starts_at_utc=min(stop.starts_at_utc for stop in stops),
+                ends_at_utc=max(stop.ends_at_utc for stop in stops),
+                bounds={},
+                diagnostics={
+                    "manualSelection": {
+                        "dayId": str(day.id),
+                        "stopIds": [str(stop_id) for stop_id in sorted_stop_ids],
+                    }
+                },
+                source=ReconstructionSource.USER_CORRECTION.value,
+                confidence=1.0,
+                algorithm_version=AREA_VISIT_ALGORITHM_VERSION,
+                reconstruction_run_id=run.id,
+                user_locked=True,
+            )
+            db.add(area)
+            db.flush()
+            for sort_order, stop in enumerate(stops, start=1):
+                db.add(
+                    orm.AreaVisitStop(
+                        trip_id=trip_id,
+                        area_visit_id=area.id,
+                        stop_id=stop.id,
+                        reconstruction_run_id=run.id,
+                        sort_order=sort_order,
+                        membership_source=ReconstructionSource.USER_CORRECTION.value,
+                        confidence=1.0,
+                        algorithm_version=AREA_VISIT_ALGORITHM_VERSION,
+                        user_locked=True,
+                    )
+                )
+                lock_record(stop)
+                lock_reconstruction_parents(db, stop)
+            db.flush()
+            recalculate_area_visit(db, area)
+            lock_reconstruction_parents(db, area)
+            after = area_visit_snapshot(db, area)
+            target_type, target_id = "area_visit", area.id
+
         elif operation_type in {
             EditOperationType.RENAME_DAY.value,
             EditOperationType.RENAME_STOP.value,
@@ -2997,6 +3186,16 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Stop already belongs to an Area",
                 )
+            rows = area_visit_membership_rows(db, area.id)
+            area_positions = [area_stop.position for _, area_stop, _, _ in rows]
+            if not area_positions or stop.position not in {
+                min(area_positions) - 1,
+                max(area_positions) + 1,
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Stop must be adjacent to the Area",
+                )
             before = area_visit_snapshot(db, area)
             db.add(
                 orm.AreaVisitStop(
@@ -3033,10 +3232,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             expected_area_not_deleted(area)
             expected_fresh(area, payload.expected_updated_at)
             rows = area_visit_membership_rows(db, area.id)
-            if len(rows) <= 1:
+            if len(rows) <= MIN_AREA_STOPS:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Area must keep at least one stop",
+                    detail=f"Area must keep at least {MIN_AREA_STOPS} stops",
                 )
             membership = next(
                 (item for item, stop, _, _ in rows if stop.id == stop_id),
@@ -3046,6 +3245,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Area stop not found",
+                )
+            ordered_area_stop_ids = [stop.id for _, stop, _, _ in rows]
+            if stop_id not in {ordered_area_stop_ids[0], ordered_area_stop_ids[-1]}:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Only the first or last Area stop can be removed",
                 )
             before = area_visit_snapshot(db, area)
             removed_stop = next((stop for _, stop, _, _ in rows if stop.id == stop_id), None)
@@ -3314,9 +3519,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 and item.target_type == "area_visit"
                 and item.target_id is not None
             ):
-                area = db.get(orm.AreaVisit, item.target_id)
-                if area is not None and area.trip_id == trip_id:
-                    lock_record(area)
+                review_area = db.get(orm.AreaVisit, item.target_id)
+                if review_area is not None and review_area.trip_id == trip_id:
+                    lock_record(review_area)
             after = record_values(item, ["status", "resolution", "resolved_by", "resolved_at"])
             target_type, target_id = "review_item", item.id
             review_item = item
