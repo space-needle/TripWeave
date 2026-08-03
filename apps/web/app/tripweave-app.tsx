@@ -42,6 +42,11 @@ import type {
   UserResponse,
 } from "./api-types";
 import {
+  buildPublicStorySlideshowScenes,
+  type SlideshowScene,
+  type SlideshowRoute,
+} from "./story-slideshow";
+import {
   EVERYONE,
   StoryMapState,
   type StoryLegLine,
@@ -80,6 +85,7 @@ type StoryMobilePane = "map" | "timeline" | "photos";
 type StoryHeaderIconAction =
   | StoryMobilePane
   | "story"
+  | "slideshow"
   | "share"
   | "more"
   | "update"
@@ -274,9 +280,16 @@ export default function TripWeaveApp() {
     );
   }
   if (path.startsWith("/story/")) {
+    const storyPath = path.slice("/story/".length);
+    const slideshowSuffix = "/slideshow";
+    const isSlideshow = storyPath.endsWith(slideshowSuffix);
+    const tokenPath = isSlideshow
+      ? storyPath.slice(0, -slideshowSuffix.length)
+      : storyPath;
     return (
       <PublicStoryViewer
-        token={decodeURIComponent(path.slice("/story/".length))}
+        token={decodeURIComponent(tokenPath)}
+        initialView={isSlideshow ? "slideshow" : "story"}
       />
     );
   }
@@ -7545,7 +7558,13 @@ function PublicationList({
   );
 }
 
-function PublicStoryViewer({ token }: { token: string }) {
+function PublicStoryViewer({
+  token,
+  initialView = "story",
+}: {
+  token: string;
+  initialView?: "story" | "slideshow";
+}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [story, setStory] = useState<PublicStoryResponse | null>(null);
   const [error, setError] = useState("");
@@ -7553,6 +7572,9 @@ function PublicStoryViewer({ token }: { token: string }) {
     initialStoryMapState(),
   );
   const [mobilePane, setMobilePane] = useState<StoryMobilePane>("map");
+  const [publicView, setPublicView] = useState<"story" | "slideshow">(
+    initialView,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -7611,6 +7633,18 @@ function PublicStoryViewer({ token }: { token: string }) {
   const timezoneId =
     typeof trip.timezoneId === "string" ? trip.timezoneId : "UTC";
   const areaVisitsByDay = areaVisitsByDayRecord(story.areaVisitsByDay);
+  const slideshowScenes = buildPublicStorySlideshowScenes(story);
+
+  if (publicView === "slideshow") {
+    return (
+      <PublicStorySlideshow
+        scenes={slideshowScenes}
+        title={title}
+        timezoneId={timezoneId}
+        onExit={() => setPublicView("story")}
+      />
+    );
+  }
 
   return (
     <main className="app-shell public-story-shell">
@@ -7644,6 +7678,15 @@ function PublicStoryViewer({ token }: { token: string }) {
               <StoryHeaderIcon action={action} />
             </button>
           ))}
+          <button
+            type="button"
+            aria-label="Slideshow"
+            aria-pressed={false}
+            onClick={() => setPublicView("slideshow")}
+            title="Slideshow"
+          >
+            <StoryHeaderIcon action="slideshow" />
+          </button>
         </nav>
       </header>
       <TripStoryExplorer
@@ -7657,6 +7700,369 @@ function PublicStoryViewer({ token }: { token: string }) {
       />
     </main>
   );
+}
+
+function PublicStorySlideshow({
+  scenes,
+  title,
+  timezoneId,
+  onExit,
+}: {
+  scenes: SlideshowScene[];
+  title: string;
+  timezoneId: string;
+  onExit: () => void;
+}) {
+  const [requestedActiveIndex, setRequestedActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const shellRef = useRef<HTMLElement | null>(null);
+  const reducedMotion = useReducedMotion();
+  const activeIndex =
+    scenes.length > 0 ? Math.min(requestedActiveIndex, scenes.length - 1) : 0;
+  const activeScene = scenes[activeIndex] ?? null;
+  const activePhoto = activeScene?.type === "photo" ? activeScene.photo : null;
+  const hasMultipleScenes = scenes.length > 1;
+  const thumbnailScenes = scenes.filter(
+    (scene): scene is Extract<SlideshowScene, { type: "photo" }> =>
+      scene.type === "photo",
+  );
+
+  const goToPrevious = useCallback(() => {
+    if (!hasMultipleScenes) {
+      return;
+    }
+    setRequestedActiveIndex((index) =>
+      activeIndex === 0 ? scenes.length - 1 : Math.max(0, index - 1),
+    );
+  }, [activeIndex, hasMultipleScenes, scenes.length]);
+
+  const goToNext = useCallback(() => {
+    if (!hasMultipleScenes) {
+      return;
+    }
+    setRequestedActiveIndex((index) => (index + 1) % scenes.length);
+  }, [hasMultipleScenes, scenes.length]);
+
+  useEffect(() => {
+    if (isPaused || reducedMotion || !hasMultipleScenes || !activeScene) {
+      return;
+    }
+    const timeout = window.setTimeout(goToNext, activeScene.durationMs);
+    return () => window.clearTimeout(timeout);
+  }, [activeScene, goToNext, hasMultipleScenes, isPaused, reducedMotion]);
+
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        goToPrevious();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        goToNext();
+      } else if (event.key === " ") {
+        event.preventDefault();
+        setIsPaused((value) => !value);
+      } else if (event.key === "Escape") {
+        onExit();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [goToNext, goToPrevious, onExit]);
+
+  async function requestFullscreen() {
+    const element = shellRef.current;
+    if (!element || !element.requestFullscreen) {
+      return;
+    }
+    try {
+      await element.requestFullscreen();
+    } catch {
+      setIsPaused(true);
+    }
+  }
+
+  return (
+    <main
+      className="slideshow-shell"
+      ref={shellRef}
+      aria-label={`${title} slideshow`}
+    >
+      {activeScene?.type === "day" || activeScene?.type === "stop" ? (
+        <SlideshowMapScene scene={activeScene} />
+      ) : (
+        <div className="slideshow-stage">
+          {activePhoto ? (
+            <img
+              key={activePhoto.id}
+              src={activePhoto.imageUrl}
+              alt={activePhoto.filename ?? `${title} travel photo`}
+            />
+          ) : (
+            <div className="slideshow-empty">
+              <p>No published photos are available for slideshow.</p>
+            </div>
+          )}
+        </div>
+      )}
+      <header className="slideshow-topbar">
+        <div>
+          <p className="eyebrow">TripWeave slideshow</p>
+          <h1>{title}</h1>
+        </div>
+        <div className="slideshow-controls" aria-label="Slideshow controls">
+          <button
+            type="button"
+            onClick={() => setIsPaused((value) => !value)}
+            disabled={!hasMultipleScenes}
+          >
+            {isPaused || reducedMotion ? "Play" : "Pause"}
+          </button>
+          <button type="button" onClick={() => void requestFullscreen()}>
+            Full screen
+          </button>
+          <button type="button" onClick={onExit}>
+            Story
+          </button>
+        </div>
+      </header>
+      {activeScene?.type === "day" || activeScene?.type === "stop" ? (
+        <footer className="slideshow-caption map-caption">
+          <div className="slideshow-caption-copy">
+            <span className="slideshow-caption-kicker">
+              {activeScene.type === "day"
+                ? "Day overview"
+                : activeScene.dayLabel}
+            </span>
+            <strong>{activeScene.title}</strong>
+            <dl>
+              <div>
+                <dt>{activeScene.type === "day" ? "Stops" : "Photos"}</dt>
+                <dd>
+                  {activeScene.type === "day"
+                    ? activeScene.stops.length
+                    : activeScene.photoCount}
+                </dd>
+              </div>
+              <div>
+                <dt>Coming up</dt>
+                <dd>{activeScene.subtitle}</dd>
+              </div>
+            </dl>
+          </div>
+          <span className="slideshow-counter">
+            {activeIndex + 1} / {scenes.length}
+          </span>
+        </footer>
+      ) : activePhoto ? (
+        <footer className="slideshow-caption">
+          <div className="slideshow-caption-copy">
+            <span className="slideshow-caption-kicker">
+              {activePhoto.dayLabel}
+            </span>
+            <strong>{activePhoto.stopLabel}</strong>
+            <dl>
+              <div>
+                <dt>Date</dt>
+                <dd>{formatDate(activePhoto.capturedAt, timezoneId)}</dd>
+              </div>
+              <div>
+                <dt>From</dt>
+                <dd>{activePhoto.contributor}</dd>
+              </div>
+            </dl>
+          </div>
+          <span className="slideshow-counter">
+            {activeIndex + 1} / {scenes.length}
+          </span>
+        </footer>
+      ) : null}
+      {hasMultipleScenes ? (
+        <>
+          <button
+            type="button"
+            className="slideshow-nav previous"
+            aria-label="Previous photo"
+            onClick={goToPrevious}
+          >
+            {"<"}
+          </button>
+          <button
+            type="button"
+            className="slideshow-nav next"
+            aria-label="Next photo"
+            onClick={goToNext}
+          >
+            {">"}
+          </button>
+        </>
+      ) : null}
+      <div className="slideshow-strip" aria-hidden="true">
+        {thumbnailScenes.slice(0, 24).map((scene) => (
+          <span
+            key={scene.id}
+            className={scene.id === activeScene?.id ? "active" : undefined}
+          >
+            {scene.photo.thumbnailUrl ? (
+              <img src={scene.photo.thumbnailUrl} alt="" />
+            ) : null}
+          </span>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function SlideshowMapScene({
+  scene,
+}: {
+  scene: Extract<SlideshowScene, { type: "day" | "stop" }>;
+}) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<Marker[]>([]);
+  const reducedMotion = useReducedMotion();
+  const hasMapData = scene.stops.some((stop) => stop.coordinates);
+
+  useEffect(() => {
+    if (!mapNode.current || mapRef.current) {
+      return;
+    }
+    const map = new maplibregl.Map({
+      container: mapNode.current,
+      style: configuredMapStyle(),
+      center: [0, 0],
+      zoom: 1,
+      attributionControl: { compact: true },
+      interactive: false,
+    });
+    mapRef.current = map;
+    map.on("load", () => {
+      map.addSource("slideshow-routes", {
+        type: "geojson",
+        data: slideshowRouteCollection([]),
+      });
+      map.addLayer({
+        id: "slideshow-routes-line",
+        type: "line",
+        source: "slideshow-routes",
+        paint: {
+          "line-color": "#f5b35b",
+          "line-opacity": 0.78,
+          "line-width": 4,
+        },
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
+      });
+    });
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+
+    for (const stop of scene.stops) {
+      if (!stop.coordinates) {
+        continue;
+      }
+      const element = document.createElement("div");
+      element.className =
+        scene.type === "stop" && stop.id === scene.activeStopId
+          ? "slideshow-map-marker active"
+          : "slideshow-map-marker";
+      element.textContent = String(stop.position);
+      markersRef.current.push(
+        new maplibregl.Marker({ element, anchor: "center" })
+          .setLngLat(stop.coordinates)
+          .addTo(map),
+      );
+    }
+
+    const syncRoute = () => {
+      const source = map.getSource("slideshow-routes") as
+        GeoJSONSource | undefined;
+      source?.setData(slideshowRouteCollection(scene.routes));
+    };
+    if (map.loaded()) {
+      syncRoute();
+    } else {
+      map.once("load", syncRoute);
+    }
+
+    const activeStop =
+      scene.type === "stop"
+        ? scene.stops.find((stop) => stop.id === scene.activeStopId)
+        : null;
+    const focusCoordinates =
+      scene.type === "stop" && activeStop?.coordinates
+        ? [activeStop.coordinates]
+        : scene.stops
+            .map((stop) => stop.coordinates)
+            .filter((coordinate) => coordinate !== null);
+
+    if (focusCoordinates.length === 0) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      map.resize();
+      if (focusCoordinates.length === 1) {
+        map.easeTo({
+          center: focusCoordinates[0],
+          zoom: scene.type === "stop" ? 14.8 : 12,
+          duration: reducedMotion ? 0 : 900,
+        });
+        return;
+      }
+      map.fitBounds(boundsForCoordinates(focusCoordinates), {
+        padding: 120,
+        maxZoom: scene.type === "stop" ? 14.8 : 12,
+        duration: reducedMotion ? 0 : 1000,
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [reducedMotion, scene]);
+
+  return (
+    <div
+      className={`slideshow-map-stage ${
+        hasConfiguredMapStyle() ? "configured-map-shell" : "local-map-shell"
+      }`}
+    >
+      <div className="slideshow-map" ref={mapNode} aria-hidden="true" />
+      {!hasMapData ? (
+        <div className="slideshow-map-empty">
+          <p>No mapped stops are available for this scene.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function slideshowRouteCollection(routes: SlideshowRoute[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: routes.map((route) => ({
+      type: "Feature" as const,
+      id: route.id,
+      properties: { id: route.id },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: route.coordinates,
+      },
+    })),
+  };
 }
 
 function areaVisitsByDayRecord(
@@ -7699,6 +8105,18 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
         <path d="M5 7.5h14v11H5z" />
         <path d="m8 15 2.5-3 2 2.2 1.5-1.7 2.2 2.5" />
         <path d="M8.5 10h.01" />
+      </svg>
+    );
+  }
+
+  if (action === "slideshow") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 6h16v11H4z" />
+        <path d="M9 20h6" />
+        <path d="M12 17v3" />
+        <path d="m8 14 2.4-3 2 2.1 1.5-1.7 2.1 2.6" />
+        <path d="M8.4 9.2h.01" />
       </svg>
     );
   }
