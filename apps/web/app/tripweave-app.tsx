@@ -22,6 +22,7 @@ import QRCode from "qrcode";
 import { ApiError, api, guestApi, uploadWithProgress } from "./api-client";
 import type {
   AreaVisitResponse,
+  AreaVisitStopResponse,
   AreaVisitsResponse,
   GuestMemberResponse,
   InvitationPreviewResponse,
@@ -2938,6 +2939,9 @@ function TripStoryExplorer({
   const [savingAreaActionKey, setSavingAreaActionKey] = useState<string | null>(
     null,
   );
+  const [pendingTimelineAction, setPendingTimelineAction] = useState<
+    string | null
+  >(null);
   const [areaSelectionDayId, setAreaSelectionDayId] = useState<string | null>(
     null,
   );
@@ -3468,6 +3472,220 @@ function TripStoryExplorer({
     return area.title ?? `Area ${area.sortOrder}`;
   }
 
+  function areaVisitStopFromReconstructionStop(
+    stop: ReconstructionStopResponse,
+    membershipSortOrder: number,
+  ): AreaVisitStopResponse {
+    return {
+      id: stop.id,
+      position: stop.position,
+      title: stop.title,
+      startsAt: stop.startsAt,
+      endsAt: stop.endsAt,
+      placeName: stop.placeName,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      membershipSource: "user_edited",
+      membershipConfidence: 1,
+      membershipSortOrder,
+      membershipUserLocked: true,
+    };
+  }
+
+  function areaVisitStopById(
+    day: ReconstructionDayResponse,
+  ): Map<string, AreaVisitStopResponse> {
+    return new Map(
+      day.stops.map((stop, index) => [
+        stop.id,
+        areaVisitStopFromReconstructionStop(stop, index + 1),
+      ]),
+    );
+  }
+
+  function updateAreaVisitsForDay(
+    dayId: string,
+    update: (current: AreaVisitsResponse | undefined) => AreaVisitsResponse,
+  ) {
+    setAreaVisitsByDay((current) => ({
+      ...current,
+      [dayId]: update(current[dayId]),
+    }));
+  }
+
+  function optimisticCreateAreaVisit(
+    day: ReconstructionDayResponse,
+    stopIds: string[],
+    title: string,
+  ) {
+    const stopLookup = areaVisitStopById(day);
+    const stopIdSet = new Set(stopIds);
+    const selectedStops = day.stops
+      .filter((stop) => stopIdSet.has(stop.id))
+      .map((stop, index) =>
+        areaVisitStopFromReconstructionStop(stop, index + 1),
+      );
+    if (selectedStops.length === 0) {
+      return;
+    }
+    const now = new Date().toISOString();
+    updateAreaVisitsForDay(day.id, (current) => {
+      const areas = current?.areas ?? [];
+      const optimisticArea: AreaVisitResponse = {
+        id: `optimistic-area:${day.id}:${stopIds.join("-")}`,
+        tripId: current?.tripId ?? tripId ?? "",
+        dayId: day.id,
+        reconstructionRunId:
+          current?.sourceReconstructionRunId ??
+          reconstruction?.latestRun?.id ??
+          "",
+        sortOrder: areas.length + 1,
+        title,
+        startsAt: selectedStops[0]?.startsAt ?? now,
+        endsAt: selectedStops[selectedStops.length - 1]?.endsAt ?? now,
+        latitude: selectedStops[0]?.latitude ?? null,
+        longitude: selectedStops[0]?.longitude ?? null,
+        confidence: 1,
+        source: "user_edited",
+        algorithmVersion: "pending-ui",
+        userLocked: true,
+        bounds: {},
+        diagnostics: { pending: true },
+        stops: selectedStops,
+      };
+      const fallbackStandaloneStops = Array.from(stopLookup.values());
+      return {
+        tripId: current?.tripId ?? tripId ?? "",
+        dayId: day.id,
+        sourceReconstructionRunId:
+          current?.sourceReconstructionRunId ??
+          reconstruction?.latestRun?.id ??
+          null,
+        areas: [...areas, optimisticArea],
+        standaloneStops: (
+          current?.standaloneStops ?? fallbackStandaloneStops
+        ).filter((stop) => !stopIdSet.has(stop.id)),
+      };
+    });
+  }
+
+  function optimisticRenameAreaVisit(area: AreaVisitResponse, title: string) {
+    updateAreaVisitsForDay(area.dayId, (current) => ({
+      ...(current ?? {
+        tripId: area.tripId,
+        dayId: area.dayId,
+        sourceReconstructionRunId: area.reconstructionRunId,
+        standaloneStops: [],
+      }),
+      areas: (current?.areas ?? [area]).map((candidate) =>
+        candidate.id === area.id ? { ...candidate, title } : candidate,
+      ),
+    }));
+  }
+
+  function optimisticAddStopToArea(
+    day: ReconstructionDayResponse,
+    area: AreaVisitResponse,
+    stopId: string,
+  ) {
+    const stopLookup = areaVisitStopById(day);
+    const stopToAdd = stopLookup.get(stopId);
+    if (!stopToAdd) {
+      return;
+    }
+    updateAreaVisitsForDay(day.id, (current) => {
+      const currentArea = current?.areas.find(
+        (candidate) => candidate.id === area.id,
+      );
+      const nextStopIds = new Set([
+        ...(currentArea?.stops ?? area.stops).map((stop) => stop.id),
+        stopId,
+      ]);
+      const orderedStops = day.stops
+        .filter((stop) => nextStopIds.has(stop.id))
+        .map((stop, index) =>
+          areaVisitStopFromReconstructionStop(stop, index + 1),
+        );
+      return {
+        ...(current ?? {
+          tripId: area.tripId,
+          dayId: day.id,
+          sourceReconstructionRunId: area.reconstructionRunId,
+          standaloneStops: [],
+        }),
+        areas: (current?.areas ?? [area]).map((candidate) =>
+          candidate.id === area.id
+            ? { ...candidate, stops: orderedStops }
+            : candidate,
+        ),
+        standaloneStops: (current?.standaloneStops ?? []).filter(
+          (stop) => stop.id !== stopId,
+        ),
+      };
+    });
+  }
+
+  function optimisticRemoveStopFromArea(
+    day: ReconstructionDayResponse,
+    area: AreaVisitResponse,
+    stopId: string,
+  ) {
+    const stopLookup = areaVisitStopById(day);
+    const stopToRemove = stopLookup.get(stopId);
+    if (!stopToRemove) {
+      return;
+    }
+    updateAreaVisitsForDay(day.id, (current) => {
+      const standaloneStops = [
+        ...(current?.standaloneStops ?? []),
+        stopToRemove,
+      ].sort(
+        (left, right) =>
+          day.stops.findIndex((stop) => stop.id === left.id) -
+          day.stops.findIndex((stop) => stop.id === right.id),
+      );
+      return {
+        ...(current ?? {
+          tripId: area.tripId,
+          dayId: day.id,
+          sourceReconstructionRunId: area.reconstructionRunId,
+          standaloneStops: [],
+        }),
+        areas: (current?.areas ?? [area]).map((candidate) =>
+          candidate.id === area.id
+            ? {
+                ...candidate,
+                stops: candidate.stops.filter((stop) => stop.id !== stopId),
+              }
+            : candidate,
+        ),
+        standaloneStops,
+      };
+    });
+  }
+
+  function optimisticDeleteAreaVisit(area: AreaVisitResponse) {
+    setAreaVisitsByDay((current) => {
+      const dayAreaVisits = current[area.dayId];
+      if (!dayAreaVisits) {
+        return current;
+      }
+      return {
+        ...current,
+        [area.dayId]: {
+          ...dayAreaVisits,
+          areas: dayAreaVisits.areas.filter(
+            (candidate) => candidate.id !== area.id,
+          ),
+          standaloneStops: [
+            ...dayAreaVisits.standaloneStops,
+            ...area.stops,
+          ].sort((left, right) => left.position - right.position),
+        },
+      };
+    });
+  }
+
   function areaSummary(stops: ReconstructionStopResponse[]): string {
     const photoCount = stops.reduce(
       (total, stop) => total + stop.mediaCount,
@@ -3633,15 +3851,20 @@ function TripStoryExplorer({
     if (!onCreateAreaVisit || !title || selectedAreaStopIds.length < 3) {
       return;
     }
+    const previousAreaVisitsByDay = areaVisitsByDay;
     setIsCreatingArea(true);
     setCreateAreaError("");
+    setPendingTimelineAction("Creating area...");
+    optimisticCreateAreaVisit(day, selectedAreaStopIds, title);
     try {
       await onCreateAreaVisit(day.id, selectedAreaStopIds, title);
       cancelAreaSelection();
     } catch (error) {
+      setAreaVisitsByDay(previousAreaVisitsByDay);
       setCreateAreaError(messageFrom(error));
     } finally {
       setIsCreatingArea(false);
+      setPendingTimelineAction(null);
     }
   }
 
@@ -3746,48 +3969,71 @@ function TripStoryExplorer({
     if (!onRenameAreaVisit || !nextTitle) {
       return;
     }
+    const previousAreaVisitsByDay = areaVisitsByDay;
     setSavingAreaActionKey(`rename:${area.id}`);
     setAreaEditError("");
+    setPendingTimelineAction("Renaming area...");
+    optimisticRenameAreaVisit(area, nextTitle);
     try {
       await onRenameAreaVisit(area.id, nextTitle);
       setEditingAreaId(null);
       setAreaTitleDraft("");
     } catch (error) {
+      setAreaVisitsByDay(previousAreaVisitsByDay);
       setAreaEditError(messageFrom(error));
     } finally {
       setSavingAreaActionKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
-  async function addStopToArea(area: AreaVisitResponse, stopId: string) {
+  async function addStopToArea(
+    day: ReconstructionDayResponse,
+    area: AreaVisitResponse,
+    stopId: string,
+  ) {
     if (!onAddAreaVisitStop) {
       return;
     }
+    const previousAreaVisitsByDay = areaVisitsByDay;
     const key = `add:${area.id}:${stopId}`;
     setSavingAreaActionKey(key);
     setAreaEditError("");
+    setPendingTimelineAction("Adding stop...");
+    optimisticAddStopToArea(day, area, stopId);
     try {
       await onAddAreaVisitStop(area.id, stopId);
     } catch (error) {
+      setAreaVisitsByDay(previousAreaVisitsByDay);
       setAreaEditError(messageFrom(error));
     } finally {
       setSavingAreaActionKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
-  async function removeStopFromArea(area: AreaVisitResponse, stopId: string) {
+  async function removeStopFromArea(
+    day: ReconstructionDayResponse,
+    area: AreaVisitResponse,
+    stopId: string,
+  ) {
     if (!onRemoveAreaVisitStop) {
       return;
     }
+    const previousAreaVisitsByDay = areaVisitsByDay;
     const key = `remove:${area.id}:${stopId}`;
     setSavingAreaActionKey(key);
     setAreaEditError("");
+    setPendingTimelineAction("Removing stop...");
+    optimisticRemoveStopFromArea(day, area, stopId);
     try {
       await onRemoveAreaVisitStop(area.id, stopId);
     } catch (error) {
+      setAreaVisitsByDay(previousAreaVisitsByDay);
       setAreaEditError(messageFrom(error));
     } finally {
       setSavingAreaActionKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
@@ -3795,17 +4041,22 @@ function TripStoryExplorer({
     if (!onDeleteAreaVisit) {
       return;
     }
+    const previousAreaVisitsByDay = areaVisitsByDay;
     const key = `delete:${area.id}`;
     setSavingAreaActionKey(key);
     setAreaEditError("");
+    setPendingTimelineAction("Deleting area...");
+    optimisticDeleteAreaVisit(area);
     try {
       await onDeleteAreaVisit(area.id);
       setEditingAreaId(null);
       setAreaTitleDraft("");
     } catch (error) {
+      setAreaVisitsByDay(previousAreaVisitsByDay);
       setAreaEditError(messageFrom(error));
     } finally {
       setSavingAreaActionKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
@@ -3880,6 +4131,7 @@ function TripStoryExplorer({
     }
     setMergingStopKey(key);
     setMergeStopError("");
+    setPendingTimelineAction("Merging stops...");
     try {
       await onMergeStops(mergeCandidateStopId, selectedTargetStopId);
       onStateChange(selectStoryStop(state, selectedTargetStopId, dayId));
@@ -3891,6 +4143,7 @@ function TripStoryExplorer({
       setMergeStopError(`Could not merge stops. ${messageFrom(error)}`);
     } finally {
       setMergingStopKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
@@ -3914,6 +4167,7 @@ function TripStoryExplorer({
     }
     setSplittingStopKey(key);
     setSplitStopError("");
+    setPendingTimelineAction("Splitting stop...");
     try {
       await onSplitStop(stopId, afterMediaItemId);
       onStateChange(selectStoryStop(state, stopId, dayId));
@@ -3924,6 +4178,7 @@ function TripStoryExplorer({
       setSplitStopError(`Could not split stop. ${messageFrom(error)}`);
     } finally {
       setSplittingStopKey(null);
+      setPendingTimelineAction(null);
     }
   }
 
@@ -4318,6 +4573,12 @@ function TripStoryExplorer({
               })}
             </div>
           ) : null}
+          {pendingTimelineAction ? (
+            <div className="timeline-pending-status" role="status">
+              <span className="button-spinner" aria-hidden="true" />
+              <span>{pendingTimelineAction}</span>
+            </div>
+          ) : null}
           <div className="timeline-day-list">
             {timelineDays.map((day) => {
               const forkGroups = timelineForkGroups(day);
@@ -4483,6 +4744,9 @@ function TripStoryExplorer({
                     <p className="error">{createAreaError}</p>
                   ) : null}
                   {day.stops.map((stop) => {
+                    const stopIndexInDay = day.stops.findIndex(
+                      (dayStop) => dayStop.id === stop.id,
+                    );
                     const isEditingTools = editToolsStopId === stop.id;
                     const isAreaSelectionMode = areaSelectionDayId === day.id;
                     const isAreaStopSelected =
@@ -4544,7 +4808,11 @@ function TripStoryExplorer({
                           areaContext
                             ? `timeline-stop-stack in-area ${
                                 isFirstAreaStop ? "area-start" : ""
-                              } ${isLastAreaStop ? "area-end" : ""}`
+                              } ${isLastAreaStop ? "area-end" : ""} ${
+                                isFirstAreaStop && stopIndexInDay > 0
+                                  ? "has-previous-stop"
+                                  : ""
+                              }`
                             : "timeline-stop-stack"
                         }
                         key={stop.id}
@@ -4664,6 +4932,7 @@ function TripStoryExplorer({
                                         }
                                         onClick={() =>
                                           void addStopToArea(
+                                            day,
                                             areaContext.area,
                                             previousAreaStop.id,
                                           )
@@ -4683,6 +4952,7 @@ function TripStoryExplorer({
                                         }
                                         onClick={() =>
                                           void addStopToArea(
+                                            day,
                                             areaContext.area,
                                             nextAreaStop.id,
                                           )
@@ -4715,6 +4985,7 @@ function TripStoryExplorer({
                                           }
                                           onClick={() =>
                                             void removeStopFromArea(
+                                              day,
                                               areaContext.area,
                                               areaStop.id,
                                             )

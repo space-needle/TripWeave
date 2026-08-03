@@ -2431,6 +2431,24 @@ button.is-updating {
   width: 100%;
 }
 
+.timeline-pending-status {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  min-height: 38px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #d78363;
+  border-radius: 8px;
+  background: #fff7f3;
+  color: #7d2c1a;
+  font-size: 0.82rem;
+  font-weight: 850;
+  padding: 8px 10px;
+  box-shadow: 0 10px 24px rgb(23 32 42 / 8%);
+}
+
 .timeline-stop::before {
   position: absolute;
   top: 50%;
@@ -2443,6 +2461,25 @@ button.is-updating {
 
 .timeline-stop-stack:last-child .timeline-stop::before {
   display: none;
+}
+
+.timeline-stop-stack.area-start.has-previous-stop .timeline-stop::before {
+  top: -50px;
+}
+
+.timeline-stop-stack.area-start.has-previous-stop::after {
+  position: absolute;
+  top: -10px;
+  left: 13px;
+  z-index: 2;
+  width: 2px;
+  height: 50px;
+  content: "";
+  background: #e9a085;
+}
+
+.timeline-stop-stack.area-start.has-previous-stop.in-area > * {
+  z-index: 3;
 }
 
 .timeline-stop::after {
