@@ -643,6 +643,183 @@ def test_incremental_reconstruction_adds_new_media_without_replacing_story(
         )
 
 
+def test_reconstruction_reuses_owner_stop_rename_on_future_trip(
+    migrated_database: Engine,
+) -> None:
+    owner = factories.user_row(email="owner-remembered-stop@example.com")
+    other_user = factories.user_row(email="other-remembered-stop@example.com")
+    previous_trip = factories.trip_row(created_by=cast(UUID, owner["id"]))
+    other_trip = factories.trip_row(created_by=cast(UUID, other_user["id"]))
+    future_trip = factories.trip_row(created_by=cast(UUID, owner["id"]))
+    previous_member = factories.member_row(
+        trip_id=cast(UUID, previous_trip["id"]), user_id=cast(UUID, owner["id"])
+    )
+    previous_member["role"] = "owner"
+    other_member = factories.member_row(
+        trip_id=cast(UUID, other_trip["id"]), user_id=cast(UUID, other_user["id"])
+    )
+    other_member["role"] = "owner"
+    future_member = factories.member_row(
+        trip_id=cast(UUID, future_trip["id"]), user_id=cast(UUID, owner["id"])
+    )
+    future_member["role"] = "owner"
+
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO users (id, email, password_hash, display_name)
+                VALUES (:id, :email, :password_hash, :display_name)
+                """
+            ),
+            [owner, other_user],
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trips (id, title, timezone_id, created_by)
+                VALUES (:id, :title, :timezone_id, :created_by)
+                """
+            ),
+            [previous_trip, other_trip, future_trip],
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO trip_members (id, trip_id, user_id, role, display_name)
+                VALUES (:id, :trip_id, :user_id, :role, :display_name)
+                """
+            ),
+            [previous_member, other_member, future_member],
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, previous_trip["id"]),
+            member_id=cast(UUID, previous_member["id"]),
+            filename="remembered-owner-previous.jpg",
+            captured_at="2026-07-02T16:00:00+00:00",
+            latitude=37.0000,
+            longitude=-122.0000,
+            sha256="a" * 64,
+        )
+        insert_media(
+            connection,
+            trip_id=cast(UUID, other_trip["id"]),
+            member_id=cast(UUID, other_member["id"]),
+            filename="remembered-other-previous.jpg",
+            captured_at="2026-07-02T16:00:00+00:00",
+            latitude=37.0000,
+            longitude=-122.0000,
+            sha256="b" * 64,
+        )
+
+    with Session(migrated_database) as session:
+        db_previous_trip = session.get(orm.Trip, previous_trip["id"])
+        db_other_trip = session.get(orm.Trip, other_trip["id"])
+        assert db_previous_trip is not None
+        assert db_other_trip is not None
+        reconstruct_trip(db=session, trip=db_previous_trip, geocoder=CountingGeocoder())
+        reconstruct_trip(db=session, trip=db_other_trip, geocoder=CountingGeocoder())
+
+        previous_stop_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM stops
+                WHERE trip_id = :trip_id
+                ORDER BY starts_at_utc
+                LIMIT 1
+                """
+            ),
+            {"trip_id": previous_trip["id"]},
+        ).scalar_one()
+        other_stop_id = session.execute(
+            text(
+                """
+                SELECT id
+                FROM stops
+                WHERE trip_id = :trip_id
+                ORDER BY starts_at_utc
+                LIMIT 1
+                """
+            ),
+            {"trip_id": other_trip["id"]},
+        ).scalar_one()
+        session.execute(
+            text(
+                """
+                UPDATE stops
+                SET title = :title,
+                    user_locked = true,
+                    source = 'user_correction'
+                WHERE id = :stop_id
+                """
+            ),
+            [
+                {"stop_id": previous_stop_id, "title": "Owner remembered cafe"},
+                {"stop_id": other_stop_id, "title": "Other remembered cafe"},
+            ],
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO edit_operations (
+                    trip_id, operation_type, actor_user_id, actor_member_id,
+                    target_type, target_id, payload, before_values, after_values
+                )
+                VALUES (
+                    :trip_id, 'rename_stop', :actor_user_id, :actor_member_id,
+                    'stop', :target_id, '{}'::jsonb,
+                    CAST(:before_values AS jsonb),
+                    CAST(:after_values AS jsonb)
+                )
+                """
+            ),
+            [
+                {
+                    "trip_id": previous_trip["id"],
+                    "actor_user_id": owner["id"],
+                    "actor_member_id": previous_member["id"],
+                    "target_id": previous_stop_id,
+                    "before_values": '{"title": "Place 1"}',
+                    "after_values": '{"title": "Owner remembered cafe"}',
+                },
+                {
+                    "trip_id": other_trip["id"],
+                    "actor_user_id": other_user["id"],
+                    "actor_member_id": other_member["id"],
+                    "target_id": other_stop_id,
+                    "before_values": '{"title": "Place 1"}',
+                    "after_values": '{"title": "Other remembered cafe"}',
+                },
+            ],
+        )
+        session.commit()
+
+    with migrated_database.begin() as connection:
+        insert_media(
+            connection,
+            trip_id=cast(UUID, future_trip["id"]),
+            member_id=cast(UUID, future_member["id"]),
+            filename="remembered-owner-future.jpg",
+            captured_at="2026-08-02T16:00:00+00:00",
+            latitude=37.0001,
+            longitude=-122.0001,
+            sha256="c" * 64,
+        )
+
+    with Session(migrated_database) as session:
+        db_future_trip = session.get(orm.Trip, future_trip["id"])
+        assert db_future_trip is not None
+        reconstruct_trip(db=session, trip=db_future_trip, geocoder=CountingGeocoder())
+        remembered_title = session.execute(
+            text("SELECT title FROM stops WHERE trip_id = :trip_id"),
+            {"trip_id": future_trip["id"]},
+        ).scalar_one()
+
+    assert remembered_title == "Owner remembered cafe"
+
+
 def test_full_rebuild_preserves_media_under_locked_stops(
     migrated_database: Engine,
 ) -> None:

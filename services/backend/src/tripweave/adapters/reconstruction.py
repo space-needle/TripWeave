@@ -167,7 +167,7 @@ def reconstruct_trip(
         if point.latitude is not None and point.longitude is not None
     ]
     clusters = cluster_stops(gps_points)
-    created = persist_clusters(db, run, trip.id, clusters, geocoder)
+    created = persist_clusters(db, run, trip, clusters, geocoder)
     review_count += assign_missing_gps(db, run, trip.id, rebuild_usable, gps_points)
     restored_days = restore_locked_stop_moments(db, run, locked_snapshots, media_points)
     moments = persist_moments(db, run, created, rebuild_usable)
@@ -298,7 +298,7 @@ def increment_story(
             continue
         stop = find_incremental_stop(db, trip.id, point)
         if stop is None:
-            stop = create_incremental_stop(db, run, trip.id, point, geocoder)
+            stop = create_incremental_stop(db, run, trip, point, geocoder)
             added_stops += 1
         else:
             stop.starts_at_utc = min(stop.starts_at_utc, point.captured_at_utc)
@@ -565,19 +565,26 @@ def find_incremental_stop(db: Session, trip_id: UUID, point: MediaPoint) -> orm.
 def create_incremental_stop(
     db: Session,
     run: orm.ReconstructionRun,
-    trip_id: UUID,
+    trip: orm.Trip,
     point: MediaPoint,
     geocoder: Geocoder,
 ) -> orm.Stop:
     assert point.day is not None
     assert point.captured_at_utc is not None
     assert point.latitude is not None and point.longitude is not None
-    trip_day = find_or_create_trip_day(db, run, trip_id, point)
+    trip_day = find_or_create_trip_day(db, run, trip.id, point)
     geocode_result = geocoder.reverse_geocode(latitude=point.latitude, longitude=point.longitude)
-    place = find_incremental_place(db, trip_id, point.latitude, point.longitude)
+    remembered_title = remembered_stop_title(
+        db,
+        user_id=trip.created_by,
+        trip_id=trip.id,
+        latitude=point.latitude,
+        longitude=point.longitude,
+    )
+    place = find_incremental_place(db, trip.id, point.latitude, point.longitude)
     if place is None:
         place = orm.Place(
-            trip_id=trip_id,
+            trip_id=trip.id,
             name=geocode_result.name,
             centroid=point_wkt(point.latitude, point.longitude),
             **generated(
@@ -592,10 +599,10 @@ def create_incremental_stop(
     elif place.name is None and geocode_result.name is not None and not place.user_locked:
         place.name = geocode_result.name
     stop = orm.Stop(
-        trip_id=trip_id,
+        trip_id=trip.id,
         trip_day_id=trip_day.id,
         place_id=place.id,
-        title=geocode_result.name or place.name,
+        title=remembered_title or geocode_result.name or place.name,
         position=next_stop_position(db, trip_day.id),
         starts_at_utc=point.captured_at_utc,
         ends_at_utc=point.captured_at_utc,
@@ -1367,7 +1374,7 @@ def cluster_stops(points: list[MediaPoint]) -> dict[date, list[StopCluster]]:
 def persist_clusters(
     db: Session,
     run: orm.ReconstructionRun,
-    trip_id: UUID,
+    trip: orm.Trip,
     clusters_by_day: dict[date, list[StopCluster]],
     geocoder: Geocoder,
 ) -> dict[orm.TripDay, list[orm.Stop]]:
@@ -1378,7 +1385,7 @@ def persist_clusters(
         trip_day = find_or_create_trip_day_for_date(
             db,
             run,
-            trip_id,
+            trip.id,
             day,
             min(cluster.start for cluster in clusters) if clusters else None,
             max(cluster.end for cluster in clusters) if clusters else None,
@@ -1388,11 +1395,18 @@ def persist_clusters(
             geocode_result = geocoder.reverse_geocode(
                 latitude=cluster.latitude, longitude=cluster.longitude
             )
+            remembered_title = remembered_stop_title(
+                db,
+                user_id=trip.created_by,
+                trip_id=trip.id,
+                latitude=cluster.latitude,
+                longitude=cluster.longitude,
+            )
             place = find_place(known_places, cluster.latitude, cluster.longitude)
             if place is None:
                 name = geocode_result.name
                 place = orm.Place(
-                    trip_id=trip_id,
+                    trip_id=trip.id,
                     name=name,
                     centroid=point_wkt(cluster.latitude, cluster.longitude),
                     **generated(
@@ -1408,10 +1422,10 @@ def persist_clusters(
             elif place.name is None and geocode_result.name is not None and not place.user_locked:
                 place.name = geocode_result.name
             stop = orm.Stop(
-                trip_id=trip_id,
+                trip_id=trip.id,
                 trip_day_id=trip_day.id,
                 place_id=place.id,
-                title=geocode_result.name or place.name,
+                title=remembered_title or geocode_result.name or place.name,
                 position=stop_position,
                 starts_at_utc=cluster.start,
                 ends_at_utc=cluster.end,
@@ -1426,6 +1440,69 @@ def persist_clusters(
             stops.append(stop)
         created[trip_day] = stops
     return created
+
+
+def remembered_stop_title(
+    db: Session,
+    *,
+    user_id: UUID,
+    trip_id: UUID,
+    latitude: float,
+    longitude: float,
+) -> str | None:
+    title = db.execute(
+        text(
+            """
+            SELECT COALESCE(NULLIF(edit_operations.after_values ->> 'title', ''), stops.title)
+            FROM edit_operations
+            JOIN stops ON stops.id = edit_operations.target_id
+            WHERE edit_operations.operation_type = 'rename_stop'
+                AND edit_operations.status = 'applied'
+                AND edit_operations.target_type = 'stop'
+                AND edit_operations.actor_user_id = CAST(:user_id AS uuid)
+                AND stops.trip_id != CAST(:trip_id AS uuid)
+                AND stops.centroid IS NOT NULL
+                AND COALESCE(NULLIF(edit_operations.after_values ->> 'title', ''), stops.title)
+                    IS NOT NULL
+                AND btrim(
+                    COALESCE(NULLIF(edit_operations.after_values ->> 'title', ''), stops.title)
+                ) != ''
+                AND ST_DWithin(
+                    stops.centroid,
+                    ST_SetSRID(
+                        ST_MakePoint(
+                            CAST(:longitude AS double precision),
+                            CAST(:latitude AS double precision)
+                        ),
+                        4326
+                    )::geography,
+                    CAST(:radius_meters AS double precision)
+                )
+            ORDER BY
+                ST_Distance(
+                    stops.centroid,
+                    ST_SetSRID(
+                        ST_MakePoint(
+                            CAST(:longitude AS double precision),
+                            CAST(:latitude AS double precision)
+                        ),
+                        4326
+                    )::geography
+                ),
+                edit_operations.created_at DESC,
+                edit_operations.id DESC
+            LIMIT 1
+            """
+        ),
+        {
+            "user_id": str(user_id),
+            "trip_id": str(trip_id),
+            "latitude": latitude,
+            "longitude": longitude,
+            "radius_meters": STOP_RADIUS_METERS,
+        },
+    ).scalar_one_or_none()
+    return title.strip() if isinstance(title, str) and title.strip() else None
 
 
 def assign_missing_gps(
