@@ -103,6 +103,7 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
         NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL: ${NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL-https://tiles.openfreemap.org/styles/positron}
     environment:
+      HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL: ${NEXT_PUBLIC_TRIPWEAVE_MAP_STYLE_URL-https://tiles.openfreemap.org/styles/positron}
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8000}

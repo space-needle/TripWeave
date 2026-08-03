@@ -7967,6 +7967,8 @@ function SlideshowPhotoStage({
   const [previousPhoto, setPreviousPhoto] = useState<SlideshowPhoto | null>(
     null,
   );
+  const [isPhotoReady, setIsPhotoReady] = useState(false);
+  const [shouldFadeFromMap, setShouldFadeFromMap] = useState(true);
 
   useEffect(() => {
     if (displayedPhoto.id === photo.id) {
@@ -7975,29 +7977,60 @@ function SlideshowPhotoStage({
     const timeout = window.setTimeout(() => {
       setPreviousPhoto(reducedMotion ? null : displayedPhoto);
       setDisplayedPhoto(photo);
+      setIsPhotoReady(false);
+      setShouldFadeFromMap(false);
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [displayedPhoto, photo, reducedMotion]);
+
+  useEffect(() => {
+    const image = new Image();
+    image.onload = () => setIsPhotoReady(true);
+    image.onerror = () => setIsPhotoReady(true);
+    image.src = displayedPhoto.imageUrl;
+    return () => {
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [displayedPhoto]);
+
+  useEffect(() => {
+    if (!previousPhoto || !isPhotoReady || reducedMotion) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setPreviousPhoto(null), 900);
+    return () => window.clearTimeout(timeout);
+  }, [isPhotoReady, previousPhoto, reducedMotion]);
 
   return (
     <div className="slideshow-stage slideshow-photo-stage">
       {previousPhoto ? (
         <div
           aria-hidden="true"
-          className="slideshow-photo-frame slideshow-photo-frame-previous"
+          className="slideshow-photo-layer slideshow-photo-layer-previous"
           role="img"
           style={{ backgroundImage: `url("${previousPhoto.imageUrl}")` }}
         />
       ) : null}
-      <div
-        aria-label={displayedPhoto.filename ?? `${title} travel photo`}
-        className={`slideshow-photo-frame ${
-          previousPhoto ? "slideshow-photo-frame-current" : ""
-        }`}
-        key={displayedPhoto.id}
-        role="img"
-        style={{ backgroundImage: `url("${displayedPhoto.imageUrl}")` }}
-      />
+      {isPhotoReady ? (
+        <div
+          className={`slideshow-photo-layer slideshow-photo-layer-current ${
+            shouldFadeFromMap && !previousPhoto
+              ? "slideshow-photo-layer-map-enter"
+              : ""
+          }`}
+          key={displayedPhoto.id}
+        >
+          <div
+            aria-label={displayedPhoto.filename ?? `${title} travel photo`}
+            className={`slideshow-photo-frame ${
+              previousPhoto ? "slideshow-photo-frame-current" : ""
+            }`}
+            role="img"
+            style={{ backgroundImage: `url("${displayedPhoto.imageUrl}")` }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

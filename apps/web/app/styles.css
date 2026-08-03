@@ -873,6 +873,7 @@ button.is-updating {
 
 .slideshow-photo-stage {
   overflow: hidden;
+  background: transparent;
 }
 
 .slideshow-map-stage {
@@ -938,26 +939,54 @@ button.is-updating {
   text-align: center;
 }
 
+.slideshow-photo-layer,
 .slideshow-photo-frame {
   position: absolute;
   inset: 0;
+}
+
+.slideshow-photo-layer {
+  background: #05070a;
+}
+
+.slideshow-photo-layer-previous {
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
 }
 
-.slideshow-photo-frame-previous {
-  opacity: 1;
+.slideshow-photo-layer-current {
+  z-index: 1;
+}
+
+.slideshow-photo-layer-map-enter {
+  animation: slideshow-photo-layer-fade-in 900ms ease both;
+}
+
+.slideshow-photo-frame {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
 .slideshow-photo-frame-current {
   animation: slideshow-photo-fade-in 900ms ease both;
 }
 
+@keyframes slideshow-photo-layer-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes slideshow-photo-fade-in {
   from {
     opacity: 0;
-    transform: scale(1.01);
+    transform: scale(1.006);
   }
 
   to {
