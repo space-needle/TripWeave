@@ -465,6 +465,107 @@ def test_second_user_cannot_access_private_trip(
     assert response.status_code == 404
 
 
+def test_trip_map_points_include_only_owned_trips_and_filter_by_date(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    url = get_test_database_url()
+    assert url is not None
+    assert client.get("/trips/map-points").status_code == 401
+
+    csrf_owner = register(client, "map-owner@example.com")
+    korea_trip = create_trip(client, csrf_owner, "Korea")
+    seoul_media_id = insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(korea_trip["id"]),
+        member_id=str(korea_trip["memberId"]),
+        filename="seoul.jpg",
+        captured_at=datetime(2024, 4, 10, 3, 0, tzinfo=UTC),
+        latitude=37.5665,
+        longitude=126.978,
+        sha256="0" * 64,
+    )
+    busan_media_id = insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(korea_trip["id"]),
+        member_id=str(korea_trip["memberId"]),
+        filename="busan.jpg",
+        captured_at=datetime(2024, 4, 12, 3, 0, tzinfo=UTC),
+        latitude=35.1796,
+        longitude=129.0756,
+        sha256="1" * 64,
+    )
+    insert_sanitized_assets(client, engine, seoul_media_id)
+    no_location_media_id = insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(korea_trip["id"]),
+        member_id=str(korea_trip["memberId"]),
+        filename="no-location.jpg",
+        captured_at=datetime(2024, 4, 11, 3, 0, tzinfo=UTC),
+        latitude=None,
+        longitude=None,
+        sha256="2" * 64,
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE media_items SET deleted_at = now() WHERE id = CAST(:id AS uuid)"),
+            {"id": busan_media_id},
+        )
+
+    other_client = TestClient(
+        create_app(
+            settings=Settings(
+                DATABASE_URL=PostgresDsn(url),
+                TRIPWEAVE_BLOB_DIR=tmp_path,
+                TRIPWEAVE_AUTH_RATE_LIMIT_MAX_ATTEMPTS=100,
+            ),
+            engine=engine,
+        )
+    )
+    csrf_other = register(other_client, "map-other@example.com")
+    other_trip = create_trip(other_client, csrf_other, "Other")
+    insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=str(other_trip["id"]),
+        member_id=str(other_trip["memberId"]),
+        filename="hidden.jpg",
+        captured_at=datetime(2024, 4, 10, 3, 0, tzinfo=UTC),
+        latitude=48.8566,
+        longitude=2.3522,
+        sha256="3" * 64,
+    )
+
+    response = client.get("/trips/map-points?start=2024-04-01&end=2024-04-30")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["startDate"] == "2024-04-01"
+    assert body["endDate"] == "2024-04-30"
+    assert [trip["title"] for trip in body["trips"]] == ["Korea"]
+    assert body["trips"][0]["pointCount"] == 1
+    assert body["trips"][0]["representativeMediaItemId"] == seoul_media_id
+    assert body["trips"][0]["representativeThumbnailUrl"].startswith("http://testserver/")
+    assert body["trips"][0]["bounds"] == {
+        "minLatitude": 37.5665,
+        "minLongitude": 126.978,
+        "maxLatitude": 37.5665,
+        "maxLongitude": 126.978,
+    }
+    assert [point["filename"] for point in body["points"]] == ["seoul.jpg"]
+    assert body["points"][0]["mediaItemId"] == seoul_media_id
+    assert body["points"][0]["tripId"] == korea_trip["id"]
+    assert body["points"][0]["date"] == "2024-04-10"
+    assert body["points"][0]["thumbnailUrl"].startswith("http://testserver/")
+    assert no_location_media_id not in {point["mediaItemId"] for point in body["points"]}
+
+    excluded = client.get("/trips/map-points?start=2025-01-01&end=2025-12-31")
+    assert excluded.status_code == 200
+    assert excluded.json()["trips"] == []
+    assert excluded.json()["points"] == []
+
+    invalid = client.get("/trips/map-points?start=2025-01-01&end=2024-01-01")
+    assert invalid.status_code == 400
+
+
 def test_owner_invites_account_contributor_and_contributor_uploads_with_attribution(
     client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:

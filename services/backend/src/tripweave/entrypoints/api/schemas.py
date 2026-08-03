@@ -151,6 +151,52 @@ class TripsListResponse(BaseModel):
     trips: list[TripResponse]
 
 
+class TripMapBoundsResponse(BaseModel):
+    min_latitude: float = Field(alias="minLatitude")
+    min_longitude: float = Field(alias="minLongitude")
+    max_latitude: float = Field(alias="maxLatitude")
+    max_longitude: float = Field(alias="maxLongitude")
+
+
+class TripMapPointResponse(BaseModel):
+    id: UUID
+    trip_id: UUID = Field(alias="tripId")
+    media_item_id: UUID = Field(alias="mediaItemId")
+    captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    captured_date: date | None = Field(default=None, alias="date")
+    latitude: float
+    longitude: float
+    source: str
+    confidence: float | None = None
+    filename: str | None = None
+    thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
+
+
+class TripMapTripResponse(BaseModel):
+    id: UUID
+    title: str
+    start_date: date | None = Field(default=None, alias="startDate")
+    end_date: date | None = Field(default=None, alias="endDate")
+    timezone_id: str = Field(alias="timezoneId")
+    role: str
+    member_id: UUID = Field(alias="memberId")
+    point_count: int = Field(alias="pointCount")
+    first_captured_at: datetime | None = Field(default=None, alias="firstCapturedAt")
+    last_captured_at: datetime | None = Field(default=None, alias="lastCapturedAt")
+    bounds: TripMapBoundsResponse
+    representative_media_item_id: UUID = Field(alias="representativeMediaItemId")
+    representative_thumbnail_url: str | None = Field(
+        default=None, alias="representativeThumbnailUrl"
+    )
+
+
+class TripsMapPointsResponse(BaseModel):
+    trips: list[TripMapTripResponse]
+    points: list[TripMapPointResponse]
+    start_date: date | None = Field(default=None, alias="startDate")
+    end_date: date | None = Field(default=None, alias="endDate")
+
+
 class InvitationCreateRequest(BaseModel):
     expires_in_seconds: int | None = Field(
         default=None, alias="expiresInSeconds", ge=60, le=60 * 60 * 24 * 30

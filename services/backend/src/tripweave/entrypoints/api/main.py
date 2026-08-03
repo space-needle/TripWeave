@@ -125,8 +125,12 @@ from tripweave.entrypoints.api.schemas import (
     StoryUpdateStatusResponse,
     StoryVersionResponse,
     TripCreateRequest,
+    TripMapBoundsResponse,
+    TripMapPointResponse,
+    TripMapTripResponse,
     TripResponse,
     TripsListResponse,
+    TripsMapPointsResponse,
     TripUpdateRequest,
     UploadFileResponse,
     UploadGrantResponse,
@@ -162,6 +166,22 @@ class AuthenticatedActor:
     @property
     def is_guest(self) -> bool:
         return self.guest_member is not None
+
+
+@dataclass(slots=True)
+class TripMapSummary:
+    trip: orm.Trip
+    role: str
+    member_id: UUID
+    point_count: int
+    min_latitude: float
+    min_longitude: float
+    max_latitude: float
+    max_longitude: float
+    first_captured_at: datetime | None
+    last_captured_at: datetime | None
+    representative_media_item_id: UUID
+    representative_thumbnail_url: str | None
 
 
 LOCAL_PUBLIC_API_BASE_URL = "http://localhost:8000"
@@ -1547,6 +1567,158 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         ).all()
         return TripsListResponse(
             trips=[trip_response(trip, role, member_id) for trip, role, member_id in rows]
+        )
+
+    @app.get("/trips/map-points", response_model=TripsMapPointsResponse)
+    def list_trip_map_points(
+        start: date | None = None,
+        end: date | None = None,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> TripsMapPointsResponse:
+        if start is not None and end is not None and end < start:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="end must be on or after start",
+            )
+        latitude: Any = literal_column("ST_Y(media_items.effective_location::geometry)").label(
+            "latitude"
+        )
+        longitude: Any = literal_column("ST_X(media_items.effective_location::geometry)").label(
+            "longitude"
+        )
+        statement = (
+            select(
+                orm.Trip,
+                orm.TripMember.role,
+                orm.TripMember.id.label("member_id"),
+                orm.MediaItem,
+                orm.MediaAsset,
+                latitude,
+                longitude,
+            )
+            .join(orm.TripMember, orm.TripMember.trip_id == orm.Trip.id)
+            .join(orm.MediaItem, orm.MediaItem.trip_id == orm.Trip.id)
+            .outerjoin(
+                orm.MediaAsset,
+                and_(
+                    orm.MediaAsset.media_item_id == orm.MediaItem.id,
+                    orm.MediaAsset.asset_type == MediaAssetType.THUMBNAIL.value,
+                ),
+            )
+            .where(
+                orm.TripMember.user_id == auth.user.id,
+                orm.TripMember.removed_at.is_(None),
+                orm.MediaItem.deleted_at.is_(None),
+                orm.MediaItem.effective_location.is_not(None),
+            )
+            .order_by(
+                orm.Trip.created_at.desc(),
+                orm.Trip.id,
+                orm.MediaItem.effective_captured_at_utc.asc().nulls_last(),
+                orm.MediaItem.created_at,
+                orm.MediaItem.id,
+            )
+        )
+        if start is not None:
+            statement = statement.where(
+                orm.MediaItem.effective_captured_at_utc.is_not(None),
+                func.date(orm.MediaItem.effective_captured_at_utc) >= start,
+            )
+        if end is not None:
+            statement = statement.where(
+                orm.MediaItem.effective_captured_at_utc.is_not(None),
+                func.date(orm.MediaItem.effective_captured_at_utc) <= end,
+            )
+
+        points: list[TripMapPointResponse] = []
+        trips_by_id: dict[UUID, TripMapSummary] = {}
+        for trip, role, member_id, media_item, thumbnail, lat, lon in db.execute(statement).all():
+            point_latitude = float(lat)
+            point_longitude = float(lon)
+            thumbnail_url = None
+            if thumbnail is not None:
+                thumbnail_url = media_asset_response(thumbnail).download_url
+            captured_at = (
+                media_item.effective_captured_at_utc or media_item.original_captured_at_utc
+            )
+            point = TripMapPointResponse(
+                id=media_item.id,
+                tripId=trip.id,
+                mediaItemId=media_item.id,
+                capturedAt=captured_at,
+                date=captured_at.date() if captured_at is not None else None,
+                latitude=point_latitude,
+                longitude=point_longitude,
+                source=media_item.location_source,
+                confidence=media_item.location_confidence,
+                filename=media_item.original_filename,
+                thumbnailUrl=thumbnail_url,
+            )
+            points.append(point)
+            summary = trips_by_id.get(trip.id)
+            if summary is None:
+                summary = TripMapSummary(
+                    trip=trip,
+                    role=role,
+                    member_id=member_id,
+                    point_count=0,
+                    min_latitude=point_latitude,
+                    min_longitude=point_longitude,
+                    max_latitude=point_latitude,
+                    max_longitude=point_longitude,
+                    first_captured_at=captured_at,
+                    last_captured_at=captured_at,
+                    representative_media_item_id=media_item.id,
+                    representative_thumbnail_url=thumbnail_url,
+                )
+                trips_by_id[trip.id] = summary
+            summary.point_count += 1
+            summary.min_latitude = min(summary.min_latitude, point_latitude)
+            summary.min_longitude = min(summary.min_longitude, point_longitude)
+            summary.max_latitude = max(summary.max_latitude, point_latitude)
+            summary.max_longitude = max(summary.max_longitude, point_longitude)
+            first_captured_at = summary.first_captured_at
+            if captured_at is not None and (
+                first_captured_at is None or captured_at < first_captured_at
+            ):
+                summary.first_captured_at = captured_at
+            last_captured_at = summary.last_captured_at
+            if captured_at is not None and (
+                last_captured_at is None or captured_at > last_captured_at
+            ):
+                summary.last_captured_at = captured_at
+            if summary.representative_thumbnail_url is None and thumbnail_url is not None:
+                summary.representative_media_item_id = media_item.id
+                summary.representative_thumbnail_url = thumbnail_url
+
+        return TripsMapPointsResponse(
+            trips=[
+                TripMapTripResponse(
+                    id=summary.trip.id,
+                    title=summary.trip.title,
+                    startDate=summary.trip.start_date,
+                    endDate=summary.trip.end_date,
+                    timezoneId=summary.trip.timezone_id,
+                    role=summary.role,
+                    memberId=summary.member_id,
+                    pointCount=summary.point_count,
+                    firstCapturedAt=summary.first_captured_at,
+                    lastCapturedAt=summary.last_captured_at,
+                    bounds=TripMapBoundsResponse(
+                        minLatitude=summary.min_latitude,
+                        minLongitude=summary.min_longitude,
+                        maxLatitude=summary.max_latitude,
+                        maxLongitude=summary.max_longitude,
+                    ),
+                    representativeMediaItemId=summary.representative_media_item_id,
+                    representativeThumbnailUrl=summary.representative_thumbnail_url,
+                )
+                for summary in trips_by_id.values()
+            ],
+            points=points,
+            startDate=start,
+            endDate=end,
         )
 
     @app.get("/trips/{trip_id}", response_model=TripResponse)
