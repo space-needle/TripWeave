@@ -4972,40 +4972,42 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession, payload: dict[str, object]
     ) -> ReconstructionResponse:
         hydrated = json.loads(json.dumps(payload))
-        representative_asset_ids: set[UUID] = set()
-        media_by_asset_id: dict[UUID, dict[str, object]] = {}
+        asset_ids: set[UUID] = set()
+        media_fields_by_asset_id: dict[UUID, tuple[dict[str, object], str]] = {}
         for day in hydrated.get("days", []):
             if not isinstance(day, dict):
                 continue
             for stop in day.get("stops", []):
                 if not isinstance(stop, dict):
                     continue
-                first_stop_thumbnail_id: UUID | None = None
                 for moment in stop.get("moments", []):
                     if not isinstance(moment, dict):
                         continue
                     for media in moment.get("media", []):
                         if not isinstance(media, dict):
                             continue
-                        asset_id = media.get("thumbnailAssetId")
-                        if asset_id is None:
-                            continue
-                        try:
-                            asset_uuid = UUID(str(asset_id))
-                        except ValueError:
-                            continue
-                        media_by_asset_id[asset_uuid] = media
-                        first_stop_thumbnail_id = first_stop_thumbnail_id or asset_uuid
-                if first_stop_thumbnail_id is not None:
-                    representative_asset_ids.add(first_stop_thumbnail_id)
-        if representative_asset_ids:
+                        for asset_field, url_field in (
+                            ("thumbnailAssetId", "thumbnailUrl"),
+                            ("previewAssetId", "previewUrl"),
+                        ):
+                            asset_id = media.get(asset_field)
+                            if asset_id is None:
+                                continue
+                            try:
+                                asset_uuid = UUID(str(asset_id))
+                            except ValueError:
+                                continue
+                            asset_ids.add(asset_uuid)
+                            media_fields_by_asset_id[asset_uuid] = (media, url_field)
+        if asset_ids:
             assets = db.execute(
-                select(orm.MediaAsset).where(orm.MediaAsset.id.in_(representative_asset_ids))
+                select(orm.MediaAsset).where(orm.MediaAsset.id.in_(asset_ids))
             ).scalars()
             for asset in assets:
-                media = media_by_asset_id.get(asset.id)
-                if media is not None:
-                    media["thumbnailUrl"] = media_asset_response(asset).download_url
+                media_field = media_fields_by_asset_id.get(asset.id)
+                if media_field is not None:
+                    media, url_field = media_field
+                    media[url_field] = media_asset_response(asset).download_url
         return ReconstructionResponse.model_validate(hydrated)
 
     def save_story_draft_projection(

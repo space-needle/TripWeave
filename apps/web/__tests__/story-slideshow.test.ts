@@ -189,4 +189,22 @@ describe("story slideshow", () => {
       },
     ]);
   });
+
+  it("uses the calendar date when a day has no title", () => {
+    const untitledStory: PublicStoryResponse = {
+      ...publicStory,
+      story: {
+        ...publicStory.story,
+        days: publicStory.story.days.map((day) => ({
+          ...day,
+          title: null,
+        })),
+      },
+    };
+
+    const scenes = buildPublicStorySlideshowScenes(untitledStory);
+
+    expect(scenes[0]).toMatchObject({ type: "day", title: "6/1" });
+    expect(scenes[1]).toMatchObject({ type: "stop", dayLabel: "6/1" });
+  });
 });

@@ -42,6 +42,7 @@ import type {
   UserResponse,
 } from "./api-types";
 import {
+  buildReconstructionSlideshowScenes,
   buildPublicStorySlideshowScenes,
   type SlideshowScene,
   type SlideshowRoute,
@@ -345,6 +346,7 @@ function OwnerWorkspace() {
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
   const [mobileTripMenuOpen, setMobileTripMenuOpen] = useState(false);
   const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
+  const [ownerSlideshowOpen, setOwnerSlideshowOpen] = useState(false);
   const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
@@ -388,6 +390,12 @@ function OwnerWorkspace() {
     : storyUpdate
       ? storyActionStatusLabel
       : "Update story";
+  const ownerSlideshowScenes = useMemo(
+    () => buildReconstructionSlideshowScenes(storyForExplorer),
+    [storyForExplorer],
+  );
+  const canOpenOwnerSlideshow =
+    Boolean(storyForExplorer?.latestRun) && ownerSlideshowScenes.length > 0;
 
   const selectedUploadFiles = useMemo(
     () => uploadSessions.flatMap((session) => session.files),
@@ -537,6 +545,7 @@ function OwnerWorkspace() {
   }, []);
 
   function selectTrip(trip: TripResponse) {
+    setOwnerSlideshowOpen(false);
     setSelectedTripSelection(trip.id);
     setSettingsForm(fromTrip(trip));
     setReconstruction(null);
@@ -562,6 +571,7 @@ function OwnerWorkspace() {
   }
 
   function removeTripFromState(tripId: string) {
+    setOwnerSlideshowOpen(false);
     const remaining = trips.filter((trip) => trip.id !== tripId);
     const nextTrip = remaining[0] ?? null;
     setTrips(remaining);
@@ -1599,6 +1609,19 @@ function OwnerWorkspace() {
             <StoryHeaderIcon action={icon} />
           </button>
         ))}
+        <button
+          type="button"
+          aria-label="Play slideshow"
+          disabled={!canOpenOwnerSlideshow}
+          onClick={() => {
+            setOwnerStoryPhotosOpen(false);
+            setMobileTripMenuOpen(false);
+            setOwnerSlideshowOpen(true);
+          }}
+          title="Play slideshow"
+        >
+          <StoryHeaderIcon action="slideshow" />
+        </button>
         {canManageSelectedTrip ? (
           <button
             type="button"
@@ -1842,7 +1865,7 @@ function OwnerWorkspace() {
                     {selectedTrip.startDate} - {selectedTrip.endDate}
                   </p>
                 </div>
-                {canOrganizeSelectedTrip ? (
+                {storyForExplorer?.latestRun || canOrganizeSelectedTrip ? (
                   <div className="trip-stage-header-actions">
                     <button
                       className="story-photo-icon-button desktop-story-photo-button"
@@ -1854,52 +1877,64 @@ function OwnerWorkspace() {
                     >
                       <StoryHeaderIcon action="photos" />
                     </button>
-                    <div className="button-row">
-                      <div className="story-action-stack">
-                        <button
-                          className={
-                            isReconstructingStory
-                              ? "is-updating"
-                              : storyUpdateNeeded
-                                ? "needs-update"
-                                : undefined
-                          }
-                          type="button"
-                          onClick={runReconstruction}
-                          disabled={isStoryActionDisabled}
-                          aria-busy={isReconstructingStory}
-                          title={storyActionTitle}
-                        >
-                          {isReconstructingStory ? (
-                            <span
-                              className="button-spinner"
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                          {storyActionButtonLabel}
-                        </button>
-                        {storyUpdate || isReconstructingStory ? (
-                          <span
+                    <button
+                      className="story-photo-icon-button desktop-story-photo-button"
+                      type="button"
+                      aria-label="Play slideshow"
+                      title="Play slideshow"
+                      onClick={() => setOwnerSlideshowOpen(true)}
+                      disabled={!canOpenOwnerSlideshow}
+                    >
+                      <StoryHeaderIcon action="slideshow" />
+                    </button>
+                    {canOrganizeSelectedTrip ? (
+                      <div className="button-row">
+                        <div className="story-action-stack">
+                          <button
                             className={
                               isReconstructingStory
-                                ? "story-update-status updating"
+                                ? "is-updating"
                                 : storyUpdateNeeded
-                                  ? "story-update-status needs-update"
-                                  : "story-update-status"
+                                  ? "needs-update"
+                                  : undefined
                             }
+                            type="button"
+                            onClick={runReconstruction}
+                            disabled={isStoryActionDisabled}
+                            aria-busy={isReconstructingStory}
+                            title={storyActionTitle}
                           >
-                            {storyActionStatusLabel}
-                          </span>
-                        ) : null}
+                            {isReconstructingStory ? (
+                              <span
+                                className="button-spinner"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                            {storyActionButtonLabel}
+                          </button>
+                          {storyUpdate || isReconstructingStory ? (
+                            <span
+                              className={
+                                isReconstructingStory
+                                  ? "story-update-status updating"
+                                  : storyUpdateNeeded
+                                    ? "story-update-status needs-update"
+                                    : "story-update-status"
+                              }
+                            >
+                              {storyActionStatusLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={publishTrip}
+                          disabled={isBusy}
+                        >
+                          Publish
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={publishTrip}
-                        disabled={isBusy}
-                      >
-                        Publish
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1962,6 +1997,14 @@ function OwnerWorkspace() {
                   }}
                   onOpenPhotos={openOwnerStoryPhotos}
                   timezoneId={selectedTrip.timezoneId}
+                />
+              ) : null}
+              {ownerSlideshowOpen && selectedTrip ? (
+                <PublicStorySlideshow
+                  scenes={ownerSlideshowScenes}
+                  title={selectedTrip.title}
+                  timezoneId={selectedTrip.timezoneId}
+                  onExit={() => setOwnerSlideshowOpen(false)}
                 />
               ) : null}
             </>
@@ -7722,10 +7765,6 @@ function PublicStorySlideshow({
   const activeScene = scenes[activeIndex] ?? null;
   const activePhoto = activeScene?.type === "photo" ? activeScene.photo : null;
   const hasMultipleScenes = scenes.length > 1;
-  const thumbnailScenes = scenes.filter(
-    (scene): scene is Extract<SlideshowScene, { type: "photo" }> =>
-      scene.type === "photo",
-  );
 
   const goToPrevious = useCallback(() => {
     if (!hasMultipleScenes) {
@@ -7793,10 +7832,12 @@ function PublicStorySlideshow({
       ) : (
         <div className="slideshow-stage">
           {activePhoto ? (
-            <img
+            <div
+              aria-label={activePhoto.filename ?? `${title} travel photo`}
+              className="slideshow-photo-frame"
               key={activePhoto.id}
-              src={activePhoto.imageUrl}
-              alt={activePhoto.filename ?? `${title} travel photo`}
+              role="img"
+              style={{ backgroundImage: `url("${activePhoto.imageUrl}")` }}
             />
           ) : (
             <div className="slideshow-empty">
@@ -7806,49 +7847,49 @@ function PublicStorySlideshow({
         </div>
       )}
       <header className="slideshow-topbar">
-        <div>
-          <p className="eyebrow">TripWeave slideshow</p>
-          <h1>{title}</h1>
-        </div>
         <div className="slideshow-controls" aria-label="Slideshow controls">
           <button
             type="button"
             onClick={() => setIsPaused((value) => !value)}
             disabled={!hasMultipleScenes}
+            aria-label={isPaused || reducedMotion ? "Play" : "Pause"}
+            title={isPaused || reducedMotion ? "Play" : "Pause"}
           >
-            {isPaused || reducedMotion ? "Play" : "Pause"}
+            <SlideshowControlIcon
+              action={isPaused || reducedMotion ? "play" : "pause"}
+            />
           </button>
-          <button type="button" onClick={() => void requestFullscreen()}>
-            Full screen
+          <button
+            type="button"
+            onClick={() => void requestFullscreen()}
+            aria-label="Full screen"
+            title="Full screen"
+          >
+            <SlideshowControlIcon action="fullscreen" />
           </button>
-          <button type="button" onClick={onExit}>
-            Story
+          <button
+            type="button"
+            onClick={onExit}
+            aria-label="Back to story"
+            title="Back to story"
+          >
+            <SlideshowControlIcon action="close" />
           </button>
         </div>
       </header>
       {activeScene?.type === "day" || activeScene?.type === "stop" ? (
         <footer className="slideshow-caption map-caption">
           <div className="slideshow-caption-copy">
+            <span className="slideshow-trip-title">{title}</span>
             <span className="slideshow-caption-kicker">
               {activeScene.type === "day"
                 ? "Day overview"
                 : activeScene.dayLabel}
             </span>
             <strong>{activeScene.title}</strong>
-            <dl>
-              <div>
-                <dt>{activeScene.type === "day" ? "Stops" : "Photos"}</dt>
-                <dd>
-                  {activeScene.type === "day"
-                    ? activeScene.stops.length
-                    : activeScene.photoCount}
-                </dd>
-              </div>
-              <div>
-                <dt>Coming up</dt>
-                <dd>{activeScene.subtitle}</dd>
-              </div>
-            </dl>
+            <div className="slideshow-caption-meta">
+              <span>{activeScene.subtitle}</span>
+            </div>
           </div>
           <span className="slideshow-counter">
             {activeIndex + 1} / {scenes.length}
@@ -7857,20 +7898,12 @@ function PublicStorySlideshow({
       ) : activePhoto ? (
         <footer className="slideshow-caption">
           <div className="slideshow-caption-copy">
-            <span className="slideshow-caption-kicker">
-              {activePhoto.dayLabel}
-            </span>
+            <span className="slideshow-trip-title">{title}</span>
             <strong>{activePhoto.stopLabel}</strong>
-            <dl>
-              <div>
-                <dt>Date</dt>
-                <dd>{formatDate(activePhoto.capturedAt, timezoneId)}</dd>
-              </div>
-              <div>
-                <dt>From</dt>
-                <dd>{activePhoto.contributor}</dd>
-              </div>
-            </dl>
+            <div className="slideshow-caption-meta">
+              <span>{formatDate(activePhoto.capturedAt, timezoneId)}</span>
+              <span>{activePhoto.contributor}</span>
+            </div>
           </div>
           <span className="slideshow-counter">
             {activeIndex + 1} / {scenes.length}
@@ -7897,19 +7930,45 @@ function PublicStorySlideshow({
           </button>
         </>
       ) : null}
-      <div className="slideshow-strip" aria-hidden="true">
-        {thumbnailScenes.slice(0, 24).map((scene) => (
-          <span
-            key={scene.id}
-            className={scene.id === activeScene?.id ? "active" : undefined}
-          >
-            {scene.photo.thumbnailUrl ? (
-              <img src={scene.photo.thumbnailUrl} alt="" />
-            ) : null}
-          </span>
-        ))}
-      </div>
     </main>
+  );
+}
+
+function SlideshowControlIcon({
+  action,
+}: {
+  action: "play" | "pause" | "fullscreen" | "close";
+}) {
+  if (action === "play") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    );
+  }
+  if (action === "pause") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8 5v14" />
+        <path d="M16 5v14" />
+      </svg>
+    );
+  }
+  if (action === "fullscreen") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8 4H4v4" />
+        <path d="M16 4h4v4" />
+        <path d="M20 16v4h-4" />
+        <path d="M4 16v4h4" />
+      </svg>
+    );
+  }
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M6 6l12 12" />
+      <path d="M18 6 6 18" />
+    </svg>
   );
 }
 

@@ -3,6 +3,7 @@ import type {
   ReconstructionDayResponse,
   ReconstructionLegResponse,
   ReconstructionMediaResponse,
+  ReconstructionResponse,
   ReconstructionStopResponse,
 } from "./api-types";
 
@@ -71,7 +72,13 @@ export function buildPublicStorySlideshowPhotos(
 export function buildPublicStorySlideshowScenes(
   story: PublicStoryResponse,
 ): SlideshowScene[] {
-  return story.story.days.flatMap((day) => {
+  return buildReconstructionSlideshowScenes(story.story);
+}
+
+export function buildReconstructionSlideshowScenes(
+  reconstruction: ReconstructionResponse | null,
+): SlideshowScene[] {
+  return (reconstruction?.days ?? []).flatMap((day) => {
     const dayStops = day.stops.map((stop) => slideshowStop(stop));
     const dayRoutes = (day.legs ?? []).flatMap((leg) => slideshowRoute(leg));
     const stopSections = day.stops
@@ -195,11 +202,28 @@ function lineStringCoordinates(
 }
 
 function slideshowDayLabel(day: ReconstructionDayResponse): string {
-  return day.title?.trim() || `Day ${day.position}`;
+  return (
+    day.title?.trim() ||
+    shortCalendarDate(day.date ?? null) ||
+    `Day ${day.position}`
+  );
 }
 
 function slideshowStopLabel(stop: ReconstructionStopResponse): string {
   return (
     stop.title?.trim() || stop.placeName?.trim() || `Stop ${stop.position}`
   );
+}
+
+function shortCalendarDate(value: string | null): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+  if (!match) {
+    return "";
+  }
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return new Intl.DateTimeFormat(undefined, {
+    month: "numeric",
+    day: "numeric",
+  }).format(date);
 }

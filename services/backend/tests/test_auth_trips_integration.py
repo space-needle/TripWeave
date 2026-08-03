@@ -702,8 +702,12 @@ def test_account_contributor_can_view_shared_story_without_editing(
 
     projection = contributor_client.get(f"/trips/{trip['id']}/story-draft-projection")
     assert projection.status_code == 200
-    assert projection.json()["latestRun"]["id"] == story.json()["latestRun"]["id"]
-    assert projection.json()["reviewItems"] == []
+    projection_payload = projection.json()
+    assert projection_payload["latestRun"]["id"] == story.json()["latestRun"]["id"]
+    assert projection_payload["reviewItems"] == []
+    projection_media = projection_payload["days"][0]["stops"][0]["moments"][0]["media"]
+    assert projection_media[0]["thumbnailUrl"]
+    assert projection_media[0]["previewUrl"]
     day_id = story.json()["days"][0]["id"]
     stop_id = story.json()["days"][0]["stops"][0]["id"]
     day_photos = contributor_client.get(f"/trips/{trip['id']}/story-day-photos/{day_id}")
