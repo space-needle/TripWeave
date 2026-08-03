@@ -118,7 +118,7 @@ export function normalizeStoryMapState(
     ? (model.media.find((item) => item.stopId === firstStop.id) ?? null)
     : null;
 
-  return {
+  const normalizedState: StoryMapState = {
     ...state,
     viewMode: firstStop ? "DAY" : "TRIP_OVERVIEW",
     selectedDayId: firstStop?.dayId ?? null,
@@ -128,6 +128,21 @@ export function normalizeStoryMapState(
     timeCursor: firstMedia?.capturedAt ?? null,
     mapControlMode: "STORY_CONTROLLED",
   };
+
+  if (
+    normalizedState.viewMode === state.viewMode &&
+    normalizedState.selectedDayId === state.selectedDayId &&
+    normalizedState.selectedStopId === state.selectedStopId &&
+    normalizedState.selectedMomentId === state.selectedMomentId &&
+    normalizedState.selectedMediaId === state.selectedMediaId &&
+    normalizedState.timeCursor === state.timeCursor &&
+    normalizedState.contributorFilter === state.contributorFilter &&
+    normalizedState.mapControlMode === state.mapControlMode
+  ) {
+    return state;
+  }
+
+  return normalizedState;
 }
 
 export function selectStoryDay(
