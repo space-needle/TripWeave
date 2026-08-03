@@ -103,6 +103,7 @@ const publicStory: PublicStoryResponse = {
                   {
                     id: "media-3",
                     filename: "tower.jpg",
+                    capturedAt: "2026-06-01T03:00:00Z",
                     capturedAtLocal: "2026-06-01T12:00:00",
                     contributorMemberId: "member-1",
                     contributor: "Owner",
@@ -183,7 +184,7 @@ describe("story slideshow", () => {
         thumbnailUrl: "/thumbs/tower.jpg",
         filename: "tower.jpg",
         contributor: "Owner",
-        capturedAt: "2026-06-01T12:00:00",
+        capturedAt: "2026-06-01T03:00:00Z",
         dayLabel: "Arrival",
         stopLabel: "Namsan",
       },

@@ -156,7 +156,7 @@ function slideshowPhoto(
     thumbnailUrl: media.thumbnailUrl ?? null,
     filename: media.filename ?? null,
     contributor: media.contributor,
-    capturedAt: media.capturedAtLocal ?? media.capturedAt ?? null,
+    capturedAt: media.capturedAt ?? media.capturedAtLocal ?? null,
     dayLabel: slideshowDayLabel(day),
     stopLabel: slideshowStopLabel(stop),
   };

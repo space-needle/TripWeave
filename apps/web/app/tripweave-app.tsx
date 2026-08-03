@@ -45,6 +45,7 @@ import {
   buildReconstructionSlideshowScenes,
   buildPublicStorySlideshowScenes,
   type SlideshowScene,
+  type SlideshowPhoto,
   type SlideshowRoute,
 } from "./story-slideshow";
 import {
@@ -7764,7 +7765,31 @@ function PublicStorySlideshow({
     scenes.length > 0 ? Math.min(requestedActiveIndex, scenes.length - 1) : 0;
   const activeScene = scenes[activeIndex] ?? null;
   const activePhoto = activeScene?.type === "photo" ? activeScene.photo : null;
+  const [lastMapScene, setLastMapScene] = useState<Extract<
+    SlideshowScene,
+    { type: "day" | "stop" }
+  > | null>(() => {
+    const firstMapScene = scenes.find(
+      (scene) => scene.type === "day" || scene.type === "stop",
+    );
+    return firstMapScene?.type === "day" || firstMapScene?.type === "stop"
+      ? firstMapScene
+      : null;
+  });
   const hasMultipleScenes = scenes.length > 1;
+  const activeMapScene =
+    activeScene?.type === "day" || activeScene?.type === "stop"
+      ? activeScene
+      : null;
+  const visibleMapScene = activeMapScene ?? lastMapScene;
+
+  useEffect(() => {
+    if (!activeMapScene) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setLastMapScene(activeMapScene), 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeMapScene]);
 
   const goToPrevious = useCallback(() => {
     if (!hasMultipleScenes) {
@@ -7827,25 +7852,20 @@ function PublicStorySlideshow({
       ref={shellRef}
       aria-label={`${title} slideshow`}
     >
-      {activeScene?.type === "day" || activeScene?.type === "stop" ? (
-        <SlideshowMapScene scene={activeScene} />
-      ) : (
+      {visibleMapScene ? <SlideshowMapScene scene={visibleMapScene} /> : null}
+      {activePhoto ? (
+        <SlideshowPhotoStage
+          photo={activePhoto}
+          title={title}
+          reducedMotion={reducedMotion}
+        />
+      ) : !visibleMapScene ? (
         <div className="slideshow-stage">
-          {activePhoto ? (
-            <div
-              aria-label={activePhoto.filename ?? `${title} travel photo`}
-              className="slideshow-photo-frame"
-              key={activePhoto.id}
-              role="img"
-              style={{ backgroundImage: `url("${activePhoto.imageUrl}")` }}
-            />
-          ) : (
-            <div className="slideshow-empty">
-              <p>No published photos are available for slideshow.</p>
-            </div>
-          )}
+          <div className="slideshow-empty">
+            <p>No published photos are available for slideshow.</p>
+          </div>
         </div>
-      )}
+      ) : null}
       <header className="slideshow-topbar">
         <div className="slideshow-controls" aria-label="Slideshow controls">
           <button
@@ -7931,6 +7951,54 @@ function PublicStorySlideshow({
         </>
       ) : null}
     </main>
+  );
+}
+
+function SlideshowPhotoStage({
+  photo,
+  title,
+  reducedMotion,
+}: {
+  photo: SlideshowPhoto;
+  title: string;
+  reducedMotion: boolean;
+}) {
+  const [displayedPhoto, setDisplayedPhoto] = useState(photo);
+  const [previousPhoto, setPreviousPhoto] = useState<SlideshowPhoto | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (displayedPhoto.id === photo.id) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setPreviousPhoto(reducedMotion ? null : displayedPhoto);
+      setDisplayedPhoto(photo);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [displayedPhoto, photo, reducedMotion]);
+
+  return (
+    <div className="slideshow-stage slideshow-photo-stage">
+      {previousPhoto ? (
+        <div
+          aria-hidden="true"
+          className="slideshow-photo-frame slideshow-photo-frame-previous"
+          role="img"
+          style={{ backgroundImage: `url("${previousPhoto.imageUrl}")` }}
+        />
+      ) : null}
+      <div
+        aria-label={displayedPhoto.filename ?? `${title} travel photo`}
+        className={`slideshow-photo-frame ${
+          previousPhoto ? "slideshow-photo-frame-current" : ""
+        }`}
+        key={displayedPhoto.id}
+        role="img"
+        style={{ backgroundImage: `url("${displayedPhoto.imageUrl}")` }}
+      />
+    </div>
   );
 }
 

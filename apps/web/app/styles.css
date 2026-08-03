@@ -871,6 +871,10 @@ button.is-updating {
   background: #05070a;
 }
 
+.slideshow-photo-stage {
+  overflow: hidden;
+}
+
 .slideshow-map-stage {
   position: absolute;
   inset: 0;
@@ -940,6 +944,26 @@ button.is-updating {
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
+}
+
+.slideshow-photo-frame-previous {
+  opacity: 1;
+}
+
+.slideshow-photo-frame-current {
+  animation: slideshow-photo-fade-in 900ms ease both;
+}
+
+@keyframes slideshow-photo-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .slideshow-empty {
