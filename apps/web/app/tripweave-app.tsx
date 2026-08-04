@@ -1878,7 +1878,10 @@ function OwnerWorkspace() {
             </div>
           ) : null}
           <nav className="trip-primary-nav" aria-label="Workspace sections">
-            <a href="#trip-stage-title" className="active">
+            <a
+              href="#trip-stage-title"
+              className={mobileTab === "tripBrowse" ? "" : "active"}
+            >
               Story
             </a>
             <button

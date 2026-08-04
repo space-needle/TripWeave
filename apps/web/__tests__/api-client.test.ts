@@ -109,4 +109,26 @@ describe("api client", () => {
     expect(options.method).toBe("GET");
     expect(options.credentials).toBe("include");
   });
+
+  it("reads trip map points with optional date filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          trips: [],
+          points: [],
+          startDate: "2024-01-01",
+          endDate: "2024-12-31",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.tripMapPoints("2024-01-01", "2024-12-31");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain("/trips/map-points?start=2024-01-01&end=2024-12-31");
+    expect(options.method).toBe("GET");
+    expect(options.credentials).toBe("include");
+  });
 });
