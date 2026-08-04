@@ -2913,11 +2913,24 @@ type TripBrowserCluster = {
   id: string;
   tripId: string;
   title: string;
+  color: string;
   coordinates: [number, number];
   points: TripMapPointResponse[];
-  thumbnailUrl: string | null;
   pointCount: number;
 };
+
+const tripBrowserPalette = [
+  "#23695b",
+  "#b54434",
+  "#2f6cb3",
+  "#8a5a11",
+  "#6d5bd0",
+  "#16758b",
+  "#a43f73",
+  "#4f7f2f",
+  "#c05a19",
+  "#53606f",
+];
 
 function formatTripMapDate(value: string | null | undefined): string {
   if (!value) {
@@ -2945,6 +2958,28 @@ function worldPixelForPoint(point: TripMapPointResponse, zoom: number) {
   };
 }
 
+function colorForTripId(tripId: string): string {
+  let hash = 0;
+  for (let index = 0; index < tripId.length; index += 1) {
+    hash = (hash * 31 + tripId.charCodeAt(index)) >>> 0;
+  }
+  return tripBrowserPalette[hash % tripBrowserPalette.length];
+}
+
+function offsetForCollision(index: number): [number, number] {
+  if (index === 0) {
+    return [0, 0];
+  }
+  const ring = Math.ceil(index / 8);
+  const position = (index - 1) % 8;
+  const angle = (position / 8) * Math.PI * 2;
+  const distance = 10 + (ring - 1) * 6;
+  return [
+    Math.round(Math.cos(angle) * distance),
+    Math.round(Math.sin(angle) * distance),
+  ];
+}
+
 function clusterTripMapPoints(
   data: TripsMapPointsResponse | null,
   trips: TripResponse[],
@@ -2954,6 +2989,12 @@ function clusterTripMapPoints(
     return [];
   }
   const tripTitleById = new Map(trips.map((trip) => [trip.id, trip.title]));
+  const tripColorById = new Map(
+    data.trips.map((trip, index) => [
+      trip.id,
+      tripBrowserPalette[index % tripBrowserPalette.length],
+    ]),
+  );
   const pointsByTrip = new Map<string, TripMapPointResponse[]>();
   for (const point of data.points) {
     const points = pointsByTrip.get(point.tripId) ?? [];
@@ -2998,15 +3039,13 @@ function clusterTripMapPoints(
       const latitude =
         cluster.points.reduce((total, point) => total + point.latitude, 0) /
         cluster.points.length;
-      const representative =
-        cluster.points.find((point) => point.thumbnailUrl) ?? cluster.points[0];
       clusters.push({
         id: `${tripId}:${index}`,
         tripId,
         title: tripTitleById.get(tripId) ?? "Trip",
+        color: tripColorById.get(tripId) ?? colorForTripId(tripId),
         coordinates: [longitude, latitude],
         points: cluster.points,
-        thumbnailUrl: representative.thumbnailUrl ?? null,
         pointCount: cluster.points.length,
       });
     });
@@ -3123,6 +3162,7 @@ function TripBrowserMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [openClusterId, setOpenClusterId] = useState<string | null>(null);
   const clusters = useMemo(
     () => clusterTripMapPoints(data, trips, zoom),
     [data, trips, zoom],
@@ -3173,65 +3213,74 @@ function TripBrowserMap({
     }
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
+    const collisionCounts = new Map<string, number>();
     for (const cluster of clusters) {
       const anchor = document.createElement("div");
       anchor.className =
         cluster.tripId === selectedTripId
           ? "photo-map-marker-anchor selected"
           : "photo-map-marker-anchor";
+      if (cluster.id === openClusterId) {
+        anchor.classList.add("open");
+      }
       const button = document.createElement("button");
       button.type = "button";
       button.className =
         cluster.tripId === selectedTripId
           ? "trip-browser-marker active"
           : "trip-browser-marker";
+      button.style.setProperty("--trip-marker-color", cluster.color);
       button.setAttribute(
         "aria-label",
-        `Select ${cluster.title}, ${cluster.pointCount} mapped point${
+        `Show ${cluster.title}, ${cluster.pointCount} mapped point${
           cluster.pointCount === 1 ? "" : "s"
         }`,
       );
-      const imageFrame = document.createElement("span");
-      imageFrame.className = "trip-browser-marker-image";
-      if (cluster.thumbnailUrl) {
-        const image = document.createElement("img");
-        image.src = cluster.thumbnailUrl;
-        image.alt = "";
-        image.loading = "lazy";
-        imageFrame.appendChild(image);
-      } else {
-        const fallback = document.createElement("span");
-        fallback.textContent = cluster.title.slice(0, 1).toUpperCase();
-        imageFrame.appendChild(fallback);
-      }
-      const badge = document.createElement("small");
-      badge.textContent = String(cluster.pointCount);
-      imageFrame.appendChild(badge);
-      const label = document.createElement("strong");
-      label.textContent = cluster.title;
-      button.appendChild(imageFrame);
-      button.appendChild(label);
+      button.title = cluster.title;
+      button.setAttribute("aria-haspopup", "dialog");
+      const dot = document.createElement("span");
+      dot.className = "trip-browser-marker-dot";
+      button.appendChild(dot);
+
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        onSelectTrip(cluster.tripId);
-        if (cluster.points.length > 1) {
-          const bounds = new LngLatBounds();
-          cluster.points.forEach((point) =>
-            bounds.extend([point.longitude, point.latitude]),
-          );
-          if (!bounds.isEmpty()) {
-            map.fitBounds(bounds, { padding: 84, maxZoom: 9, duration: 500 });
-          }
-        } else {
-          map.easeTo({
-            center: cluster.coordinates,
-            zoom: Math.max(map.getZoom(), 7),
-          });
-        }
+        setOpenClusterId((current) =>
+          current === cluster.id ? null : cluster.id,
+        );
       });
       anchor.appendChild(button);
+      if (cluster.id === openClusterId) {
+        const popupContent = document.createElement("div");
+        popupContent.className = "trip-browser-popup";
+        const popupButton = document.createElement("button");
+        popupButton.type = "button";
+        popupButton.className = "trip-browser-popup-title";
+        popupButton.textContent = cluster.title;
+        popupButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          setOpenClusterId(null);
+          onSelectTrip(cluster.tripId);
+        });
+        const popupMeta = document.createElement("span");
+        popupMeta.textContent = `${cluster.pointCount} mapped point${
+          cluster.pointCount === 1 ? "" : "s"
+        }`;
+        popupContent.appendChild(popupButton);
+        popupContent.appendChild(popupMeta);
+        anchor.appendChild(popupContent);
+      }
+      const projected = map.project(cluster.coordinates);
+      const collisionKey = `${Math.round(projected.x / 18)}:${Math.round(
+        projected.y / 18,
+      )}`;
+      const collisionIndex = collisionCounts.get(collisionKey) ?? 0;
+      collisionCounts.set(collisionKey, collisionIndex + 1);
       markersRef.current.push(
-        new maplibregl.Marker({ anchor: "center", element: anchor })
+        new maplibregl.Marker({
+          anchor: "center",
+          element: anchor,
+          offset: offsetForCollision(collisionIndex),
+        })
           .setLngLat(cluster.coordinates)
           .addTo(map),
       );
@@ -3240,7 +3289,7 @@ function TripBrowserMap({
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
-  }, [clusters, onSelectTrip, selectedTripId]);
+  }, [clusters, onSelectTrip, openClusterId, selectedTripId]);
 
   const selectedTripSummary =
     data?.trips.find((trip) => trip.id === selectedTripId) ??
