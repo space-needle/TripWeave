@@ -2162,6 +2162,10 @@ button.is-updating {
   border-radius: 18px 18px 0 0;
 }
 
+.trip-browser-map-panel .local-map-shell::before {
+  content: none;
+}
+
 .trip-browser-filters {
   min-width: 0;
   display: grid;
