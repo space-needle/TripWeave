@@ -319,26 +319,32 @@ p {
   gap: 6px;
 }
 
-.trip-primary-nav a {
+.trip-primary-nav a,
+.trip-primary-nav button {
   min-height: 38px;
   display: flex;
   align-items: center;
   border: 1px solid transparent;
   border-radius: 10px;
+  background: transparent;
   color: var(--text);
   font-size: 0.92rem;
   font-weight: 800;
   padding: 8px 10px;
   text-decoration: none;
+  text-align: left;
 }
 
 .trip-primary-nav a:hover,
-.trip-primary-nav a:focus-visible {
+.trip-primary-nav a:focus-visible,
+.trip-primary-nav button:hover,
+.trip-primary-nav button:focus-visible {
   border-color: var(--border);
   background: #fff;
 }
 
-.trip-primary-nav a.active {
+.trip-primary-nav a.active,
+.trip-primary-nav button.active {
   border-color: #f2cbbf;
   background: #fff1ed;
   color: #b54e33;
@@ -346,7 +352,8 @@ p {
 
 .mobile-workspace-tabs,
 .mobile-trip-actions,
-.mobile-trip-action-menu {
+.mobile-trip-action-menu,
+.mobile-tool-menu {
   display: none;
 }
 
@@ -2130,6 +2137,166 @@ button.is-updating {
     0 0 0 10px rgb(255 255 255 / 72%);
 }
 
+.trip-browser-shell {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgb(23 32 42 / 9%);
+}
+
+.trip-browser-map-panel {
+  min-height: min(620px, 64vh);
+  border-radius: 18px 18px 0 0;
+}
+
+.trip-browser-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border-top: 1px solid var(--border);
+  padding: 14px;
+}
+
+.trip-browser-filters button {
+  min-width: 84px;
+}
+
+.trip-browser-summary {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.trip-browser-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.trip-browser-summary strong,
+.trip-browser-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-browser-summary strong {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.trip-browser-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.trip-browser-summary > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 8px;
+}
+
+.trip-browser-marker {
+  min-width: 92px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0 12px 22px rgb(23 32 42 / 22%));
+}
+
+.trip-browser-marker-image {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px var(--accent);
+}
+
+.trip-browser-marker-image img,
+.trip-browser-marker-image > span {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.trip-browser-marker-image img {
+  object-fit: cover;
+}
+
+.trip-browser-marker-image > span {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.trip-browser-marker-image small {
+  position: absolute;
+  right: -10px;
+  bottom: -4px;
+  min-width: 24px;
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--text);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.trip-browser-marker strong {
+  max-width: 126px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-browser-marker.active .trip-browser-marker-image {
+  box-shadow:
+    0 0 0 6px var(--accent),
+    0 0 0 10px rgb(255 255 255 / 72%);
+}
+
+.trip-browser-marker.active strong {
+  border-color: color-mix(in srgb, var(--accent) 45%, #fff);
+  color: var(--accent-strong);
+}
+
 .story-timeline {
   display: grid;
   gap: 16px;
@@ -3424,7 +3591,8 @@ button.thumb-frame:focus-visible {
     backdrop-filter: blur(12px);
   }
 
-  .mobile-trip-action-menu {
+  .mobile-trip-action-menu,
+  .mobile-tool-menu {
     position: fixed;
     top: 72px;
     right: 12px;
@@ -3440,7 +3608,8 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions button,
-  .mobile-trip-action-menu button {
+  .mobile-trip-action-menu button,
+  .mobile-tool-menu button {
     width: 38px;
     height: 38px;
     display: grid;
@@ -3453,7 +3622,8 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions button.active,
-  .mobile-trip-action-menu button.active {
+  .mobile-trip-action-menu button.active,
+  .mobile-tool-menu button.active {
     background: var(--accent);
     color: #fff;
   }
@@ -3469,7 +3639,8 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions button:disabled,
-  .mobile-trip-action-menu button:disabled {
+  .mobile-trip-action-menu button:disabled,
+  .mobile-tool-menu button:disabled {
     opacity: 0.38;
     cursor: not-allowed;
   }
@@ -3479,7 +3650,8 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions svg,
-  .mobile-trip-action-menu svg {
+  .mobile-trip-action-menu svg,
+  .mobile-tool-menu svg {
     width: 19px;
     height: 19px;
     fill: none;
@@ -3565,6 +3737,14 @@ button.thumb-frame:focus-visible {
 
   .trip-stage-header-actions > .button-row {
     display: none;
+  }
+
+  .trip-browser-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trip-browser-filters button {
+    grid-column: 1 / -1;
   }
 
   .desktop-story-photo-button {

@@ -37,7 +37,9 @@ import type {
   SimilarityGroupResponse,
   StoryPhotoProjectionResponse,
   StoryPhotoProjectionPhotoResponse,
+  TripMapPointResponse,
   TripResponse,
+  TripsMapPointsResponse,
   UploadFileResponse,
   UploadSessionResponse,
   UserResponse,
@@ -83,7 +85,13 @@ type GalleryPhoto = {
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
 type MobileWorkspaceTab =
-  "story" | "timeline" | "photos" | "share" | "tripSettings" | "appSettings";
+  | "story"
+  | "timeline"
+  | "photos"
+  | "share"
+  | "tripSettings"
+  | "appSettings"
+  | "tripBrowse";
 type StoryMobilePane = "map" | "timeline" | "photos";
 type StoryHeaderIconAction =
   | StoryMobilePane
@@ -94,6 +102,7 @@ type StoryHeaderIconAction =
   | "update"
   | "upload"
   | "manage"
+  | "browse"
   | "settings";
 
 type TripForm = {
@@ -347,8 +356,15 @@ function OwnerWorkspace() {
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
   const [mobileTripMenuOpen, setMobileTripMenuOpen] = useState(false);
+  const [mobileToolMenuOpen, setMobileToolMenuOpen] = useState(false);
   const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
   const [ownerSlideshowOpen, setOwnerSlideshowOpen] = useState(false);
+  const [tripMapPoints, setTripMapPoints] =
+    useState<TripsMapPointsResponse | null>(null);
+  const [tripMapStartDate, setTripMapStartDate] = useState("");
+  const [tripMapEndDate, setTripMapEndDate] = useState("");
+  const [tripMapError, setTripMapError] = useState("");
+  const [isTripMapLoading, setIsTripMapLoading] = useState(false);
   const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
@@ -427,6 +443,20 @@ function OwnerWorkspace() {
   const setSelectedTripSelection = useCallback((tripId: string | null) => {
     selectedTripIdRef.current = tripId;
     setSelectedTripId(tripId);
+  }, []);
+
+  const loadTripMapPoints = useCallback(async (start = "", end = "") => {
+    setIsTripMapLoading(true);
+    setTripMapError("");
+    try {
+      setTripMapPoints(
+        await api.tripMapPoints(start || undefined, end || undefined),
+      );
+    } catch (error) {
+      setTripMapError(messageFrom(error));
+    } finally {
+      setIsTripMapLoading(false);
+    }
   }, []);
 
   const loadTrips = useCallback(
@@ -548,6 +578,7 @@ function OwnerWorkspace() {
 
   function selectTrip(trip: TripResponse) {
     setOwnerSlideshowOpen(false);
+    setMobileToolMenuOpen(false);
     setSelectedTripSelection(trip.id);
     setSettingsForm(fromTrip(trip));
     setReconstruction(null);
@@ -569,6 +600,13 @@ function OwnerWorkspace() {
       void loadPublications(trip.id);
     } else {
       setPublications(null);
+    }
+  }
+
+  function selectTripById(tripId: string) {
+    const trip = trips.find((item) => item.id === tripId);
+    if (trip) {
+      selectTrip(trip);
     }
   }
 
@@ -656,6 +694,16 @@ function OwnerWorkspace() {
       );
     }
   }, [loadStoryProjection, selectedTrip?.id]);
+
+  useEffect(() => {
+    if (!user || mobileTab !== "tripBrowse") {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      void loadTripMapPoints(tripMapStartDate, tripMapEndDate);
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [loadTripMapPoints, mobileTab, tripMapEndDate, tripMapStartDate, user]);
 
   useEffect(() => {
     if (selectedTrip?.id && selectedTrip.role === "owner") {
@@ -1655,19 +1703,53 @@ function OwnerWorkspace() {
         )}
         <button
           type="button"
-          aria-label="Settings"
-          aria-pressed={mobileTab === "appSettings"}
-          className={mobileTab === "appSettings" ? "active" : ""}
+          aria-label="Tools"
+          aria-expanded={mobileToolMenuOpen}
+          className={mobileToolMenuOpen ? "active" : ""}
           onClick={() => {
             setOwnerStoryPhotosOpen(false);
             setMobileTripMenuOpen(false);
-            setMobileTab("appSettings");
+            setMobileToolMenuOpen((current) => !current);
           }}
-          title="Settings"
+          title="Tools"
         >
           <StoryHeaderIcon action="settings" />
         </button>
       </nav>
+      {mobileToolMenuOpen ? (
+        <nav className="mobile-tool-menu" aria-label="Tools">
+          <button
+            type="button"
+            aria-label="Browse trips"
+            aria-pressed={mobileTab === "tripBrowse"}
+            className={mobileTab === "tripBrowse" ? "active" : ""}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileToolMenuOpen(false);
+              setMobileTab("tripBrowse");
+            }}
+            title="Browse trips"
+          >
+            <StoryHeaderIcon action="browse" />
+          </button>
+          <button
+            type="button"
+            aria-label="Settings"
+            aria-pressed={mobileTab === "appSettings"}
+            className={mobileTab === "appSettings" ? "active" : ""}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              setMobileTripMenuOpen(false);
+              setMobileToolMenuOpen(false);
+              setMobileTab("appSettings");
+            }}
+            title="Settings"
+          >
+            <StoryHeaderIcon action="settings" />
+          </button>
+        </nav>
+      ) : null}
       {mobileTripMenuOpen && canManageSelectedTrip ? (
         <nav className="mobile-trip-action-menu" aria-label="Trip actions">
           <button
@@ -1799,6 +1881,16 @@ function OwnerWorkspace() {
             <a href="#trip-stage-title" className="active">
               Story
             </a>
+            <button
+              type="button"
+              className={mobileTab === "tripBrowse" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                setMobileTab("tripBrowse");
+              }}
+            >
+              Browse trips
+            </button>
             <a href="#photos-panel">Photos</a>
             {selectedTrip?.role === "owner" ? (
               <a href="#travelers-panel">Travelers</a>
@@ -1853,12 +1945,34 @@ function OwnerWorkspace() {
 
         <section
           className={`trip-stage ${
-            ["story", "timeline"].includes(mobileTab) ? "mobile-tab-active" : ""
+            ["story", "timeline", "tripBrowse"].includes(mobileTab)
+              ? "mobile-tab-active"
+              : ""
           }`}
           aria-labelledby="trip-stage-title"
           data-mobile-tab-panel="story"
         >
-          {selectedTrip ? (
+          {mobileTab === "tripBrowse" ? (
+            <TripBrowserPanel
+              data={tripMapPoints}
+              endDate={tripMapEndDate}
+              error={tripMapError}
+              isLoading={isTripMapLoading}
+              selectedTripId={selectedTrip?.id ?? null}
+              startDate={tripMapStartDate}
+              trips={trips}
+              onClearFilters={() => {
+                setTripMapStartDate("");
+                setTripMapEndDate("");
+              }}
+              onEndDateChange={setTripMapEndDate}
+              onRefresh={() =>
+                void loadTripMapPoints(tripMapStartDate, tripMapEndDate)
+              }
+              onSelectTrip={selectTripById}
+              onStartDateChange={setTripMapStartDate}
+            />
+          ) : selectedTrip ? (
             <>
               <div className="trip-stage-header">
                 <div>
@@ -2790,6 +2904,384 @@ function localGridData() {
     type: "FeatureCollection" as const,
     features,
   };
+}
+
+type TripBrowserCluster = {
+  id: string;
+  tripId: string;
+  title: string;
+  coordinates: [number, number];
+  points: TripMapPointResponse[];
+  thumbnailUrl: string | null;
+  pointCount: number;
+};
+
+function formatTripMapDate(value: string | null | undefined): string {
+  if (!value) {
+    return "No date";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function worldPixelForPoint(point: TripMapPointResponse, zoom: number) {
+  const scale = 512 * 2 ** zoom;
+  const latitude = Math.max(
+    -85.05112878,
+    Math.min(85.05112878, point.latitude),
+  );
+  const sinLatitude = Math.sin((latitude * Math.PI) / 180);
+  return {
+    x: ((point.longitude + 180) / 360) * scale,
+    y:
+      (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) *
+      scale,
+  };
+}
+
+function clusterTripMapPoints(
+  data: TripsMapPointsResponse | null,
+  trips: TripResponse[],
+  zoom: number,
+): TripBrowserCluster[] {
+  if (!data) {
+    return [];
+  }
+  const tripTitleById = new Map(trips.map((trip) => [trip.id, trip.title]));
+  const pointsByTrip = new Map<string, TripMapPointResponse[]>();
+  for (const point of data.points) {
+    const points = pointsByTrip.get(point.tripId) ?? [];
+    points.push(point);
+    pointsByTrip.set(point.tripId, points);
+  }
+  const radiusPixels = Math.max(34, 130 - zoom * 8);
+  const clusters: TripBrowserCluster[] = [];
+  for (const [tripId, points] of pointsByTrip) {
+    const tripClusters: Array<{
+      points: TripMapPointResponse[];
+      pixelX: number;
+      pixelY: number;
+    }> = [];
+    for (const point of points) {
+      const pixel = worldPixelForPoint(point, zoom);
+      const cluster = tripClusters.find(
+        (candidate) =>
+          Math.hypot(candidate.pixelX - pixel.x, candidate.pixelY - pixel.y) <=
+          radiusPixels,
+      );
+      if (cluster) {
+        cluster.points.push(point);
+        cluster.pixelX =
+          (cluster.pixelX * (cluster.points.length - 1) + pixel.x) /
+          cluster.points.length;
+        cluster.pixelY =
+          (cluster.pixelY * (cluster.points.length - 1) + pixel.y) /
+          cluster.points.length;
+      } else {
+        tripClusters.push({
+          points: [point],
+          pixelX: pixel.x,
+          pixelY: pixel.y,
+        });
+      }
+    }
+    tripClusters.forEach((cluster, index) => {
+      const longitude =
+        cluster.points.reduce((total, point) => total + point.longitude, 0) /
+        cluster.points.length;
+      const latitude =
+        cluster.points.reduce((total, point) => total + point.latitude, 0) /
+        cluster.points.length;
+      const representative =
+        cluster.points.find((point) => point.thumbnailUrl) ?? cluster.points[0];
+      clusters.push({
+        id: `${tripId}:${index}`,
+        tripId,
+        title: tripTitleById.get(tripId) ?? "Trip",
+        coordinates: [longitude, latitude],
+        points: cluster.points,
+        thumbnailUrl: representative.thumbnailUrl ?? null,
+        pointCount: cluster.points.length,
+      });
+    });
+  }
+  return clusters;
+}
+
+function TripBrowserPanel({
+  data,
+  endDate,
+  error,
+  isLoading,
+  selectedTripId,
+  startDate,
+  trips,
+  onClearFilters,
+  onEndDateChange,
+  onRefresh,
+  onSelectTrip,
+  onStartDateChange,
+}: {
+  data: TripsMapPointsResponse | null;
+  endDate: string;
+  error: string;
+  isLoading: boolean;
+  selectedTripId: string | null;
+  startDate: string;
+  trips: TripResponse[];
+  onClearFilters: () => void;
+  onEndDateChange: (value: string) => void;
+  onRefresh: () => void;
+  onSelectTrip: (tripId: string) => void;
+  onStartDateChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <div className="trip-stage-header">
+        <div>
+          <h2 id="trip-stage-title">Browse trips</h2>
+          <p>
+            {data
+              ? `${data.trips.length} trip${
+                  data.trips.length === 1 ? "" : "s"
+                } with mapped photos`
+              : "Explore trips by place and time"}
+          </p>
+        </div>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          Refresh
+        </button>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      <section className="trip-browser-shell">
+        <TripBrowserMap
+          data={data}
+          isLoading={isLoading}
+          selectedTripId={selectedTripId}
+          trips={trips}
+          onSelectTrip={onSelectTrip}
+        />
+        <form
+          className="trip-browser-filters"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <label>
+            Start
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => onStartDateChange(event.target.value)}
+            />
+          </label>
+          <label>
+            End
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => onEndDateChange(event.target.value)}
+            />
+          </label>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onClearFilters}
+            disabled={!startDate && !endDate}
+          >
+            Clear
+          </button>
+        </form>
+      </section>
+    </>
+  );
+}
+
+function TripBrowserMap({
+  data,
+  isLoading,
+  selectedTripId,
+  trips,
+  onSelectTrip,
+}: {
+  data: TripsMapPointsResponse | null;
+  isLoading: boolean;
+  selectedTripId: string | null;
+  trips: TripResponse[];
+  onSelectTrip: (tripId: string) => void;
+}) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<Marker[]>([]);
+  const [zoom, setZoom] = useState(1);
+  const clusters = useMemo(
+    () => clusterTripMapPoints(data, trips, zoom),
+    [data, trips, zoom],
+  );
+
+  useEffect(() => {
+    if (!mapNode.current || mapRef.current) {
+      return;
+    }
+    const map = new maplibregl.Map({
+      container: mapNode.current,
+      style: configuredMapStyle(),
+      center: [0, 18],
+      zoom: 1,
+      attributionControl: { compact: true },
+    });
+    mapRef.current = map;
+    const syncZoom = () => setZoom(map.getZoom());
+    map.on("load", syncZoom);
+    map.on("zoomend", syncZoom);
+    map.on("moveend", syncZoom);
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !data || data.points.length === 0) {
+      return;
+    }
+    const bounds = new LngLatBounds();
+    data.points.forEach((point) =>
+      bounds.extend([point.longitude, point.latitude]),
+    );
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds, { padding: 64, maxZoom: 7, duration: 500 });
+    }
+  }, [data]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    for (const cluster of clusters) {
+      const anchor = document.createElement("div");
+      anchor.className =
+        cluster.tripId === selectedTripId
+          ? "photo-map-marker-anchor selected"
+          : "photo-map-marker-anchor";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className =
+        cluster.tripId === selectedTripId
+          ? "trip-browser-marker active"
+          : "trip-browser-marker";
+      button.setAttribute(
+        "aria-label",
+        `Select ${cluster.title}, ${cluster.pointCount} mapped point${
+          cluster.pointCount === 1 ? "" : "s"
+        }`,
+      );
+      const imageFrame = document.createElement("span");
+      imageFrame.className = "trip-browser-marker-image";
+      if (cluster.thumbnailUrl) {
+        const image = document.createElement("img");
+        image.src = cluster.thumbnailUrl;
+        image.alt = "";
+        image.loading = "lazy";
+        imageFrame.appendChild(image);
+      } else {
+        const fallback = document.createElement("span");
+        fallback.textContent = cluster.title.slice(0, 1).toUpperCase();
+        imageFrame.appendChild(fallback);
+      }
+      const badge = document.createElement("small");
+      badge.textContent = String(cluster.pointCount);
+      imageFrame.appendChild(badge);
+      const label = document.createElement("strong");
+      label.textContent = cluster.title;
+      button.appendChild(imageFrame);
+      button.appendChild(label);
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelectTrip(cluster.tripId);
+        if (cluster.points.length > 1) {
+          const bounds = new LngLatBounds();
+          cluster.points.forEach((point) =>
+            bounds.extend([point.longitude, point.latitude]),
+          );
+          if (!bounds.isEmpty()) {
+            map.fitBounds(bounds, { padding: 84, maxZoom: 9, duration: 500 });
+          }
+        } else {
+          map.easeTo({
+            center: cluster.coordinates,
+            zoom: Math.max(map.getZoom(), 7),
+          });
+        }
+      });
+      anchor.appendChild(button);
+      markersRef.current.push(
+        new maplibregl.Marker({ anchor: "center", element: anchor })
+          .setLngLat(cluster.coordinates)
+          .addTo(map),
+      );
+    }
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+    };
+  }, [clusters, onSelectTrip, selectedTripId]);
+
+  const selectedTripSummary =
+    data?.trips.find((trip) => trip.id === selectedTripId) ??
+    data?.trips[0] ??
+    null;
+
+  return (
+    <div className="story-map-panel trip-browser-map-panel">
+      <div className="story-map-shell local-map-shell">
+        <div ref={mapNode} className="story-map" />
+        {isLoading ? (
+          <div className="map-empty-state">
+            <strong>Loading trips</strong>
+            <span>Preparing mapped photos.</span>
+          </div>
+        ) : !data || data.points.length === 0 ? (
+          <div className="map-empty-state">
+            <strong>No mapped trips</strong>
+            <span>Add photos with location data or widen the date filter.</span>
+          </div>
+        ) : null}
+      </div>
+      <div className="trip-browser-summary">
+        {selectedTripSummary ? (
+          <div>
+            <strong>{selectedTripSummary.title}</strong>
+            <span>
+              {formatTripMapDate(selectedTripSummary.firstCapturedAt)} -{" "}
+              {formatTripMapDate(selectedTripSummary.lastCapturedAt)}
+            </span>
+          </div>
+        ) : (
+          <div>
+            <strong>Trip map</strong>
+            <span>Zoom into a region to split trips into local markers.</span>
+          </div>
+        )}
+        <span>
+          {data?.points.length ?? 0} point
+          {data?.points.length === 1 ? "" : "s"}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 const localMapStyle: maplibregl.StyleSpecification = {
@@ -8612,6 +9104,17 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
         <path d="M19 12a7.6 7.6 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a7.3 7.3 0 0 0-1.8-1l-.4-2.7h-4l-.4 2.7a7.3 7.3 0 0 0-1.8 1l-2.5-1-2 3.5 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a7.3 7.3 0 0 0 1.8 1l.4 2.7h4l.4-2.7a7.3 7.3 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" />
+      </svg>
+    );
+  }
+
+  if (action === "browse") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
+        <path d="M9 3v15" />
+        <path d="M15 6v15" />
+        <path d="M12 9.5a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z" />
       </svg>
     );
   }

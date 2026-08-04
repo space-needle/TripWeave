@@ -404,6 +404,43 @@ export type TripCreateRequest = {
   dayCutoffHour?: number;
 };
 
+export type TripMapBoundsResponse = {
+  minLatitude: number;
+  minLongitude: number;
+  maxLatitude: number;
+  maxLongitude: number;
+};
+
+export type TripMapPointResponse = {
+  id: string;
+  tripId: string;
+  mediaItemId: string;
+  capturedAt?: string | null;
+  date?: string | null;
+  latitude: number;
+  longitude: number;
+  source: string;
+  confidence?: number | null;
+  filename?: string | null;
+  thumbnailUrl?: string | null;
+};
+
+export type TripMapTripResponse = {
+  id: string;
+  title: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  timezoneId: string;
+  role: string;
+  memberId: string;
+  pointCount: number;
+  firstCapturedAt?: string | null;
+  lastCapturedAt?: string | null;
+  bounds: TripMapBoundsResponse;
+  representativeMediaItemId: string;
+  representativeThumbnailUrl?: string | null;
+};
+
 export type TripResponse = {
   id: string;
   title: string;
@@ -433,6 +470,13 @@ export type TripUpdateRequest = {
 
 export type TripsListResponse = {
   trips: TripResponse[];
+};
+
+export type TripsMapPointsResponse = {
+  trips: TripMapTripResponse[];
+  points: TripMapPointResponse[];
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 export type UploadFileRegisterRequest = {

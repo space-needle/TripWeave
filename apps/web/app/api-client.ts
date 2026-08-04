@@ -24,6 +24,7 @@ import type {
   SimilarityGroupsResponse,
   StoryPhotoProjectionResponse,
   TripCreateRequest,
+  TripsMapPointsResponse,
   TripResponse,
   TripsListResponse,
   TripUpdateRequest,
@@ -155,6 +156,19 @@ export const api = {
   },
   trips(): Promise<TripsListResponse> {
     return apiRequest<TripsListResponse>("/trips");
+  },
+  tripMapPoints(start?: string, end?: string): Promise<TripsMapPointsResponse> {
+    const params = new URLSearchParams();
+    if (start) {
+      params.set("start", start);
+    }
+    if (end) {
+      params.set("end", end);
+    }
+    const query = params.toString();
+    return apiRequest<TripsMapPointsResponse>(
+      query ? `/trips/map-points?${query}` : "/trips/map-points",
+    );
   },
   createTrip(payload: TripCreateRequest): Promise<TripResponse> {
     return apiRequest<TripResponse>("/trips", {
