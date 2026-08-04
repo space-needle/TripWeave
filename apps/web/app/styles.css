@@ -373,6 +373,7 @@ p {
 
 .trip-stage {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   min-width: 0;
 }
@@ -2139,6 +2140,9 @@ button.is-updating {
 }
 
 .trip-browser-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: grid;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -2148,11 +2152,14 @@ button.is-updating {
 }
 
 .trip-browser-map-panel {
+  width: 100%;
+  min-width: 0;
   min-height: min(620px, 64vh);
   border-radius: 18px 18px 0 0;
 }
 
 .trip-browser-filters {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 10px;
@@ -2163,6 +2170,11 @@ button.is-updating {
 
 .trip-browser-filters button {
   min-width: 84px;
+}
+
+.trip-browser-filters label,
+.trip-browser-filters input {
+  min-width: 0;
 }
 
 .trip-browser-summary {
