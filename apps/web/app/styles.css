@@ -1792,7 +1792,8 @@ button.is-updating {
 
 .photo-map-marker-anchor > .photo-day-marker,
 .photo-map-marker-anchor > .photo-stop-marker,
-.photo-map-marker-anchor > .photo-area-marker {
+.photo-map-marker-anchor > .photo-area-marker,
+.photo-map-marker-anchor > .trip-browser-marker {
   position: absolute;
   top: 0;
   left: 0;
