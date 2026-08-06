@@ -2213,12 +2213,16 @@ button.is-updating {
 .trip-browser-filters label {
   width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .trip-browser-filters input {
+  display: block;
   width: 100%;
+  inline-size: 100%;
   min-width: 0;
   max-width: 100%;
+  max-inline-size: 100%;
   box-sizing: border-box;
 }
 
