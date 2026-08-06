@@ -2211,9 +2211,10 @@ button.is-updating {
 }
 
 .trip-browser-filters label {
+  display: grid;
+  gap: 6px;
   width: 100%;
   min-width: 0;
-  overflow: hidden;
 }
 
 .trip-browser-filters input {
@@ -2224,6 +2225,15 @@ button.is-updating {
   max-width: 100%;
   max-inline-size: 100%;
   box-sizing: border-box;
+}
+
+@media (max-width: 920px) {
+  .trip-browser-filters input[type="date"] {
+    min-inline-size: 0 !important;
+    padding-inline: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 .trip-browser-summary {
