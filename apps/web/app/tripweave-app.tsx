@@ -1969,9 +1969,6 @@ function OwnerWorkspace() {
                 setTripMapEndDate("");
               }}
               onEndDateChange={setTripMapEndDate}
-              onRefresh={() =>
-                void loadTripMapPoints(tripMapStartDate, tripMapEndDate)
-              }
               onSelectTrip={selectTripById}
               onStartDateChange={setTripMapStartDate}
             />
@@ -3063,7 +3060,6 @@ function TripBrowserPanel({
   trips,
   onClearFilters,
   onEndDateChange,
-  onRefresh,
   onSelectTrip,
   onStartDateChange,
 }: {
@@ -3076,7 +3072,6 @@ function TripBrowserPanel({
   trips: TripResponse[];
   onClearFilters: () => void;
   onEndDateChange: (value: string) => void;
-  onRefresh: () => void;
   onSelectTrip: (tripId: string) => void;
   onStartDateChange: (value: string) => void;
 }) {
@@ -3093,14 +3088,6 @@ function TripBrowserPanel({
               : "Explore trips by place and time"}
           </p>
         </div>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading}
-        >
-          Refresh
-        </button>
       </div>
       {error ? <p className="error">{error}</p> : null}
       <section className="trip-browser-shell">
@@ -4695,6 +4682,42 @@ function TripStoryExplorer({
     return stop.moments.flatMap((moment) => moment.media);
   }
 
+  function timelineStopTimeLabel(stop: ReconstructionStopResponse): {
+    dateTime: string;
+    label: string;
+  } {
+    const timedMedia = orderedStopMedia(stop).filter(
+      (media) => media.capturedAt || media.capturedAtLocal,
+    );
+    if (timedMedia.length > 1) {
+      const firstMedia = timedMedia[0];
+      const lastMedia = timedMedia[timedMedia.length - 1];
+      const firstLabel = formatTimelineStopTime(
+        firstMedia.capturedAt ?? stop.startsAt,
+        firstMedia.capturedAtLocal ?? null,
+        timezoneId,
+      );
+      const lastLabel = formatTimelineStopTime(
+        lastMedia.capturedAt ?? stop.endsAt,
+        lastMedia.capturedAtLocal ?? null,
+        timezoneId,
+      );
+      return {
+        dateTime: firstMedia.capturedAt ?? stop.startsAt,
+        label:
+          firstLabel === lastLabel ? firstLabel : `${firstLabel} - ${lastLabel}`,
+      };
+    }
+    return {
+      dateTime: stop.startsAt,
+      label: formatTimelineStopTime(
+        stop.startsAt,
+        stop.startsAtLocal ?? null,
+        timezoneId,
+      ),
+    };
+  }
+
   async function splitStopAfterMedia(
     stopId: string,
     afterMediaItemId: string,
@@ -5326,6 +5349,7 @@ function TripStoryExplorer({
                     const isPendingMergeHere =
                       Boolean(mergeHereKey) && pendingMergeKey === mergeHereKey;
                     const stopMedia = orderedStopMedia(stop);
+                    const stopTime = timelineStopTimeLabel(stop);
                     const areaContext = areaForStop(day, stop.id);
                     const canSelectForArea =
                       isAreaSelectionMode &&
@@ -5628,13 +5652,9 @@ function TripStoryExplorer({
                                 </span>
                                 <time
                                   className="timeline-stop-time"
-                                  dateTime={stop.startsAt}
+                                  dateTime={stopTime.dateTime}
                                 >
-                                  {formatTimelineStopTime(
-                                    stop.startsAt,
-                                    stop.startsAtLocal ?? null,
-                                    timezoneId,
-                                  )}
+                                  {stopTime.label}
                                 </time>
                                 <small>
                                   {stop.mediaCount} photos ·{" "}

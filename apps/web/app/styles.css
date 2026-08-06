@@ -2781,10 +2781,11 @@ button.is-updating {
 }
 
 .timeline-stop-number {
-  min-width: 30px;
-  min-height: 24px;
-  display: inline-grid;
-  place-items: center;
+  width: 30px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   border-radius: 999px;
   background: #1f4f54;
@@ -2792,7 +2793,6 @@ button.is-updating {
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
-  padding: 0 8px;
 }
 
 .timeline-stop-button small {
