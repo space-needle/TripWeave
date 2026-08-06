@@ -28,6 +28,7 @@ done
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm api alembic upgrade head
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d api worker web caddy
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart caddy
 
 if [ -n "$PUBLIC_BASE" ]; then
   echo "Waiting for public API readiness at $PUBLIC_BASE/api/health/ready..."
