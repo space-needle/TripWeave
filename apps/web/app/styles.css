@@ -2215,6 +2215,10 @@ button.is-updating {
   min-width: 0;
 }
 
+.trip-browser-filters input {
+  max-width: 100%;
+}
+
 .trip-browser-summary {
   position: relative;
   z-index: 2;
@@ -3888,6 +3892,16 @@ button.thumb-frame:focus-visible {
 
   .trip-browser-filters button {
     grid-column: 1 / -1;
+  }
+
+  @media (max-width: 520px) {
+    .trip-browser-filters {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .trip-browser-filters button {
+      grid-column: auto;
+    }
   }
 
   .desktop-story-photo-button {
