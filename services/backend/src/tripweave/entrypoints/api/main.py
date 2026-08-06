@@ -1695,11 +1695,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             startDate=start,
             endDate=end,
         )
-        app.state.metrics.record(
+        app.state.metrics.duration(
             "trip_map_points.response.duration_ms",
             (time.perf_counter() - started_at) * 1000,
-            unit="ms",
-            dimensions={
+            {
                 "point_count": str(len(points)),
                 "trip_count": str(len(response.trips)),
                 "date_filtered": str(start is not None or end is not None),
