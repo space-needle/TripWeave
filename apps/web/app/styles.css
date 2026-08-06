@@ -2793,6 +2793,35 @@ button.is-updating {
   color: var(--muted);
 }
 
+.timeline-stop-button .timeline-stop-metrics {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timeline-stop-button .timeline-stop-metrics span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.timeline-stop-button .timeline-stop-metrics svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
 .timeline-stop-button {
   min-height: 0;
   min-width: 0;
@@ -2816,21 +2845,65 @@ button.is-updating {
 
 .timeline-stop-card {
   display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
   grid-column: 2;
   gap: 9px;
+  align-items: center;
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: #fff;
-  padding: 12px;
-  box-shadow: 0 10px 28px rgb(23 32 42 / 6%);
+  padding: 14px;
+  box-shadow:
+    0 18px 34px rgb(23 32 42 / 12%),
+    0 4px 10px rgb(23 32 42 / 7%);
+}
+
+.timeline-stop-photo {
+  width: 58px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: #dfe8e3;
+  color: var(--accent-strong);
+  font-size: 0.95rem;
+  font-weight: 900;
+  box-shadow:
+    0 12px 24px rgb(23 32 42 / 18%),
+    0 0 0 1px rgb(23 32 42 / 7%);
+}
+
+.timeline-stop-photo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.timeline-stop-photo span {
+  display: grid;
+  place-items: center;
+}
+
+.timeline-stop-heading {
+  grid-column: 2;
+}
+
+.timeline-stop-card > .timeline-note-preview,
+.timeline-stop-card > .timeline-stop-edit-panel {
+  grid-column: 1 / -1;
 }
 
 .timeline-stop-stack.in-area .timeline-stop-card {
   border-color: #d8e7e1;
   margin-left: 10px;
   margin-right: 10px;
-  box-shadow: 0 6px 16px rgb(23 32 42 / 5%);
+  box-shadow:
+    0 14px 28px rgb(23 32 42 / 10%),
+    0 3px 8px rgb(23 32 42 / 6%);
 }
 
 .timeline-stop.area-selection-mode .timeline-stop-card {
@@ -3143,7 +3216,9 @@ button.is-updating {
 
 .timeline-stop.active .timeline-stop-card {
   border-color: #e87856;
-  box-shadow: 0 12px 30px rgb(232 120 86 / 14%);
+  box-shadow:
+    0 20px 38px rgb(232 120 86 / 18%),
+    0 4px 12px rgb(23 32 42 / 8%);
 }
 
 .summary-grid {

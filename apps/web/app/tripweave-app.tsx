@@ -104,6 +104,7 @@ type StoryHeaderIconAction =
   | "manage"
   | "browse"
   | "settings";
+type TimelineMetricIconName = "camera" | "travelers";
 
 type TripForm = {
   title: string;
@@ -4700,7 +4701,9 @@ function TripStoryExplorer({
       return {
         dateTime: firstMedia.capturedAt ?? stop.startsAt,
         label:
-          firstLabel === lastLabel ? firstLabel : `${firstLabel} - ${lastLabel}`,
+          firstLabel === lastLabel
+            ? firstLabel
+            : `${firstLabel} - ${lastLabel}`,
       };
     }
     return {
@@ -5365,6 +5368,14 @@ function TripStoryExplorer({
                     const previousAreaStop = areaEdges?.previous ?? null;
                     const nextAreaStop = areaEdges?.next ?? null;
                     const timelineBranch = timelineBranchInfo(forkGroups, stop);
+                    const featuredStopMedia =
+                      stopMedia.find(
+                        (media) => media.thumbnailUrl ?? media.previewUrl,
+                      ) ?? stopMedia[0];
+                    const featuredStopImage =
+                      featuredStopMedia?.thumbnailUrl ??
+                      featuredStopMedia?.previewUrl ??
+                      null;
                     return (
                       <div
                         className={
@@ -5624,6 +5635,20 @@ function TripStoryExplorer({
                             {displayStopPosition(stop)}
                           </span>
                           <div className="timeline-stop-card">
+                            <div
+                              className="timeline-stop-photo"
+                              aria-hidden="true"
+                            >
+                              {featuredStopImage ? (
+                                <img
+                                  src={featuredStopImage}
+                                  alt=""
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{displayStopPosition(stop)}</span>
+                              )}
+                            </div>
                             <div className="timeline-stop-heading">
                               <button
                                 type="button"
@@ -5654,9 +5679,15 @@ function TripStoryExplorer({
                                 >
                                   {stopTime.label}
                                 </time>
-                                <small>
-                                  {stop.mediaCount} photos ·{" "}
-                                  {stop.contributorCount} travelers
+                                <small className="timeline-stop-metrics">
+                                  <span>
+                                    <TimelineMetricIcon name="camera" />
+                                    {stop.mediaCount}
+                                  </span>
+                                  <span>
+                                    <TimelineMetricIcon name="travelers" />
+                                    {stop.contributorCount}
+                                  </span>
                                 </small>
                               </button>
                               <div className="timeline-stop-actions">
@@ -9067,6 +9098,27 @@ function isAreaVisitsResponse(value: unknown): value is AreaVisitsResponse {
   const candidate = value as { areas?: unknown; standaloneStops?: unknown };
   return (
     Array.isArray(candidate.areas) && Array.isArray(candidate.standaloneStops)
+  );
+}
+
+function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
+  if (name === "camera") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 8.5h3l1.5-2h7l1.5 2h3v9.5H4z" />
+        <path d="M12 11a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
+        <path d="M18 11h.01" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      <path d="M17 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+      <path d="M14 18.5a4.2 4.2 0 0 1 6.5.5" />
+    </svg>
   );
 }
 
