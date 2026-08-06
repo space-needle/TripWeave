@@ -3895,11 +3895,6 @@ function TripStoryExplorer({
     }
   }
 
-  function focusTimelineStopOnMap(stopId: string, dayId: string) {
-    onStateChange(selectStoryStop(state, stopId, dayId));
-    onMobilePaneChange?.("map");
-  }
-
   async function openStopPhotos(stopId: string, dayId: string) {
     if (!tripId) {
       const stopMedia = filteredModel.media.filter(
@@ -5714,17 +5709,6 @@ function TripStoryExplorer({
                                     />
                                   </button>
                                 ) : null}
-                                <button
-                                  type="button"
-                                  className="timeline-icon-button timeline-map-button"
-                                  aria-label={`View ${displayStopTitle(stop)} on map`}
-                                  title="View on map"
-                                  onClick={() =>
-                                    focusTimelineStopOnMap(stop.id, day.id)
-                                  }
-                                >
-                                  <StoryHeaderIcon action="map" />
-                                </button>
                               </div>
                             </div>
                             {stop.note && !isEditingTools ? (
