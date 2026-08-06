@@ -2781,7 +2781,8 @@ button.is-updating {
 }
 
 .timeline-stop-number {
-  width: 30px;
+  box-sizing: border-box;
+  min-width: 30px;
   height: 24px;
   display: inline-flex;
   align-items: center;
@@ -2792,7 +2793,10 @@ button.is-updating {
   color: #fff;
   font-size: 0.72rem;
   font-weight: 900;
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+  padding: 0 8px;
+  text-align: center;
 }
 
 .timeline-stop-button small {
@@ -4170,7 +4174,8 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions,
-  .mobile-trip-action-menu {
+  .mobile-trip-action-menu,
+  .mobile-tool-menu {
     position: absolute;
   }
 
