@@ -1109,6 +1109,28 @@ class StoryStopPhotoProjection(Base, TimestampMixin):
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
+class TripMapPointProjection(Base, TimestampMixin):
+    __tablename__ = "trip_map_point_projections"
+    __table_args__ = (UniqueConstraint("media_item_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    media_item_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False
+    )
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    captured_date: Mapped[date | None] = mapped_column(Date)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    filename: Mapped[str | None] = mapped_column(Text)
+
+
 class AssetDownloadGrant(Base, TimestampMixin):
     __tablename__ = "asset_download_grants"
     __table_args__ = (UniqueConstraint("asset_id"),)
@@ -1242,6 +1264,12 @@ Index(
     "ix_story_stop_photo_projections_trip_run",
     StoryStopPhotoProjection.trip_id,
     StoryStopPhotoProjection.source_reconstruction_run_id,
+)
+Index("ix_trip_map_point_projections_trip_id", TripMapPointProjection.trip_id)
+Index(
+    "ix_trip_map_point_projections_trip_date",
+    TripMapPointProjection.trip_id,
+    TripMapPointProjection.captured_date,
 )
 Index("ix_asset_download_grants_expires_at", AssetDownloadGrant.expires_at)
 Index("ix_share_links_trip_id", ShareLink.trip_id)

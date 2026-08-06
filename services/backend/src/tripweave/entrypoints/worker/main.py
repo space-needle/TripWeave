@@ -28,6 +28,7 @@ from tripweave.adapters.reconstruction import (
     latest_reconstruction_run,
     reconstruct_trip,
 )
+from tripweave.adapters.trip_map_projection import rebuild_trip_map_point_projection
 from tripweave.adapters.worker_heartbeat import write_heartbeat
 from tripweave.application.media_processing import (
     MediaProcessingError,
@@ -312,6 +313,7 @@ def ingest_media(
     )
     apply_processed_media(db, blob_store, media_item, processed)
     discard_temporary_original(blob_store, media_item)
+    rebuild_trip_map_point_projection(db, media_item.trip_id)
     enqueue_auto_story_update(db, settings, media_item.trip_id)
     db.commit()
 

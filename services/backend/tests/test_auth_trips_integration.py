@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
+from uuid import UUID
 
 import pytest
 from alembic.config import Config
@@ -19,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from alembic import command
 from tripweave.adapters.blob_store_factory import create_blob_store
 from tripweave.adapters.manual_geocoder import ManualGeocoder
+from tripweave.adapters.trip_map_projection import rebuild_trip_map_point_projection
 from tripweave.config import Settings, get_settings
 from tripweave.domain.storage import BlobRef
 from tripweave.entrypoints.api.main import create_app
@@ -510,6 +512,10 @@ def test_trip_map_points_include_only_owned_trips_and_filter_by_date(
             text("UPDATE media_items SET deleted_at = now() WHERE id = CAST(:id AS uuid)"),
             {"id": busan_media_id},
         )
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with session_factory() as db:
+        rebuild_trip_map_point_projection(db, UUID(str(korea_trip["id"])))
+        db.commit()
 
     other_client = TestClient(
         create_app(
