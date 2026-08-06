@@ -3424,11 +3424,6 @@ function TripStoryExplorer({
     (item) => item.id === state.selectedMediaId,
   );
   const activeStopRefs = useRef<Record<string, HTMLElement | null>>({});
-  const timelineRef = useRef<HTMLElement | null>(null);
-  const latestStateRef = useRef(state);
-  const skipNextTimelineSelectionRef = useRef(false);
-  const suppressNextTimelineAutoScrollRef = useRef(false);
-  const timelinePaneFocusStopRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const [galleryMediaId, setGalleryMediaId] = useState<string | null>(null);
   const [galleryPhotoIds, setGalleryPhotoIds] = useState<string[] | null>(null);
@@ -3720,10 +3715,6 @@ function TripStoryExplorer({
   }, [activePhotoDayId, isPhotoRollVisible, loadDayPhotoProjection]);
 
   useEffect(() => {
-    latestStateRef.current = state;
-  }, [state]);
-
-  useEffect(() => {
     const normalizedState = normalizeStoryMapState(state, model);
     if (normalizedState !== state) {
       onStateChange(normalizedState);
@@ -3734,84 +3725,20 @@ function TripStoryExplorer({
     if (displayMobilePane !== "timeline" || !state.selectedStopId) {
       return;
     }
-    if (suppressNextTimelineAutoScrollRef.current) {
-      suppressNextTimelineAutoScrollRef.current = false;
-      return;
-    }
     const element = activeStopRefs.current[state.selectedStopId];
     if (!element) {
       return;
     }
-    timelinePaneFocusStopRef.current = state.selectedStopId;
-    skipNextTimelineSelectionRef.current = true;
     const frameId = window.requestAnimationFrame(() => {
       element.scrollIntoView({
         block: "center",
         behavior: reducedMotion ? "auto" : "smooth",
       });
     });
-    const timeoutId = window.setTimeout(
-      () => {
-        if (timelinePaneFocusStopRef.current === state.selectedStopId) {
-          timelinePaneFocusStopRef.current = null;
-        }
-      },
-      reducedMotion ? 0 : 500,
-    );
     return () => {
       window.cancelAnimationFrame(frameId);
-      window.clearTimeout(timeoutId);
     };
   }, [displayMobilePane, reducedMotion, state.selectedStopId]);
-
-  useEffect(() => {
-    if (!["STOP", "MOMENT"].includes(state.viewMode)) {
-      return;
-    }
-    const elements = Object.values(activeStopRefs.current).filter(
-      (element): element is HTMLElement => element !== null,
-    );
-    if (elements.length === 0 || typeof IntersectionObserver === "undefined") {
-      return;
-    }
-    const timeline = timelineRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort(
-            (left, right) => right.intersectionRatio - left.intersectionRatio,
-          )[0];
-        const stopId = visible?.target.getAttribute("data-stop-id");
-        const dayId = visible?.target.getAttribute("data-day-id");
-        const currentState = latestStateRef.current;
-        if (
-          timelinePaneFocusStopRef.current &&
-          timelinePaneFocusStopRef.current === currentState.selectedStopId
-        ) {
-          return;
-        }
-        if (skipNextTimelineSelectionRef.current) {
-          skipNextTimelineSelectionRef.current = false;
-          return;
-        }
-        if (
-          stopId &&
-          dayId &&
-          stopId !== currentState.selectedStopId &&
-          ["STOP", "MOMENT"].includes(currentState.viewMode)
-        ) {
-          suppressNextTimelineAutoScrollRef.current = true;
-          onStateChange(selectStoryStop(currentState, stopId, dayId));
-        }
-      },
-      { root: timeline, threshold: [0.35, 0.7] },
-    );
-    for (const element of elements) {
-      observer.observe(element);
-    }
-    return () => observer.disconnect();
-  }, [filteredModel.stops, onStateChange, state.viewMode]);
 
   useEffect(() => {
     if (!isPhotoRollVisible) {
@@ -3964,7 +3891,6 @@ function TripStoryExplorer({
 
   function showDayStops(dayId: string) {
     const firstStop = filteredModel.stops.find((stop) => stop.dayId === dayId);
-    skipNextTimelineSelectionRef.current = true;
     setExpandedMapAreaId(null);
     onStateChange({
       ...state,
@@ -5105,11 +5031,7 @@ function TripStoryExplorer({
         {photoProjectionError ? (
           <p className="error">{photoProjectionError}</p>
         ) : null}
-        <section
-          className="story-timeline"
-          aria-label="Chronological timeline"
-          ref={timelineRef}
-        >
+        <section className="story-timeline" aria-label="Chronological timeline">
           <p className="screen-reader-map-summary">
             Map alternative: {filteredModel.stops.length} stops,{" "}
             {filteredModel.media.length} photos, selected {selectedLabel}.
