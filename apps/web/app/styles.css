@@ -2668,7 +2668,7 @@ button.is-updating {
   left: 15px;
   width: 2px;
   content: "";
-  background: #e9a085;
+  background: var(--timeline-day-color, #e9a085);
 }
 
 .timeline-stop-stack:last-child .timeline-stop::before {
@@ -2687,7 +2687,7 @@ button.is-updating {
   width: 2px;
   height: 50px;
   content: "";
-  background: #e9a085;
+  background: var(--timeline-day-color, #e9a085);
 }
 
 .timeline-stop-stack.area-start.has-previous-stop.in-area > * {
@@ -2706,13 +2706,13 @@ button.is-updating {
   z-index: 1;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: #e87856;
+  background: var(--timeline-day-color, #e87856);
   color: #fff;
   font-size: 0.72rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  box-shadow: 0 0 0 1px #e87856;
+  box-shadow: 0 0 0 1px var(--timeline-day-color, #e87856);
   text-align: center;
 }
 
@@ -2722,8 +2722,8 @@ button.is-updating {
 
 .timeline-day.has-branches .timeline-stop-branch .timeline-stop-marker {
   margin-left: 24px;
-  background: #2fa7a2;
-  box-shadow: 0 0 0 1px #2fa7a2;
+  background: var(--timeline-day-color, #2fa7a2);
+  box-shadow: 0 0 0 1px var(--timeline-day-color, #2fa7a2);
 }
 
 .timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane {
@@ -2734,7 +2734,7 @@ button.is-updating {
   z-index: 0;
   display: block;
   width: 2px;
-  background: #77c7c2;
+  background: var(--timeline-day-color, #77c7c2);
 }
 
 .timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::before,
@@ -2743,7 +2743,7 @@ button.is-updating {
   left: -23px;
   width: 23px;
   height: 22px;
-  border-color: #77c7c2;
+  border-color: var(--timeline-day-color, #77c7c2);
   content: "";
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type CSSProperties,
   ChangeEvent,
   DragEvent,
   FormEvent,
@@ -3417,6 +3418,7 @@ function TripStoryExplorer({
     () => filterStoryModel(model, state.contributorFilter),
     [model, state.contributorFilter],
   );
+  const dayColorMap = useMemo(() => storyDayColorMap(model), [model]);
   const selectedStop = filteredModel.stops.find(
     (stop) => stop.id === state.selectedStopId,
   );
@@ -5076,6 +5078,12 @@ function TripStoryExplorer({
                     state.selectedDayId === day.id ? "active" : ""
                   } ${dayHasBranches ? "has-branches" : ""}`}
                   key={day.id}
+                  style={
+                    {
+                      "--timeline-day-color":
+                        dayColorMap.get(day.id) ?? storyDayColors[0],
+                    } as CSSProperties
+                  }
                 >
                   <div className="timeline-day-heading">
                     <button
