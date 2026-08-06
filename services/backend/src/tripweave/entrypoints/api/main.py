@@ -183,7 +183,6 @@ class TripMapSummary:
     first_captured_at: datetime | None
     last_captured_at: datetime | None
     representative_media_item_id: UUID
-    representative_thumbnail_url: str | None
 
 
 LOCAL_PUBLIC_API_BASE_URL = "http://localhost:8000"
@@ -1596,19 +1595,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 orm.TripMember.role,
                 orm.TripMember.id.label("member_id"),
                 orm.MediaItem,
-                orm.MediaAsset,
                 latitude,
                 longitude,
             )
             .join(orm.TripMember, orm.TripMember.trip_id == orm.Trip.id)
             .join(orm.MediaItem, orm.MediaItem.trip_id == orm.Trip.id)
-            .outerjoin(
-                orm.MediaAsset,
-                and_(
-                    orm.MediaAsset.media_item_id == orm.MediaItem.id,
-                    orm.MediaAsset.asset_type == MediaAssetType.THUMBNAIL.value,
-                ),
-            )
             .where(
                 orm.TripMember.user_id == auth.user.id,
                 orm.TripMember.removed_at.is_(None),
@@ -1636,12 +1627,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
         points: list[TripMapPointResponse] = []
         trips_by_id: dict[UUID, TripMapSummary] = {}
-        for trip, role, member_id, media_item, thumbnail, lat, lon in db.execute(statement).all():
+        for trip, role, member_id, media_item, lat, lon in db.execute(statement).all():
             point_latitude = float(lat)
             point_longitude = float(lon)
-            thumbnail_url = None
-            if thumbnail is not None:
-                thumbnail_url = media_asset_response(thumbnail).download_url
             captured_at = (
                 media_item.effective_captured_at_utc or media_item.original_captured_at_utc
             )
@@ -1656,7 +1644,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 source=media_item.location_source,
                 confidence=media_item.location_confidence,
                 filename=media_item.original_filename,
-                thumbnailUrl=thumbnail_url,
+                thumbnailUrl=None,
             )
             points.append(point)
             summary = trips_by_id.get(trip.id)
@@ -1673,7 +1661,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     first_captured_at=captured_at,
                     last_captured_at=captured_at,
                     representative_media_item_id=media_item.id,
-                    representative_thumbnail_url=thumbnail_url,
                 )
                 trips_by_id[trip.id] = summary
             summary.point_count += 1
@@ -1691,10 +1678,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 last_captured_at is None or captured_at > last_captured_at
             ):
                 summary.last_captured_at = captured_at
-            if summary.representative_thumbnail_url is None and thumbnail_url is not None:
-                summary.representative_media_item_id = media_item.id
-                summary.representative_thumbnail_url = thumbnail_url
-
         return TripsMapPointsResponse(
             trips=[
                 TripMapTripResponse(
@@ -1715,7 +1698,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         maxLongitude=summary.max_longitude,
                     ),
                     representativeMediaItemId=summary.representative_media_item_id,
-                    representativeThumbnailUrl=summary.representative_thumbnail_url,
+                    representativeThumbnailUrl=None,
                 )
                 for summary in trips_by_id.values()
             ],

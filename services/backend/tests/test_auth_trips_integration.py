@@ -543,7 +543,7 @@ def test_trip_map_points_include_only_owned_trips_and_filter_by_date(
     assert [trip["title"] for trip in body["trips"]] == ["Korea"]
     assert body["trips"][0]["pointCount"] == 1
     assert body["trips"][0]["representativeMediaItemId"] == seoul_media_id
-    assert body["trips"][0]["representativeThumbnailUrl"].startswith("http://testserver/")
+    assert body["trips"][0]["representativeThumbnailUrl"] is None
     assert body["trips"][0]["bounds"] == {
         "minLatitude": 37.5665,
         "minLongitude": 126.978,
@@ -554,7 +554,7 @@ def test_trip_map_points_include_only_owned_trips_and_filter_by_date(
     assert body["points"][0]["mediaItemId"] == seoul_media_id
     assert body["points"][0]["tripId"] == korea_trip["id"]
     assert body["points"][0]["date"] == "2024-04-10"
-    assert body["points"][0]["thumbnailUrl"].startswith("http://testserver/")
+    assert body["points"][0]["thumbnailUrl"] is None
     assert no_location_media_id not in {point["mediaItemId"] for point in body["points"]}
 
     excluded = client.get("/trips/map-points?start=2025-01-01&end=2025-12-31")
