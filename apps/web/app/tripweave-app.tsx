@@ -580,9 +580,14 @@ function OwnerWorkspace() {
     setPublications(await api.publications(tripId));
   }, []);
 
+  function closeMobileMenus() {
+    setMobileTripMenuOpen(false);
+    setMobileToolMenuOpen(false);
+  }
+
   function selectTrip(trip: TripResponse) {
     setOwnerSlideshowOpen(false);
-    setMobileToolMenuOpen(false);
+    closeMobileMenus();
     setSelectedTripSelection(trip.id);
     setSettingsForm(fromTrip(trip));
     setReconstruction(null);
@@ -1655,7 +1660,7 @@ function OwnerWorkspace() {
             key={tab}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               setMobileTab(tab);
             }}
             title={label}
@@ -1669,7 +1674,7 @@ function OwnerWorkspace() {
           disabled={!canOpenOwnerSlideshow}
           onClick={() => {
             setOwnerStoryPhotosOpen(false);
-            setMobileTripMenuOpen(false);
+            closeMobileMenus();
             setOwnerSlideshowOpen(true);
           }}
           title="Play slideshow"
@@ -1683,7 +1688,10 @@ function OwnerWorkspace() {
             aria-expanded={mobileTripMenuOpen}
             className={mobileTripMenuOpen ? "active" : ""}
             disabled={!selectedTrip}
-            onClick={() => setMobileTripMenuOpen((current) => !current)}
+            onClick={() => {
+              setMobileToolMenuOpen(false);
+              setMobileTripMenuOpen((current) => !current);
+            }}
             title="Trip actions"
           >
             <StoryHeaderIcon action="more" />
@@ -1697,7 +1705,7 @@ function OwnerWorkspace() {
             disabled={!selectedTrip}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("photos");
             }}
             title="Upload photos"
@@ -1729,8 +1737,7 @@ function OwnerWorkspace() {
             className={mobileTab === "tripBrowse" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
-              setMobileToolMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("tripBrowse");
             }}
             title="Browse trips"
@@ -1744,8 +1751,7 @@ function OwnerWorkspace() {
             className={mobileTab === "appSettings" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
-              setMobileToolMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("appSettings");
             }}
             title="Settings"
@@ -1772,7 +1778,7 @@ function OwnerWorkspace() {
             aria-busy={isReconstructingStory}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               void runReconstruction();
             }}
             title={storyActionTitle}
@@ -1790,7 +1796,7 @@ function OwnerWorkspace() {
             className={mobileTab === "photos" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("photos");
             }}
             title="Upload photos"
@@ -1805,7 +1811,7 @@ function OwnerWorkspace() {
             disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("share");
             }}
             title="Share trip"
@@ -1820,7 +1826,7 @@ function OwnerWorkspace() {
             disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
-              setMobileTripMenuOpen(false);
+              closeMobileMenus();
               setMobileTab("tripSettings");
             }}
             title="Trip settings"
