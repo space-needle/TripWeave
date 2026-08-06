@@ -8986,7 +8986,16 @@ function SlideshowMapScene({
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    for (const stop of scene.stops) {
+    const stopsByMarkerDepth =
+      scene.type === "stop"
+        ? [
+            ...scene.stops.filter((stop) => stop.id !== scene.activeStopId),
+            ...scene.stops.filter((stop) => stop.id === scene.activeStopId),
+          ]
+        : scene.stops;
+
+    // MapLibre stacks DOM markers in insertion order, so add the current stop last.
+    for (const stop of stopsByMarkerDepth) {
       if (!stop.coordinates) {
         continue;
       }
