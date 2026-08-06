@@ -31,6 +31,7 @@ The planned stack is:
 
 - `docs/architecture.md` defines the system shape and module boundaries.
 - `docs/domain-model.md` defines the core product concepts and invariants.
+- `docs/user-introduction.md` introduces the app, core workflows, features, and privacy model for first-time users. `docs/user-introduction-kr.md` provides the Korean version.
 - `docs/mvp-scope.md` defines the local MVP stages.
 - `docs/security-and-privacy.md` defines ownership, deletion, publication, and secret-handling rules.
 - `docs/cloud-portability-contract.md` defines provider-neutral storage contracts.
