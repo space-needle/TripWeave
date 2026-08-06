@@ -93,7 +93,8 @@ type MobileWorkspaceTab =
   | "share"
   | "tripSettings"
   | "appSettings"
-  | "tripBrowse";
+  | "tripBrowse"
+  | "help";
 type StoryMobilePane = "map" | "timeline" | "photos";
 type StoryHeaderIconAction =
   | StoryMobilePane
@@ -105,7 +106,8 @@ type StoryHeaderIconAction =
   | "upload"
   | "manage"
   | "browse"
-  | "settings";
+  | "settings"
+  | "help";
 type TimelineMetricIconName = "camera" | "travelers";
 
 type TripForm = {
@@ -1758,6 +1760,20 @@ function OwnerWorkspace() {
           >
             <StoryHeaderIcon action="settings" />
           </button>
+          <button
+            type="button"
+            aria-label="Help"
+            aria-pressed={mobileTab === "help"}
+            className={mobileTab === "help" ? "active" : ""}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              closeMobileMenus();
+              setMobileTab("help");
+            }}
+            title="Help"
+          >
+            <StoryHeaderIcon action="help" />
+          </button>
         </nav>
       ) : null}
       {mobileTripMenuOpen && canManageSelectedTrip ? (
@@ -2155,6 +2171,62 @@ function OwnerWorkspace() {
               </p>
             </div>
           )}
+        </section>
+
+        <section
+          className={`help-panel panel ${
+            mobileTab === "help" ? "mobile-tab-active" : ""
+          }`}
+          aria-labelledby="help-title"
+          data-mobile-tab-panel="help"
+        >
+          <div className="help-heading">
+            <p className="eyebrow">TripWeave guide</p>
+            <h2 id="help-title">Help</h2>
+            <p>
+              Turn photos from a shared trip into a map, timeline, and story.
+            </p>
+          </div>
+          <div className="help-sections">
+            <section aria-labelledby="help-getting-started">
+              <h3 id="help-getting-started">Get started</h3>
+              <ol>
+                <li>Create a trip and add its dates and timezone.</li>
+                <li>Invite fellow travelers to contribute their photos.</li>
+                <li>Upload JPEG or HEIC photos to the trip.</li>
+              </ol>
+            </section>
+            <section aria-labelledby="help-explore">
+              <h3 id="help-explore">Explore the trip</h3>
+              <p>
+                Use Map to follow the route and Timeline to move through each
+                day and stop. Select a stop to focus the map and its photos.
+              </p>
+            </section>
+            <section aria-labelledby="help-story">
+              <h3 id="help-story">Update the story</h3>
+              <p>
+                After adding or correcting photos, choose Update story from the
+                trip actions menu. Review any items that need a human decision
+                before sharing.
+              </p>
+            </section>
+            <section aria-labelledby="help-sharing">
+              <h3 id="help-sharing">Share safely</h3>
+              <p>
+                Create an invite link for contributors, then publish a story
+                link when it is ready. Shared stories use sanitized derivatives
+                instead of original photos.
+              </p>
+            </section>
+            <section aria-labelledby="help-privacy">
+              <h3 id="help-privacy">Privacy and ownership</h3>
+              <p>
+                Original photos and metadata stay private. Contributors retain
+                ownership and control over the media they upload.
+              </p>
+            </section>
+          </div>
         </section>
 
         <aside className="trip-management" aria-label="Trip management">
@@ -9173,6 +9245,16 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
         <path d="M19 12a7.6 7.6 0 0 0-.1-1l2-1.6-2-3.5-2.5 1a7.3 7.3 0 0 0-1.8-1l-.4-2.7h-4l-.4 2.7a7.3 7.3 0 0 0-1.8 1l-2.5-1-2 3.5 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.5 2.5-1a7.3 7.3 0 0 0 1.8 1l.4 2.7h4l.4-2.7a7.3 7.3 0 0 0 1.8-1l2.5 1 2-3.5-2-1.6c.1-.3.1-.7.1-1Z" />
+      </svg>
+    );
+  }
+
+  if (action === "help") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M9.7 9.4a2.5 2.5 0 1 1 4.3 1.7c-.9.9-2 1.4-2 2.8" />
+        <path d="M12 17h.01" />
       </svg>
     );
   }

@@ -378,6 +378,47 @@ p {
   min-width: 0;
 }
 
+.help-panel {
+  display: grid;
+  gap: 22px;
+  align-content: start;
+}
+
+.help-heading {
+  display: grid;
+  gap: 8px;
+}
+
+.help-heading h2 {
+  font-size: 1.5rem;
+}
+
+.help-sections {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.help-sections section {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0;
+}
+
+.help-sections h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.help-sections ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .trip-stage-header {
   display: flex;
   align-items: center;
