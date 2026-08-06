@@ -2,6 +2,7 @@
 import json
 import os
 import secrets
+import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from tripweave.adapters.local_blob_store import (
     BlobSizeExceededError,
     InvalidGrantError,
 )
+from tripweave.adapters.metrics import create_metrics_recorder
 from tripweave.adapters.publication import PublicationError, blob_ref_from_manifest, load_manifest
 from tripweave.adapters.reconstruction import (
     MOMENT_GAP_MINUTES,
@@ -232,6 +234,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.state.publication_manifest_cache = {}
     app.state.blob_store = create_blob_store(resolved_settings)
     app.state.geocoder = create_geocoder(resolved_settings)
+    app.state.metrics = create_metrics_recorder()
 
     app.add_middleware(
         CORSMiddleware,
@@ -5143,9 +5146,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def hydrate_story_draft_projection(
         db: DbSession, payload: dict[str, object]
     ) -> ReconstructionResponse:
+        started_at = time.perf_counter()
         hydrated = json.loads(json.dumps(payload))
         asset_ids: set[UUID] = set()
         media_fields_by_asset_id: dict[UUID, tuple[dict[str, object], str]] = {}
+        media_count = 0
         for day in hydrated.get("days", []):
             if not isinstance(day, dict):
                 continue
@@ -5158,6 +5163,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     for media in moment.get("media", []):
                         if not isinstance(media, dict):
                             continue
+                        media_count += 1
                         for asset_field, url_field in (
                             ("thumbnailAssetId", "thumbnailUrl"),
                             ("previewAssetId", "previewUrl"),
@@ -5171,16 +5177,21 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                                 continue
                             asset_ids.add(asset_uuid)
                             media_fields_by_asset_id[asset_uuid] = (media, url_field)
-        if asset_ids:
-            assets = db.execute(
-                select(orm.MediaAsset).where(orm.MediaAsset.id.in_(asset_ids))
-            ).scalars()
-            for asset in assets:
-                media_field = media_fields_by_asset_id.get(asset.id)
-                if media_field is not None:
-                    media, url_field = media_field
-                    media[url_field] = media_asset_response(asset).download_url
-        return ReconstructionResponse.model_validate(hydrated)
+        urls = cached_download_urls_for_assets(db, asset_ids)
+        for asset_id, media_field in media_fields_by_asset_id.items():
+            media, url_field = media_field
+            media[url_field] = urls.get(asset_id)
+        response = ReconstructionResponse.model_validate(hydrated)
+        app.state.metrics.duration(
+            "story_projection.hydrate.duration_ms",
+            round((time.perf_counter() - started_at) * 1000, 3),
+            {
+                "projection": "draft",
+                "asset_count": len(asset_ids),
+                "media_count": media_count,
+            },
+        )
+        return response
 
     def save_story_draft_projection(
         db: DbSession,
@@ -5355,6 +5366,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             asset_id: grants[asset_id].download_url for asset_id in asset_ids if asset_id in grants
         }
         missing_ids = asset_ids - set(urls)
+        app.state.metrics.count(
+            "asset_download_grant.cache.lookup",
+            len(asset_ids),
+            {
+                "hit_count": len(urls),
+                "miss_count": len(missing_ids),
+            },
+        )
         if not missing_ids:
             return urls
         assets = list(
@@ -5424,6 +5443,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         ).scalar_one_or_none()
 
     def story_draft_projection_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
+        started_at = time.perf_counter()
         latest_run = db.execute(
             select(orm.ReconstructionRun)
             .where(orm.ReconstructionRun.trip_id == trip_id)
@@ -5431,7 +5451,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .limit(1)
         ).scalar_one_or_none()
         if latest_run is None:
-            return reconstruction_response(db, trip_id)
+            response = reconstruction_response(db, trip_id)
+            app.state.metrics.duration(
+                "story_projection.response.duration_ms",
+                round((time.perf_counter() - started_at) * 1000, 3),
+                {"projection": "draft", "cache_hit": False, "fallback_reason": "no_run"},
+            )
+            return response
         projection = db.execute(
             select(orm.StoryDraftProjection).where(
                 orm.StoryDraftProjection.trip_id == trip_id,
@@ -5440,7 +5466,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
         ).scalar_one_or_none()
         if projection is not None:
-            return hydrate_story_draft_projection(db, projection.payload)
+            response = hydrate_story_draft_projection(db, projection.payload)
+            app.state.metrics.duration(
+                "story_projection.response.duration_ms",
+                round((time.perf_counter() - started_at) * 1000, 3),
+                {"projection": "draft", "cache_hit": True},
+            )
+            return response
 
         response = reconstruction_response(db, trip_id)
         payload = story_draft_projection_payload(db, response)
@@ -5450,7 +5482,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             source_reconstruction_run_id=latest_run.id,
             payload=payload,
         )
-        return hydrate_story_draft_projection(db, payload)
+        hydrated = hydrate_story_draft_projection(db, payload)
+        app.state.metrics.duration(
+            "story_projection.response.duration_ms",
+            round((time.perf_counter() - started_at) * 1000, 3),
+            {
+                "projection": "draft",
+                "cache_hit": False,
+                "fallback_reason": "projection_missing",
+            },
+        )
+        return hydrated
 
     @app.post("/trips/{trip_id}/reconstruction-runs", response_model=ReconstructionResponse)
     def start_reconstruction(
