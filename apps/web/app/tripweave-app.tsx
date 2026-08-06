@@ -3870,7 +3870,7 @@ function TripStoryExplorer({
   }
 
   function canSelectTimelineStop(): boolean {
-    return ["STOP", "MOMENT"].includes(state.viewMode);
+    return true;
   }
 
   function handleTimelineKey(
@@ -5617,6 +5617,12 @@ function TripStoryExplorer({
                             className="timeline-branch-lane"
                             aria-hidden="true"
                           />
+                          <span
+                            className="timeline-stop-marker"
+                            aria-hidden="true"
+                          >
+                            {displayStopPosition(stop)}
+                          </span>
                           <div className="timeline-stop-card">
                             <div className="timeline-stop-heading">
                               <button
@@ -5638,9 +5644,6 @@ function TripStoryExplorer({
                                 }}
                               >
                                 <span>
-                                  <span className="timeline-stop-number">
-                                    {displayStopPosition(stop)}
-                                  </span>
                                   <span className="timeline-stop-title">
                                     {displayStopTitle(stop)}
                                   </span>

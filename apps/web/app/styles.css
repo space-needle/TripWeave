@@ -2468,15 +2468,15 @@ button.is-updating {
 .timeline-stop {
   position: relative;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   gap: 10px;
   border: 0;
   border-radius: 0;
-  padding: 0 0 0 8px;
+  padding: 0;
 }
 
 .timeline-day.has-branches .timeline-stop {
-  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
 }
 
 .timeline-stop-stack {
@@ -2490,7 +2490,7 @@ button.is-updating {
   top: -10px;
   right: 0;
   bottom: -10px;
-  left: 32px;
+  left: 40px;
   z-index: 0;
   border-right: 1px solid #c8ddd6;
   border-left: 1px solid #c8ddd6;
@@ -2499,7 +2499,7 @@ button.is-updating {
 }
 
 .timeline-day.has-branches .timeline-stop-stack.in-area::before {
-  left: 54px;
+  left: 64px;
 }
 
 .timeline-stop-stack.in-area.area-start::before {
@@ -2532,7 +2532,7 @@ button.is-updating {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  margin-left: 32px;
+  margin-left: 40px;
   margin-right: 10px;
   border-bottom: 1px solid #d8e7e1;
   color: var(--text);
@@ -2540,7 +2540,7 @@ button.is-updating {
 }
 
 .timeline-day.has-branches .timeline-area-heading {
-  margin-left: 54px;
+  margin-left: 64px;
 }
 
 .timeline-area-heading-main {
@@ -2652,7 +2652,7 @@ button.is-updating {
   position: absolute;
   top: 50%;
   bottom: calc(-50% - 10px);
-  left: 5px;
+  left: 15px;
   width: 2px;
   content: "";
   background: #e9a085;
@@ -2669,7 +2669,7 @@ button.is-updating {
 .timeline-stop-stack.area-start.has-previous-stop::after {
   position: absolute;
   top: -10px;
-  left: 13px;
+  left: 15px;
   z-index: 2;
   width: 2px;
   height: 50px;
@@ -2681,26 +2681,34 @@ button.is-updating {
   z-index: 3;
 }
 
-.timeline-stop::after {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 12px;
-  aspect-ratio: 1;
+.timeline-stop-marker {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  justify-self: start;
+  z-index: 1;
   border: 2px solid #fff;
   border-radius: 999px;
-  content: "";
   background: #e87856;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
   box-shadow: 0 0 0 1px #e87856;
-  transform: translateY(-50%);
+  text-align: center;
 }
 
 .timeline-branch-lane {
   display: none;
 }
 
-.timeline-day.has-branches .timeline-stop-branch::after {
-  left: 30px;
+.timeline-day.has-branches .timeline-stop-branch .timeline-stop-marker {
+  margin-left: 24px;
   background: #2fa7a2;
   box-shadow: 0 0 0 1px #2fa7a2;
 }
@@ -2709,7 +2717,7 @@ button.is-updating {
   position: absolute;
   top: -50%;
   bottom: calc(-50% - 10px);
-  left: 35px;
+  left: 38px;
   z-index: 0;
   display: block;
   width: 2px;
@@ -2719,8 +2727,8 @@ button.is-updating {
 .timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::before,
 .timeline-day.has-branches .timeline-stop-branch .timeline-branch-lane::after {
   position: absolute;
-  left: -29px;
-  width: 29px;
+  left: -23px;
+  width: 23px;
   height: 22px;
   border-color: #77c7c2;
   content: "";
@@ -2778,25 +2786,6 @@ button.is-updating {
 .timeline-stop-title {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.timeline-stop-number {
-  box-sizing: border-box;
-  min-width: 30px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: #1f4f54;
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  line-height: 24px;
-  padding: 0 8px;
-  text-align: center;
 }
 
 .timeline-stop-button small {
@@ -4139,27 +4128,27 @@ button.thumb-frame:focus-visible {
   }
 
   .timeline-stop {
-    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-columns: 32px minmax(0, 1fr);
   }
 
   .timeline-day.has-branches .timeline-stop {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   .timeline-stop-stack.in-area::before {
-    left: 30px;
+    left: 40px;
   }
 
   .timeline-day.has-branches .timeline-stop-stack.in-area::before {
-    left: 52px;
+    left: 64px;
   }
 
   .timeline-area-heading {
-    margin-left: 30px;
+    margin-left: 40px;
   }
 
   .timeline-day.has-branches .timeline-area-heading {
-    margin-left: 52px;
+    margin-left: 64px;
   }
 }
 
