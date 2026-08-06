@@ -17,6 +17,10 @@
 		reverse_proxy api:8000
 	}
 
+	handle /trip-assets/* {
+		reverse_proxy api:8000
+	}
+
 	handle /public/shares/* {
 		reverse_proxy api:8000
 	}

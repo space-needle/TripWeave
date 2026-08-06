@@ -756,7 +756,7 @@ def test_account_contributor_can_view_shared_story_without_editing(
             ).scalar_one()
         )
 
-    insert_ready_media_for_reconstruction(
+    owner_media_id = insert_ready_media_for_reconstruction(
         engine,
         trip_id=str(trip["id"]),
         member_id=owner_member_id,
@@ -766,7 +766,7 @@ def test_account_contributor_can_view_shared_story_without_editing(
         longitude=127.0,
         sha256="a" * 64,
     )
-    insert_ready_media_for_reconstruction(
+    contributor_media_id = insert_ready_media_for_reconstruction(
         engine,
         trip_id=str(trip["id"]),
         member_id=contributor_member_id,
@@ -776,6 +776,8 @@ def test_account_contributor_can_view_shared_story_without_editing(
         longitude=127.001,
         sha256="b" * 64,
     )
+    insert_sanitized_assets(client, engine, owner_media_id)
+    insert_sanitized_assets(client, engine, contributor_media_id)
 
     reconstructed = client.post(
         f"/trips/{trip['id']}/reconstruction-runs",
@@ -809,12 +811,18 @@ def test_account_contributor_can_view_shared_story_without_editing(
     projection_media = projection_payload["days"][0]["stops"][0]["moments"][0]["media"]
     assert projection_media[0]["thumbnailUrl"]
     assert projection_media[0]["previewUrl"]
+    assert "/trip-assets/" in projection_media[0]["thumbnailUrl"]
+    thumbnail_path = upload_path(projection_media[0]["thumbnailUrl"])
+    thumbnail_asset = contributor_client.get(thumbnail_path)
+    assert thumbnail_asset.status_code == 200
+    assert thumbnail_asset.content == b"thumbnail-webp"
     day_id = story.json()["days"][0]["id"]
     stop_id = story.json()["days"][0]["stops"][0]["id"]
     day_photos = contributor_client.get(f"/trips/{trip['id']}/story-day-photos/{day_id}")
     assert day_photos.status_code == 200
     assert len(day_photos.json()["stops"][0]["photos"]) == 2
     assert day_photos.json()["stops"][0]["photos"][0]["previewUrl"]
+    assert "/trip-assets/" in day_photos.json()["stops"][0]["photos"][0]["previewUrl"]
     stop_photos = contributor_client.get(f"/trips/{trip['id']}/story-stop-photos/{stop_id}")
     assert stop_photos.status_code == 200
     assert len(stop_photos.json()["stops"][0]["photos"]) == 2
@@ -868,6 +876,8 @@ def test_account_contributor_can_view_shared_story_without_editing(
     assert denied_projection.status_code == 404
     denied_day_photos = other_client.get(f"/trips/{trip['id']}/story-day-photos/{day_id}")
     assert denied_day_photos.status_code == 404
+    denied_asset = other_client.get(thumbnail_path)
+    assert denied_asset.status_code == 404
 
     cannot_reconstruct = contributor_client.post(
         f"/trips/{trip['id']}/reconstruction-runs",

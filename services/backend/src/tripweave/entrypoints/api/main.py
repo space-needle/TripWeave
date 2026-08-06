@@ -1846,6 +1846,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             downloadUrl=download_url,
         )
 
+    def trip_asset_url(trip_id: UUID, asset_id: UUID) -> str:
+        base_url = app.state.settings.public_api_base_url.rstrip("/")
+        return f"{base_url}/trip-assets/{trip_id}/{asset_id}"
+
     def blob_ref_for_media_asset(asset: orm.MediaAsset) -> BlobRef:
         return BlobRef(
             store_alias=asset.store_alias,
@@ -5144,7 +5148,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return payload
 
     def hydrate_story_draft_projection(
-        db: DbSession, payload: dict[str, object]
+        db: DbSession, trip_id: UUID, payload: dict[str, object]
     ) -> ReconstructionResponse:
         started_at = time.perf_counter()
         hydrated = json.loads(json.dumps(payload))
@@ -5177,10 +5181,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                                 continue
                             asset_ids.add(asset_uuid)
                             media_fields_by_asset_id[asset_uuid] = (media, url_field)
-        urls = cached_download_urls_for_assets(db, asset_ids)
+        base_url = app.state.settings.public_api_base_url.rstrip("/")
         for asset_id, media_field in media_fields_by_asset_id.items():
             media, url_field = media_field
-            media[url_field] = urls.get(asset_id)
+            media[url_field] = f"{base_url}/trip-assets/{trip_id}/{asset_id}"
         response = ReconstructionResponse.model_validate(hydrated)
         app.state.metrics.duration(
             "story_projection.hydrate.duration_ms",
@@ -5407,8 +5411,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def hydrate_story_photo_projection(
         db: DbSession, payload: dict[str, object]
     ) -> StoryPhotoProjectionResponse:
+        started_at = time.perf_counter()
         hydrated = json.loads(json.dumps(payload))
-        asset_ids: set[UUID] = set()
+        trip_id = UUID(str(hydrated["tripId"]))
+        asset_count = 0
         media_refs: list[tuple[dict[str, object], str, UUID]] = []
         for stop in hydrated.get("stops", []):
             if not isinstance(stop, dict):
@@ -5427,12 +5433,20 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                         asset_uuid = UUID(str(asset_id))
                     except ValueError:
                         continue
-                    asset_ids.add(asset_uuid)
+                    asset_count += 1
                     media_refs.append((photo, url_key, asset_uuid))
-        urls = cached_download_urls_for_assets(db, asset_ids)
         for photo, url_key, asset_id in media_refs:
-            photo[url_key] = urls.get(asset_id)
-        return StoryPhotoProjectionResponse.model_validate(hydrated)
+            photo[url_key] = trip_asset_url(trip_id, asset_id)
+        response = StoryPhotoProjectionResponse.model_validate(hydrated)
+        app.state.metrics.duration(
+            "story_projection.hydrate.duration_ms",
+            round((time.perf_counter() - started_at) * 1000, 3),
+            {
+                "projection": "photo",
+                "asset_count": asset_count,
+            },
+        )
+        return response
 
     def latest_run_for_trip_or_none(db: DbSession, trip_id: UUID) -> orm.ReconstructionRun | None:
         return db.execute(
@@ -5466,7 +5480,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
         ).scalar_one_or_none()
         if projection is not None:
-            response = hydrate_story_draft_projection(db, projection.payload)
+            response = hydrate_story_draft_projection(db, trip_id, projection.payload)
             app.state.metrics.duration(
                 "story_projection.response.duration_ms",
                 round((time.perf_counter() - started_at) * 1000, 3),
@@ -5482,7 +5496,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             source_reconstruction_run_id=latest_run.id,
             payload=payload,
         )
-        hydrated = hydrate_story_draft_projection(db, payload)
+        hydrated = hydrate_story_draft_projection(db, trip_id, payload)
         app.state.metrics.duration(
             "story_projection.response.duration_ms",
             round((time.perf_counter() - started_at) * 1000, 3),
@@ -5879,6 +5893,52 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             member=member,
         )
         return edit_operation_response(operation)
+
+    @app.get("/trip-assets/{trip_id}/{asset_id}")
+    def get_trip_asset(
+        trip_id: UUID,
+        asset_id: UUID,
+        actor: AuthenticatedActor = Depends(current_actor),
+        db: DbSession = Depends(db_session),
+    ) -> StreamingResponse:
+        require_member_for_actor(db, trip_id, actor)
+        row = db.execute(
+            select(orm.MediaAsset, orm.MediaItem)
+            .join(orm.MediaItem, orm.MediaItem.id == orm.MediaAsset.media_item_id)
+            .where(
+                orm.MediaAsset.id == asset_id,
+                orm.MediaAsset.asset_type.in_(
+                    [MediaAssetType.THUMBNAIL.value, MediaAssetType.DISPLAY.value]
+                ),
+                orm.MediaItem.trip_id == trip_id,
+                orm.MediaItem.deleted_at.is_(None),
+            )
+        ).one_or_none()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+        asset, _ = row
+        blob_ref = blob_ref_for_media_asset(asset)
+        try:
+            metadata = app.state.blob_store.stat(blob_ref)
+        except BlobNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
+            ) from exc
+        db.commit()
+
+        def body() -> Iterator[bytes]:
+            with app.state.blob_store.open_reader(blob_ref) as reader:
+                while True:
+                    chunk = reader.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return StreamingResponse(
+            body(),
+            media_type=metadata.content_type or asset.mime_type or "application/octet-stream",
+            headers={"cache-control": "private, max-age=300"},
+        )
 
     @app.get("/blob-download/{token}")
     def download_blob(token: str) -> StreamingResponse:
