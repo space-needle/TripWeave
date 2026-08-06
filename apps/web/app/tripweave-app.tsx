@@ -72,6 +72,7 @@ import {
   setContributorFilter,
   startPlayback,
 } from "./story-map-state";
+import { groupTripsByYear } from "./trip-list";
 
 type GalleryPhoto = {
   id: string;
@@ -378,6 +379,7 @@ function OwnerWorkspace() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
     [selectedTripId, trips],
   );
+  const tripYearGroups = useMemo(() => groupTripsByYear(trips), [trips]);
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
   const selectedTripHasStoryData =
@@ -1918,21 +1920,32 @@ function OwnerWorkspace() {
             {trips.length === 0 ? (
               <p>No trips yet.</p>
             ) : (
-              <div className="trip-list" role="list">
-                {trips.map((trip) => (
-                  <button
-                    className={
-                      trip.id === selectedTrip?.id
-                        ? "trip-row trip-row-active"
-                        : "trip-row"
-                    }
-                    key={trip.id}
-                    type="button"
-                    onClick={() => selectTrip(trip)}
+              <div className="trip-list">
+                {tripYearGroups.map((group) => (
+                  <section
+                    className="trip-year-group"
+                    key={group.year}
+                    aria-labelledby={`trip-year-${group.year}`}
                   >
-                    <span>{trip.title}</span>
-                    <small>{trip.role}</small>
-                  </button>
+                    <h3 id={`trip-year-${group.year}`}>{group.year}</h3>
+                    <div className="trip-year-cards">
+                      {group.trips.map((trip) => (
+                        <button
+                          className={
+                            trip.id === selectedTrip?.id
+                              ? "trip-row trip-row-active"
+                              : "trip-row"
+                          }
+                          key={trip.id}
+                          type="button"
+                          onClick={() => selectTrip(trip)}
+                        >
+                          <span>{trip.title}</span>
+                          <small>{trip.role}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             )}
