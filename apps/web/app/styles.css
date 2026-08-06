@@ -2210,13 +2210,16 @@ button.is-updating {
   min-width: 84px;
 }
 
-.trip-browser-filters label,
-.trip-browser-filters input {
+.trip-browser-filters label {
+  width: 100%;
   min-width: 0;
 }
 
 .trip-browser-filters input {
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
 }
 
 .trip-browser-summary {
@@ -3892,16 +3895,6 @@ button.thumb-frame:focus-visible {
 
   .trip-browser-filters button {
     grid-column: 1 / -1;
-  }
-
-  @media (max-width: 520px) {
-    .trip-browser-filters {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .trip-browser-filters button {
-      grid-column: auto;
-    }
   }
 
   .desktop-story-photo-button {
