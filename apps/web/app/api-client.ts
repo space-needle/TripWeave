@@ -28,6 +28,10 @@ import type {
   TripResponse,
   TripsListResponse,
   TripUpdateRequest,
+  TierCreateRequest,
+  TierListResponse,
+  TierResponse,
+  UserTierResponse,
   UploadSessionCreateRequest,
   UploadSessionResponse,
   UploadSessionsListResponse,
@@ -171,6 +175,21 @@ export const api = {
   },
   adminDashboard(): Promise<AdminDashboardResponse> {
     return apiRequest<AdminDashboardResponse>("/admin/dashboard");
+  },
+  adminTiers(): Promise<TierListResponse> {
+    return apiRequest<TierListResponse>("/admin/tiers");
+  },
+  createAdminTier(payload: TierCreateRequest): Promise<TierResponse> {
+    return apiRequest<TierResponse>("/admin/tiers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  assignAdminTier(userId: string, tierId: string): Promise<UserTierResponse> {
+    return apiRequest<UserTierResponse>(
+      `/admin/users/${encodeURIComponent(userId)}/tier?tier_id=${encodeURIComponent(tierId)}`,
+      { method: "PUT", body: JSON.stringify({}) },
+    );
   },
   tripMapPoints(start?: string, end?: string): Promise<TripsMapPointsResponse> {
     const params = new URLSearchParams();

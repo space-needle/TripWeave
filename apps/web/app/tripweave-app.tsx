@@ -2993,11 +2993,19 @@ function AdminDashboard() {
   const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(
     null,
   );
+  const [tiers, setTiers] = useState<import("./api-types").TierResponse[]>([]);
+  const [userId, setUserId] = useState("");
+  const [tierId, setTierId] = useState("");
+  const [adminError, setAdminError] = useState("");
   useEffect(() => {
     void api
       .adminDashboard()
       .then(setDashboard)
       .catch(() => setDashboard(null));
+    void api
+      .adminTiers()
+      .then((result) => setTiers(result.tiers))
+      .catch(() => undefined);
   }, []);
   if (!dashboard) return null;
   const latest = dashboard.trend.at(-1);
@@ -3058,6 +3066,55 @@ function AdminDashboard() {
         {dashboard.distributions.trip_photos_p50 ?? 0} /{" "}
         {dashboard.distributions.trip_photos_p90 ?? 0}.
       </p>
+      <div className="panel-heading">
+        <h3>Tier management</h3>
+      </div>
+      {tiers.map((tier) => (
+        <p key={tier.id}>
+          {tier.name}: {tier.maxTripsPerUser ?? "unlimited"} trips,{" "}
+          {tier.maxFilesPerTrip ?? "unlimited"} photos
+        </p>
+      ))}
+      <form
+        className="stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          try {
+            await api.assignAdminTier(userId, tierId);
+            setAdminError("");
+          } catch (error) {
+            setAdminError(
+              error instanceof Error ? error.message : "Unable to assign tier",
+            );
+          }
+        }}
+      >
+        <label>
+          User ID
+          <input
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Tier
+          <select
+            value={tierId}
+            onChange={(event) => setTierId(event.target.value)}
+            required
+          >
+            <option value="">Select tier</option>
+            {tiers.map((tier) => (
+              <option key={tier.id} value={tier.id}>
+                {tier.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit">Assign tier</button>
+      </form>
+      {adminError ? <p className="error">{adminError}</p> : null}
     </section>
   );
 }
