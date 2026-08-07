@@ -2994,8 +2994,10 @@ function AdminDashboard() {
     null,
   );
   const [tiers, setTiers] = useState<import("./api-types").TierResponse[]>([]);
-  const [userId, setUserId] = useState("");
-  const [tierId, setTierId] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [adminUsers, setAdminUsers] = useState<
+    import("./api-types").AdminUserResponse[]
+  >([]);
   const [tierForm, setTierForm] = useState({
     slug: "",
     name: "",
@@ -3159,40 +3161,87 @@ function AdminDashboard() {
         onSubmit={async (event) => {
           event.preventDefault();
           try {
-            await api.assignAdminTier(userId, tierId);
+            const result = await api.adminUsers(userQuery);
+            setAdminUsers(result.users);
             setAdminError("");
           } catch (error) {
             setAdminError(
-              error instanceof Error ? error.message : "Unable to assign tier",
+              error instanceof Error ? error.message : "Unable to find users",
             );
           }
         }}
       >
+        <h3>Find user</h3>
         <label>
-          User ID
+          Email
           <input
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            required
+            value={userQuery}
+            onChange={(event) => setUserQuery(event.target.value)}
+            placeholder="Search by email"
           />
         </label>
-        <label>
-          Tier
-          <select
-            value={tierId}
-            onChange={(event) => setTierId(event.target.value)}
-            required
-          >
-            <option value="">Select tier</option>
-            {tiers.map((tier) => (
-              <option key={tier.id} value={tier.id}>
-                {tier.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit">Assign tier</button>
+        <button type="submit">Search users</button>
       </form>
+      {adminUsers.length > 0 ? (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Usage</th>
+                <th>Tier</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adminUsers.map((user) => (
+                <tr key={user.id}>
+                  <td>
+                    <strong>{user.email}</strong>
+                    <small>{user.displayName}</small>
+                  </td>
+                  <td>
+                    {user.tripCount} trips / {user.photoCount} photos
+                  </td>
+                  <td>
+                    <select
+                      value={user.tier.id}
+                      aria-label={`Tier for ${user.email}`}
+                      onChange={async (event) => {
+                        try {
+                          const result = await api.assignAdminTier(
+                            user.id,
+                            event.target.value,
+                          );
+                          setAdminUsers((current) =>
+                            current.map((item) =>
+                              item.id === user.id
+                                ? { ...item, tier: result.tier }
+                                : item,
+                            ),
+                          );
+                          setAdminError("");
+                        } catch (error) {
+                          setAdminError(
+                            error instanceof Error
+                              ? error.message
+                              : "Unable to assign tier",
+                          );
+                        }
+                      }}
+                    >
+                      {tiers.map((tier) => (
+                        <option key={tier.id} value={tier.id}>
+                          {tier.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       {adminError ? <p className="error">{adminError}</p> : null}
     </section>
   );
