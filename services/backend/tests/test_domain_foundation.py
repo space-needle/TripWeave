@@ -78,6 +78,7 @@ def test_schema_has_expected_domain_tables() -> None:
         "trip_invitations",
         "trip_legs",
         "trip_map_point_projections",
+        "trip_view_events",
         "trip_members",
         "trips",
         "subscription_tiers",

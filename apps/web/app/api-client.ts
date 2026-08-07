@@ -39,13 +39,20 @@ import type {
 } from "./api-types";
 
 export type AdminDashboardResponse = {
-  totals: { users: number; trips: number; photos: number };
+  totals: {
+    users: number;
+    trips: number;
+    photos: number;
+    tripViews: number;
+  };
   trend: Array<{
     day: string;
     users: number;
     trips: number;
     photos: number;
     active_users: number;
+    trip_views: number;
+    viewed_trips: number;
   }>;
   distributions: Record<string, number | null>;
 };
@@ -125,14 +132,16 @@ async function apiRequest<TResponse>(
   });
 
   if (!response.ok) {
-    let message = "Request failed";
+    let message = `Request failed (${response.status})`;
     try {
       const body = (await response.json()) as { detail?: unknown };
       if (typeof body.detail === "string") {
         message = body.detail;
       }
     } catch {
-      message = response.statusText || message;
+      message = response.statusText
+        ? `${response.statusText} (${response.status})`
+        : message;
     }
     throw new ApiError(message, response.status);
   }

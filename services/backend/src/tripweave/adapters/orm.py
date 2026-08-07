@@ -1200,8 +1200,27 @@ class ShareLink(Base, TimestampMixin):
     last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class TripViewEvent(Base):
+    __tablename__ = "trip_view_events"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+    share_link_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("share_links.id", ondelete="CASCADE"), nullable=False
+    )
+    viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 Index("ix_sessions_user_id", Session.user_id)
 Index("ix_trips_created_by", Trip.created_by)
+Index("ix_trip_view_events_viewed_at", TripViewEvent.viewed_at)
+Index("ix_trip_view_events_trip_viewed_at", TripViewEvent.trip_id, TripViewEvent.viewed_at)
 Index("ix_trip_members_trip_id", TripMember.trip_id)
 Index("ix_trip_members_user_id", TripMember.user_id)
 Index(

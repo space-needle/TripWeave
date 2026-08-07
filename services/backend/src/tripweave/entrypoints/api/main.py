@@ -723,7 +723,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     (SELECT count(*) FROM users WHERE created_at::date = days.day) AS users,
                     (SELECT count(*) FROM trips WHERE created_at::date = days.day) AS trips,
                     (SELECT count(*) FROM media_items WHERE deleted_at IS NULL AND created_at::date = days.day) AS photos,
-                    (SELECT count(DISTINCT user_id) FROM sessions WHERE created_at::date = days.day) AS active_users
+                    (SELECT count(DISTINCT user_id) FROM sessions WHERE created_at::date = days.day) AS active_users,
+                    (SELECT count(*) FROM trip_view_events WHERE viewed_at::date = days.day) AS trip_views,
+                    (SELECT count(DISTINCT trip_id) FROM trip_view_events WHERE viewed_at::date = days.day) AS viewed_trips
                 FROM days ORDER BY days.day
                 """
                 )
@@ -761,6 +763,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     .where(orm.MediaItem.deleted_at.is_(None))
                 )
                 or 0,
+                "tripViews": db.scalar(select(func.count()).select_from(orm.TripViewEvent)) or 0,
             },
             "trend": [dict(row) for row in trend_rows],
             "distributions": dict(distributions),
@@ -6127,6 +6130,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
             ) from exc
+        db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
         db.commit()
         return public_story_response(request, token, link, version, manifest)
 
