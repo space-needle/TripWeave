@@ -410,7 +410,9 @@ function OwnerWorkspace() {
   const tripQuotaReached =
     tripQuota !== null && tripQuota.ownedTripCount >= tripQuota.maxTripsPerUser;
   const uploadQuotaReached =
-    uploadQuota !== null && uploadQuota.remainingFileCount === 0;
+    uploadQuota !== null &&
+    (uploadQuota.remainingFileCount === 0 ||
+      uploadQuota.monthlyUploadedBytes >= uploadQuota.monthlyUploadBytes);
   const selectedTripHasStoryData =
     selectedTrip !== null && storyDataTripId === selectedTrip.id;
   const storyForExplorer = selectedTripHasStoryData
@@ -1988,9 +1990,15 @@ function OwnerWorkspace() {
             <form className="stack" onSubmit={createTrip}>
               <TripFields form={createForm} onChange={setCreateForm} />
               {tripQuota ? (
-                <p>
-                  Pilot limit: {tripQuota.ownedTripCount} /{" "}
-                  {tripQuota.maxTripsPerUser} trips
+                <p
+                  className={
+                    tripQuotaReached
+                      ? "quota-message quota-reached"
+                      : "quota-message"
+                  }
+                  role="status"
+                >
+                  {tripQuotaMessage(tripQuota)}
                 </p>
               ) : null}
               <button type="submit" disabled={isBusy || tripQuotaReached}>
@@ -2282,7 +2290,7 @@ function OwnerWorkspace() {
                   </label>
                   <p>
                     {uploadQuota
-                      ? `${uploadQuota.reservedFileCount} / ${uploadQuota.maxFilesPerTrip} photos reserved`
+                      ? uploadQuotaMessage(uploadQuota)
                       : "JPEG and HEIC"}
                   </p>
                 </div>
@@ -2729,7 +2737,9 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
     [media],
   );
   const uploadQuotaReached =
-    uploadQuota !== null && uploadQuota.remainingFileCount === 0;
+    uploadQuota !== null &&
+    (uploadQuota.remainingFileCount === 0 ||
+      uploadQuota.monthlyUploadedBytes >= uploadQuota.monthlyUploadBytes);
 
   const loadContribution = useCallback(async () => {
     const [sessionResult, mediaResult] = await Promise.all([
@@ -2967,9 +2977,16 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
                   }
                 />
               </label>
-              <p>
+              <p
+                className={
+                  uploadQuotaReached
+                    ? "quota-message quota-reached"
+                    : "quota-message"
+                }
+                role="status"
+              >
                 {uploadQuota
-                  ? `${uploadQuota.reservedFileCount} / ${uploadQuota.maxFilesPerTrip} photos reserved`
+                  ? uploadQuotaMessage(uploadQuota)
                   : "Only your uploads are shown here."}
               </p>
             </div>
@@ -3009,6 +3026,24 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   } while (value >= 1024 && unitIndex < units.length - 1);
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function tripQuotaMessage(quota: TripQuotaResponse): string {
+  const remaining = Math.max(quota.maxTripsPerUser - quota.ownedTripCount, 0);
+  if (remaining === 0) {
+    return `Trip quota reached: ${quota.ownedTripCount} of ${quota.maxTripsPerUser} trips used. Ask an operator to move this account to a higher tier.`;
+  }
+  return `Trip quota: ${quota.ownedTripCount} of ${quota.maxTripsPerUser} used · ${remaining} remaining.`;
+}
+
+function uploadQuotaMessage(quota: UploadQuotaResponse): string {
+  if (quota.monthlyUploadedBytes >= quota.monthlyUploadBytes) {
+    return `Monthly upload quota reached: ${formatBytes(quota.monthlyUploadedBytes)} of ${formatBytes(quota.monthlyUploadBytes)} used. Ask an operator to move this account to a higher tier.`;
+  }
+  if (quota.remainingFileCount === 0) {
+    return `Photo quota reached: ${quota.reservedFileCount} of ${quota.maxFilesPerTrip} slots used or reserved. Cancel an upload or ask an operator to move this trip to a higher tier.`;
+  }
+  return `Photo quota: ${quota.reservedFileCount} of ${quota.maxFilesPerTrip} slots used or reserved · ${quota.remainingFileCount} remaining.`;
 }
 
 function AdminDashboard() {

@@ -617,6 +617,20 @@ button.is-updating {
   padding: 10px 12px;
 }
 
+.quota-message {
+  border-left: 3px solid var(--accent);
+  background: #f3f8f6;
+  color: var(--muted);
+  font-size: 0.84rem;
+  padding: 9px 11px;
+}
+
+.quota-message.quota-reached {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .trip-list {
   display: grid;
   gap: 16px;
