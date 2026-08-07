@@ -114,6 +114,7 @@ class Settings(BaseSettings):
         default=900, ge=1, alias="TRIPWEAVE_UPLOAD_GRANT_SECONDS"
     )
     max_trips_per_user: int = Field(default=5, ge=1, alias="TRIPWEAVE_MAX_TRIPS_PER_USER")
+    quota_admin_emails: str = Field(default="", alias="TRIPWEAVE_QUOTA_ADMIN_EMAILS")
     upload_max_files_per_trip: int = Field(
         default=100, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILES_PER_TRIP"
     )
@@ -193,6 +194,12 @@ class Settings(BaseSettings):
             extension.strip().lower()
             for extension in self.upload_allowed_extensions.split(",")
             if extension.strip()
+        }
+
+    @property
+    def quota_admin_email_set(self) -> set[str]:
+        return {
+            email.strip().lower() for email in self.quota_admin_emails.split(",") if email.strip()
         }
 
     @property

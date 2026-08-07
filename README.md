@@ -106,6 +106,8 @@ The local database migrations enable PostGIS and create the first provider-neutr
 
 The pilot defaults to a hard limit of 5 owner-created trips per user and 100 photos per trip. The API enforces both limits before creating a trip or issuing upload grants; pending uploads reserve a photo slot until they are completed, cancelled, or failed. Configure the limits with `TRIPWEAVE_MAX_TRIPS_PER_USER` and `TRIPWEAVE_UPLOAD_MAX_FILES_PER_TRIP` when a later rollout needs different values.
 
+Set `TRIPWEAVE_QUOTA_ADMIN_EMAILS` to a comma-separated allowlist of operators who may call the authenticated `/admin/quota-overrides` API. An override may only raise a user's trip or per-trip photo limit above the pilot defaults.
+
 Local MVP release-candidate commands:
 
 - `make demo` starts Docker Compose in the background and seeds a deterministic local demo.

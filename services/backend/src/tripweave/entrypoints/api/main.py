@@ -111,6 +111,9 @@ from tripweave.entrypoints.api.schemas import (
     PublicationResponse,
     PublicationsListResponse,
     PublicStoryResponse,
+    QuotaOverrideRequest,
+    QuotaOverrideResponse,
+    QuotaOverridesListResponse,
     ReconstructionDayResponse,
     ReconstructionLegResponse,
     ReconstructionMediaResponse,
@@ -556,6 +559,73 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     @app.get("/auth/me", response_model=MeResponse)
     def me(auth: AuthenticatedUser = Depends(current_user)) -> MeResponse:
         return MeResponse(user=user_response(auth.user))
+
+    def require_quota_admin(auth: AuthenticatedUser) -> None:
+        if auth.user.email not in resolved_settings.quota_admin_email_set:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Quota admin access required"
+            )
+
+    @app.get("/admin/quota-overrides", response_model=QuotaOverridesListResponse)
+    def list_quota_overrides(
+        auth: AuthenticatedUser = Depends(current_user), db: DbSession = Depends(db_session)
+    ) -> QuotaOverridesListResponse:
+        require_quota_admin(auth)
+        rows = db.execute(
+            select(orm.UserQuotaOverride, orm.User.email)
+            .join(orm.User, orm.User.id == orm.UserQuotaOverride.user_id)
+            .order_by(orm.User.email)
+        ).all()
+        return QuotaOverridesListResponse(
+            overrides=[
+                QuotaOverrideResponse(
+                    userId=override.user_id,
+                    email=email,
+                    maxTripsPerUser=override.max_trips_per_user,
+                    maxFilesPerTrip=override.max_files_per_trip,
+                )
+                for override, email in rows
+            ]
+        )
+
+    @app.put("/admin/quota-overrides", response_model=QuotaOverrideResponse)
+    def set_quota_override(
+        payload: QuotaOverrideRequest,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> QuotaOverrideResponse:
+        require_csrf(request)
+        require_quota_admin(auth)
+        user = db.scalar(select(orm.User).where(orm.User.email == payload.email))
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if (
+            payload.max_trips_per_user is not None
+            and payload.max_trips_per_user <= resolved_settings.max_trips_per_user
+        ) or (
+            payload.max_files_per_trip is not None
+            and payload.max_files_per_trip <= resolved_settings.upload_max_files_per_trip
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Quota overrides must be greater than the pilot defaults",
+            )
+        override = db.get(orm.UserQuotaOverride, user.id)
+        if override is None:
+            override = orm.UserQuotaOverride(user_id=user.id)
+            db.add(override)
+        if payload.max_trips_per_user is not None:
+            override.max_trips_per_user = payload.max_trips_per_user
+        if payload.max_files_per_trip is not None:
+            override.max_files_per_trip = payload.max_files_per_trip
+        db.commit()
+        return QuotaOverrideResponse(
+            userId=user.id,
+            email=user.email,
+            maxTripsPerUser=override.max_trips_per_user,
+            maxFilesPerTrip=override.max_files_per_trip,
+        )
 
     @app.get("/ops/local-mvp")
     def local_mvp_operations(
@@ -1338,12 +1408,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             or 0
         )
-        if owned_trip_count >= resolved_settings.max_trips_per_user:
+        max_trips_per_user, _ = quota_limits_for_user(db, auth.user.id)
+        if owned_trip_count >= max_trips_per_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Trip limit reached ({resolved_settings.max_trips_per_user} trips per user)"
-                ),
+                detail=f"Trip limit reached ({max_trips_per_user} trips per user)",
             )
         now = datetime.now(UTC)
         trip = orm.Trip(
@@ -1803,11 +1872,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             or 0
         )
         return TripQuotaResponse(
-            maxTripsPerUser=resolved_settings.max_trips_per_user,
+            maxTripsPerUser=quota_limits_for_user(db, user_id)[0],
             ownedTripCount=owned_trip_count,
         )
 
     def upload_quota(db: DbSession, trip_id: UUID) -> UploadQuotaResponse:
+        trip_owner_id = db.scalar(select(orm.Trip.created_by).where(orm.Trip.id == trip_id))
+        if trip_owner_id is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        max_files_per_trip = quota_limits_for_user(db, trip_owner_id)[1]
         completed_media_count = int(
             db.scalar(
                 select(func.count())
@@ -1833,11 +1906,20 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         reserved_file_count = completed_media_count + reserved_upload_count
         return UploadQuotaResponse(
-            maxFilesPerTrip=resolved_settings.upload_max_files_per_trip,
+            maxFilesPerTrip=max_files_per_trip,
             reservedFileCount=reserved_file_count,
-            remainingFileCount=max(
-                resolved_settings.upload_max_files_per_trip - reserved_file_count, 0
-            ),
+            remainingFileCount=max(max_files_per_trip - reserved_file_count, 0),
+        )
+
+    def quota_limits_for_user(db: DbSession, user_id: UUID) -> tuple[int, int]:
+        override = db.get(orm.UserQuotaOverride, user_id)
+        return (
+            override.max_trips_per_user
+            if override and override.max_trips_per_user is not None
+            else resolved_settings.max_trips_per_user,
+            override.max_files_per_trip
+            if override and override.max_files_per_trip is not None
+            else resolved_settings.upload_max_files_per_trip,
         )
 
     def validate_upload_file(filename: str, byte_size: int, mime_type: str) -> None:
@@ -4065,10 +4147,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if trip is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
 
-        if len(payload.files) > resolved_settings.upload_max_files_per_trip:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Too many files for one trip"
-            )
         total_bytes = sum(file.byte_size for file in payload.files)
         if total_bytes > resolved_settings.upload_max_trip_bytes:
             raise HTTPException(
@@ -4078,6 +4156,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             validate_upload_file(file.filename, file.byte_size, file.mime_type)
 
         quota = upload_quota(db, trip_id)
+        if len(payload.files) > quota.max_files_per_trip:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Too many files for one trip"
+            )
         existing_bytes = db.execute(
             select(func.coalesce(func.sum(orm.MediaItem.byte_size), 0)).where(
                 orm.MediaItem.trip_id == trip_id,
