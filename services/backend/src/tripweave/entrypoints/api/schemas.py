@@ -180,6 +180,19 @@ class UserTierResponse(BaseModel):
     tier: TierResponse
 
 
+class AdminUserResponse(BaseModel):
+    id: UUID
+    email: str
+    display_name: str = Field(alias="displayName")
+    tier: TierResponse
+    trip_count: int = Field(alias="tripCount")
+    photo_count: int = Field(alias="photoCount")
+
+
+class AdminUsersResponse(BaseModel):
+    users: list[AdminUserResponse]
+
+
 class TripsListResponse(BaseModel):
     trips: list[TripResponse]
     quota: TripQuotaResponse

@@ -31,6 +31,7 @@ import type {
   TierCreateRequest,
   TierListResponse,
   TierResponse,
+  AdminUsersResponse,
   UserTierResponse,
   UploadSessionCreateRequest,
   UploadSessionResponse,
@@ -178,6 +179,11 @@ export const api = {
   },
   adminTiers(): Promise<TierListResponse> {
     return apiRequest<TierListResponse>("/admin/tiers");
+  },
+  adminUsers(query = ""): Promise<AdminUsersResponse> {
+    return apiRequest<AdminUsersResponse>(
+      `/admin/users?query=${encodeURIComponent(query)}`,
+    );
   },
   createAdminTier(payload: TierCreateRequest): Promise<TierResponse> {
     return apiRequest<TierResponse>("/admin/tiers", {

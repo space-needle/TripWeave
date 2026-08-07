@@ -86,6 +86,8 @@ from tripweave.domain.storage import (
     UploadTransport,
 )
 from tripweave.entrypoints.api.schemas import (
+    AdminUserResponse,
+    AdminUsersResponse,
     AreaVisitResponse,
     AreaVisitsResponse,
     AreaVisitStopResponse,
@@ -634,6 +636,60 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             assignment.tier_id = tier_id
         db.commit()
         return UserTierResponse(userId=user.id, email=user.email, tier=tier_response(tier))
+
+    @app.get("/admin/users", response_model=AdminUsersResponse)
+    def list_admin_users(
+        query: str = "",
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> AdminUsersResponse:
+        require_quota_admin(auth)
+        statement = select(orm.User).order_by(orm.User.created_at.desc()).limit(100)
+        if query.strip():
+            statement = statement.where(orm.User.email.ilike(f"%{query.strip()}%"))
+        users = db.scalars(statement).all()
+        result: list[AdminUserResponse] = []
+        for user in users:
+            tier = db.scalar(
+                select(orm.SubscriptionTier)
+                .join(
+                    orm.UserTierAssignment,
+                    orm.UserTierAssignment.tier_id == orm.SubscriptionTier.id,
+                )
+                .where(orm.UserTierAssignment.user_id == user.id)
+            )
+            if tier is None:
+                tier = db.scalar(
+                    select(orm.SubscriptionTier).where(orm.SubscriptionTier.slug == "basic")
+                )
+            if tier is None:
+                continue
+            trip_count = (
+                db.scalar(
+                    select(func.count()).select_from(orm.Trip).where(orm.Trip.created_by == user.id)
+                )
+                or 0
+            )
+            photo_count = (
+                db.scalar(
+                    select(func.count())
+                    .select_from(orm.MediaItem)
+                    .join(orm.TripMember, orm.TripMember.id == orm.MediaItem.contributor_member_id)
+                    .where(orm.TripMember.user_id == user.id, orm.MediaItem.deleted_at.is_(None))
+                )
+                or 0
+            )
+            result.append(
+                AdminUserResponse(
+                    id=user.id,
+                    email=user.email,
+                    displayName=user.display_name,
+                    tier=tier_response(tier),
+                    tripCount=trip_count,
+                    photoCount=photo_count,
+                )
+            )
+        return AdminUsersResponse(users=result)
 
     @app.get("/admin/dashboard")
     def admin_dashboard(
