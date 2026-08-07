@@ -80,6 +80,8 @@ def test_schema_has_expected_domain_tables() -> None:
         "trip_map_point_projections",
         "trip_members",
         "trips",
+        "subscription_tiers",
+        "user_tier_assignments",
         "upload_files",
         "upload_sessions",
         "users",

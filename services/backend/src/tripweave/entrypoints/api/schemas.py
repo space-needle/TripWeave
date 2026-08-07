@@ -152,34 +152,6 @@ class TripQuotaResponse(BaseModel):
     owned_trip_count: int = Field(alias="ownedTripCount")
 
 
-class QuotaOverrideRequest(BaseModel):
-    email: str = Field(min_length=5, max_length=320)
-    max_trips_per_user: int | None = Field(default=None, alias="maxTripsPerUser", ge=1)
-    max_files_per_trip: int | None = Field(default=None, alias="maxFilesPerTrip", ge=1)
-
-    @field_validator("email")
-    @classmethod
-    def normalize(cls, value: str) -> str:
-        return normalize_email(value)
-
-    @model_validator(mode="after")
-    def validate_limit(self) -> QuotaOverrideRequest:
-        if self.max_trips_per_user is None and self.max_files_per_trip is None:
-            raise ValueError("Set at least one quota override")
-        return self
-
-
-class QuotaOverrideResponse(BaseModel):
-    user_id: UUID = Field(alias="userId")
-    email: str
-    max_trips_per_user: int | None = Field(alias="maxTripsPerUser")
-    max_files_per_trip: int | None = Field(alias="maxFilesPerTrip")
-
-
-class QuotaOverridesListResponse(BaseModel):
-    overrides: list[QuotaOverrideResponse]
-
-
 class TierResponse(BaseModel):
     id: UUID
     slug: str

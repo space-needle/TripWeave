@@ -135,15 +135,6 @@ class UserTierAssignment(Base, TimestampMixin):
     )
 
 
-class UserQuotaOverride(Base, TimestampMixin):
-    __tablename__ = "user_quota_overrides"
-    user_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    max_trips_per_user: Mapped[int | None] = mapped_column(Integer)
-    max_files_per_trip: Mapped[int | None] = mapped_column(Integer)
-
-
 class Session(Base):
     __tablename__ = "sessions"
 

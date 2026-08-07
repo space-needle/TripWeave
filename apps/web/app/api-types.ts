@@ -208,23 +208,6 @@ export type PublicationsListResponse = {
   shareLinks: ShareLinkResponse[];
 };
 
-export type QuotaOverrideRequest = {
-  email: string;
-  maxTripsPerUser?: number | null;
-  maxFilesPerTrip?: number | null;
-};
-
-export type QuotaOverrideResponse = {
-  userId: string;
-  email: string;
-  maxTripsPerUser: number | null;
-  maxFilesPerTrip: number | null;
-};
-
-export type QuotaOverridesListResponse = {
-  overrides: QuotaOverrideResponse[];
-};
-
 export type ReconstructionDayResponse = {
   id: string;
   date: string;

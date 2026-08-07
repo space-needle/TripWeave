@@ -111,9 +111,6 @@ from tripweave.entrypoints.api.schemas import (
     PublicationResponse,
     PublicationsListResponse,
     PublicStoryResponse,
-    QuotaOverrideRequest,
-    QuotaOverrideResponse,
-    QuotaOverridesListResponse,
     ReconstructionDayResponse,
     ReconstructionLegResponse,
     ReconstructionMediaResponse,
@@ -698,67 +695,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             "trend": [dict(row) for row in trend_rows],
             "distributions": dict(distributions),
         }
-
-    @app.get("/admin/quota-overrides", response_model=QuotaOverridesListResponse)
-    def list_quota_overrides(
-        auth: AuthenticatedUser = Depends(current_user), db: DbSession = Depends(db_session)
-    ) -> QuotaOverridesListResponse:
-        require_quota_admin(auth)
-        rows = db.execute(
-            select(orm.UserQuotaOverride, orm.User.email)
-            .join(orm.User, orm.User.id == orm.UserQuotaOverride.user_id)
-            .order_by(orm.User.email)
-        ).all()
-        return QuotaOverridesListResponse(
-            overrides=[
-                QuotaOverrideResponse(
-                    userId=override.user_id,
-                    email=email,
-                    maxTripsPerUser=override.max_trips_per_user,
-                    maxFilesPerTrip=override.max_files_per_trip,
-                )
-                for override, email in rows
-            ]
-        )
-
-    @app.put("/admin/quota-overrides", response_model=QuotaOverrideResponse)
-    def set_quota_override(
-        payload: QuotaOverrideRequest,
-        request: Request,
-        auth: AuthenticatedUser = Depends(current_user),
-        db: DbSession = Depends(db_session),
-    ) -> QuotaOverrideResponse:
-        require_csrf(request)
-        require_quota_admin(auth)
-        user = db.scalar(select(orm.User).where(orm.User.email == payload.email))
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        if (
-            payload.max_trips_per_user is not None
-            and payload.max_trips_per_user <= resolved_settings.max_trips_per_user
-        ) or (
-            payload.max_files_per_trip is not None
-            and payload.max_files_per_trip <= resolved_settings.upload_max_files_per_trip
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Quota overrides must be greater than the pilot defaults",
-            )
-        override = db.get(orm.UserQuotaOverride, user.id)
-        if override is None:
-            override = orm.UserQuotaOverride(user_id=user.id)
-            db.add(override)
-        if payload.max_trips_per_user is not None:
-            override.max_trips_per_user = payload.max_trips_per_user
-        if payload.max_files_per_trip is not None:
-            override.max_files_per_trip = payload.max_files_per_trip
-        db.commit()
-        return QuotaOverrideResponse(
-            userId=user.id,
-            email=user.email,
-            maxTripsPerUser=override.max_trips_per_user,
-            maxFilesPerTrip=override.max_files_per_trip,
-        )
 
     @app.get("/ops/local-mvp")
     def local_mvp_operations(
