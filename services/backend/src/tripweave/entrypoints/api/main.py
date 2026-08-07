@@ -508,6 +508,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             db.add(user)
             db.flush()
+            basic_tier = db.scalar(
+                select(orm.SubscriptionTier).where(orm.SubscriptionTier.slug == "basic")
+            )
+            if basic_tier is not None:
+                db.add(orm.UserTierAssignment(user_id=user.id, tier_id=basic_tier.id))
             _, session_token, csrf_token = create_session_for_user(db, user)
             db.commit()
         except IntegrityError as exc:
@@ -1408,7 +1413,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             or 0
         )
-        max_trips_per_user, _ = quota_limits_for_user(db, auth.user.id)
+        max_trips_per_user, _, _ = quota_limits_for_user(db, auth.user.id)
         if owned_trip_count >= max_trips_per_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1880,7 +1885,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         trip_owner_id = db.scalar(select(orm.Trip.created_by).where(orm.Trip.id == trip_id))
         if trip_owner_id is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
-        max_files_per_trip = quota_limits_for_user(db, trip_owner_id)[1]
+        _, max_files_per_trip, monthly_upload_bytes = quota_limits_for_user(db, trip_owner_id)
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        monthly_uploaded_bytes = int(
+            db.scalar(
+                select(func.coalesce(func.sum(orm.MediaItem.byte_size), 0)).where(
+                    orm.MediaItem.trip_id == trip_id,
+                    orm.MediaItem.deleted_at.is_(None),
+                    orm.MediaItem.created_at >= month_start,
+                )
+            )
+            or 0
+        )
         completed_media_count = int(
             db.scalar(
                 select(func.count())
@@ -1907,19 +1923,30 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         reserved_file_count = completed_media_count + reserved_upload_count
         return UploadQuotaResponse(
             maxFilesPerTrip=max_files_per_trip,
+            monthlyUploadBytes=monthly_upload_bytes,
+            monthlyUploadedBytes=monthly_uploaded_bytes,
             reservedFileCount=reserved_file_count,
             remainingFileCount=max(max_files_per_trip - reserved_file_count, 0),
         )
 
-    def quota_limits_for_user(db: DbSession, user_id: UUID) -> tuple[int, int]:
-        override = db.get(orm.UserQuotaOverride, user_id)
+    def quota_limits_for_user(db: DbSession, user_id: UUID) -> tuple[int, int, int]:
+        tier = db.scalar(
+            select(orm.SubscriptionTier)
+            .join(orm.UserTierAssignment, orm.UserTierAssignment.tier_id == orm.SubscriptionTier.id)
+            .where(orm.UserTierAssignment.user_id == user_id)
+        )
+        if tier is None:
+            tier = db.scalar(
+                select(orm.SubscriptionTier).where(orm.SubscriptionTier.slug == "basic")
+            )
         return (
-            override.max_trips_per_user
-            if override and override.max_trips_per_user is not None
+            tier.max_trips_per_user
+            if tier and tier.max_trips_per_user is not None
             else resolved_settings.max_trips_per_user,
-            override.max_files_per_trip
-            if override and override.max_files_per_trip is not None
+            tier.max_files_per_trip
+            if tier and tier.max_files_per_trip is not None
             else resolved_settings.upload_max_files_per_trip,
+            tier.monthly_upload_bytes if tier else resolved_settings.upload_max_trip_bytes,
         )
 
     def validate_upload_file(filename: str, byte_size: int, mime_type: str) -> None:
@@ -4156,6 +4183,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             validate_upload_file(file.filename, file.byte_size, file.mime_type)
 
         quota = upload_quota(db, trip_id)
+        if quota.monthly_uploaded_bytes + total_bytes > quota.monthly_upload_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Monthly upload limit reached for this tier",
+            )
         if len(payload.files) > quota.max_files_per_trip:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Too many files for one trip"

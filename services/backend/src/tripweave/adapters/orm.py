@@ -109,25 +109,36 @@ class User(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(160), nullable=False)
 
 
-class UserQuotaOverride(Base, TimestampMixin):
-    __tablename__ = "user_quota_overrides"
-    __table_args__ = (
-        CheckConstraint(
-            "max_trips_per_user IS NOT NULL OR max_files_per_trip IS NOT NULL",
-            name="at_least_one_limit",
-        ),
-        CheckConstraint(
-            "max_trips_per_user IS NULL OR max_trips_per_user > 0", name="max_trips_per_user"
-        ),
-        CheckConstraint(
-            "max_files_per_trip IS NULL OR max_files_per_trip > 0", name="max_files_per_trip"
-        ),
+class SubscriptionTier(Base, TimestampMixin):
+    __tablename__ = "subscription_tiers"
+    __table_args__ = (CheckConstraint("monthly_upload_bytes > 0", name="monthly_upload_bytes"),)
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    max_trips_per_user: Mapped[int | None] = mapped_column(Integer)
+    max_files_per_trip: Mapped[int | None] = mapped_column(Integer)
+    monthly_upload_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+
+
+class UserTierAssignment(Base, TimestampMixin):
+    __tablename__ = "user_tier_assignments"
+    user_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    tier_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("subscription_tiers.id", ondelete="RESTRICT"),
+        nullable=False,
     )
 
+
+class UserQuotaOverride(Base, TimestampMixin):
+    __tablename__ = "user_quota_overrides"
     user_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        primary_key=True,
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     max_trips_per_user: Mapped[int | None] = mapped_column(Integer)
     max_files_per_trip: Mapped[int | None] = mapped_column(Integer)

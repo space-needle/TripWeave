@@ -326,6 +326,8 @@ class UploadFileResponse(BaseModel):
 
 class UploadQuotaResponse(BaseModel):
     max_files_per_trip: int = Field(alias="maxFilesPerTrip")
+    monthly_upload_bytes: int = Field(alias="monthlyUploadBytes")
+    monthly_uploaded_bytes: int = Field(alias="monthlyUploadedBytes")
     reserved_file_count: int = Field(alias="reservedFileCount")
     remaining_file_count: int = Field(alias="remainingFileCount")
 
