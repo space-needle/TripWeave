@@ -38,10 +38,12 @@ import type {
   SimilarityGroupResponse,
   StoryPhotoProjectionResponse,
   StoryPhotoProjectionPhotoResponse,
+  TripQuotaResponse,
   TripMapPointResponse,
   TripResponse,
   TripsMapPointsResponse,
   UploadFileResponse,
+  UploadQuotaResponse,
   UploadSessionResponse,
   UserResponse,
 } from "./api-types";
@@ -317,6 +319,7 @@ function OwnerWorkspace() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
+  const [tripQuota, setTripQuota] = useState<TripQuotaResponse | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const selectedTripIdRef = useRef<string | null>(null);
   const [mode, setMode] = useState<AuthMode>("login");
@@ -331,6 +334,9 @@ function OwnerWorkspace() {
   const [isReconstructingStory, setIsReconstructingStory] = useState(false);
   const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
     [],
+  );
+  const [uploadQuota, setUploadQuota] = useState<UploadQuotaResponse | null>(
+    null,
   );
   const [uploadError, setUploadError] = useState("");
   const [media, setMedia] = useState<MediaItemResponse[]>([]);
@@ -384,6 +390,10 @@ function OwnerWorkspace() {
   const tripYearGroups = useMemo(() => groupTripsByYear(trips), [trips]);
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
+  const tripQuotaReached =
+    tripQuota !== null && tripQuota.ownedTripCount >= tripQuota.maxTripsPerUser;
+  const uploadQuotaReached =
+    uploadQuota !== null && uploadQuota.remainingFileCount === 0;
   const selectedTripHasStoryData =
     selectedTrip !== null && storyDataTripId === selectedTrip.id;
   const storyForExplorer = selectedTripHasStoryData
@@ -469,6 +479,7 @@ function OwnerWorkspace() {
     async (preferredTripId: string | null = null) => {
       const result = await api.trips();
       setTrips(result.trips);
+      setTripQuota(result.quota);
       const next =
         preferredTripId &&
         result.trips.some((trip) => trip.id === preferredTripId)
@@ -489,10 +500,12 @@ function OwnerWorkspace() {
   const loadUploadSessions = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setUploadSessions([]);
+      setUploadQuota(null);
       return;
     }
     const result = await api.uploadSessions(tripId);
     setUploadSessions(result.uploadSessions);
+    setUploadQuota(result.quota);
   }, []);
 
   const loadMedia = useCallback(async (tripId: string | null) => {
@@ -619,34 +632,6 @@ function OwnerWorkspace() {
     if (trip) {
       selectTrip(trip);
     }
-  }
-
-  function removeTripFromState(tripId: string) {
-    setOwnerSlideshowOpen(false);
-    const remaining = trips.filter((trip) => trip.id !== tripId);
-    const nextTrip = remaining[0] ?? null;
-    setTrips(remaining);
-    setSelectedTripSelection(nextTrip?.id ?? null);
-    setSettingsForm(nextTrip ? fromTrip(nextTrip) : emptyTripForm);
-    setReconstruction(null);
-    setStoryProjection(null);
-    setStoryDataTripId(null);
-    setStoryState(initialStoryMapState());
-    setIsStoryProjectionLoading(Boolean(nextTrip));
-    if (!nextTrip) {
-      setUploadSessions([]);
-      setMedia([]);
-      setSimilarityGroups([]);
-      setInvitations([]);
-      setMembers([]);
-      setPublications(null);
-      setLatestShareUrl("");
-    }
-  }
-
-  function addTripToState(trip: TripResponse) {
-    setTrips((current) => [trip, ...current]);
-    selectTrip(trip);
   }
 
   function updateTripInState(updated: TripResponse) {
@@ -861,8 +846,10 @@ function OwnerWorkspace() {
       await api.logout();
       setUser(null);
       setTrips([]);
+      setTripQuota(null);
       setSelectedTripSelection(null);
       setUploadSessions([]);
+      setUploadQuota(null);
       setMedia([]);
       setSimilarityGroups([]);
       setReconstruction(null);
@@ -887,7 +874,7 @@ function OwnerWorkspace() {
     setIsBusy(true);
     try {
       const trip = await api.createTrip(toPayload(createForm));
-      addTripToState(trip);
+      await loadTrips(trip.id);
       setCreateForm(emptyTripForm);
     } catch (error) {
       setTripError(messageFrom(error));
@@ -924,7 +911,7 @@ function OwnerWorkspace() {
     setIsBusy(true);
     try {
       await api.deleteTrip(selectedTrip.id);
-      removeTripFromState(selectedTrip.id);
+      await loadTrips();
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -988,6 +975,12 @@ function OwnerWorkspace() {
       return;
     }
     setUploadError("");
+    if (uploadQuota && files.length > uploadQuota.remainingFileCount) {
+      setUploadError(
+        `This trip can hold ${uploadQuota.maxFilesPerTrip} photos. Remove or cancel an upload before adding more.`,
+      );
+      return;
+    }
     try {
       const session = await api.createUploadSession(selectedTrip.id, {
         files: files.map((file) => ({
@@ -997,6 +990,7 @@ function OwnerWorkspace() {
         })),
       });
       setUploadSessions((current) => [session, ...current]);
+      setUploadQuota(session.quota);
       session.files.forEach((uploadFile, index) => {
         const file = files[index];
         if (file) {
@@ -1976,7 +1970,13 @@ function OwnerWorkspace() {
             <summary>Create trip</summary>
             <form className="stack" onSubmit={createTrip}>
               <TripFields form={createForm} onChange={setCreateForm} />
-              <button type="submit" disabled={isBusy}>
+              {tripQuota ? (
+                <p>
+                  Pilot limit: {tripQuota.ownedTripCount} /{" "}
+                  {tripQuota.maxTripsPerUser} trips
+                </p>
+              ) : null}
+              <button type="submit" disabled={isBusy || tripQuotaReached}>
                 Create trip
               </button>
             </form>
@@ -2257,12 +2257,17 @@ function OwnerWorkspace() {
                     Add photos
                     <input
                       accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
+                      disabled={uploadQuotaReached}
                       multiple
                       type="file"
                       onChange={onFileInput}
                     />
                   </label>
-                  <p>JPEG and HEIC</p>
+                  <p>
+                    {uploadQuota
+                      ? `${uploadQuota.reservedFileCount} / ${uploadQuota.maxFilesPerTrip} photos reserved`
+                      : "JPEG and HEIC"}
+                  </p>
                 </div>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
                 <StoryAutoUpdateNotice
@@ -2684,6 +2689,9 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
   const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
     [],
   );
+  const [uploadQuota, setUploadQuota] = useState<UploadQuotaResponse | null>(
+    null,
+  );
   const [media, setMedia] = useState<MediaItemResponse[]>([]);
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
@@ -2703,6 +2711,8 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       ),
     [media],
   );
+  const uploadQuotaReached =
+    uploadQuota !== null && uploadQuota.remainingFileCount === 0;
 
   const loadContribution = useCallback(async () => {
     const [sessionResult, mediaResult] = await Promise.all([
@@ -2710,6 +2720,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       guestApi.media(tripId),
     ]);
     setUploadSessions(sessionResult.uploadSessions);
+    setUploadQuota(sessionResult.quota);
     setMedia(mediaResult.media);
   }, [tripId]);
 
@@ -2825,6 +2836,12 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       return;
     }
     setError("");
+    if (uploadQuota && files.length > uploadQuota.remainingFileCount) {
+      setError(
+        `This trip can hold ${uploadQuota.maxFilesPerTrip} photos. Remove or cancel an upload before adding more.`,
+      );
+      return;
+    }
     try {
       const session = await guestApi.createUploadSession(tripId, {
         files: files.map((file) => ({
@@ -2834,6 +2851,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
         })),
       });
       setUploadSessions((current) => [session, ...current]);
+      setUploadQuota(session.quota);
       session.files.forEach((uploadFile, index) => {
         const file = files[index];
         if (file) {
@@ -2924,6 +2942,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
                 Add JPEG or HEIC images
                 <input
                   accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
+                  disabled={uploadQuotaReached}
                   multiple
                   type="file"
                   onChange={(event) =>
@@ -2931,7 +2950,11 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
                   }
                 />
               </label>
-              <p>Only your uploads are shown here.</p>
+              <p>
+                {uploadQuota
+                  ? `${uploadQuota.reservedFileCount} / ${uploadQuota.maxFilesPerTrip} photos reserved`
+                  : "Only your uploads are shown here."}
+              </p>
             </div>
             <UploadFileList
               files={selectedUploadFiles}

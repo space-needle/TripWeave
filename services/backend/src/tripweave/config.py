@@ -113,8 +113,9 @@ class Settings(BaseSettings):
     upload_grant_lifetime_seconds: int = Field(
         default=900, ge=1, alias="TRIPWEAVE_UPLOAD_GRANT_SECONDS"
     )
+    max_trips_per_user: int = Field(default=5, ge=1, alias="TRIPWEAVE_MAX_TRIPS_PER_USER")
     upload_max_files_per_trip: int = Field(
-        default=500, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILES_PER_TRIP"
+        default=100, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILES_PER_TRIP"
     )
     upload_max_file_bytes: int = Field(
         default=25 * 1024 * 1024, ge=1, alias="TRIPWEAVE_UPLOAD_MAX_FILE_BYTES"

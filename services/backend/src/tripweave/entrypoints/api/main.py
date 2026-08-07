@@ -131,12 +131,14 @@ from tripweave.entrypoints.api.schemas import (
     TripMapBoundsResponse,
     TripMapPointResponse,
     TripMapTripResponse,
+    TripQuotaResponse,
     TripResponse,
     TripsListResponse,
     TripsMapPointsResponse,
     TripUpdateRequest,
     UploadFileResponse,
     UploadGrantResponse,
+    UploadQuotaResponse,
     UploadSessionCreateRequest,
     UploadSessionResponse,
     UploadSessionsListResponse,
@@ -673,6 +675,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             "worker": worker,
             "storage": storage,
             "limits": {
+                "maxTripsPerUser": resolved_settings.max_trips_per_user,
                 "maxFilesPerTrip": resolved_settings.upload_max_files_per_trip,
                 "maxFileBytes": resolved_settings.upload_max_file_bytes,
                 "maxTripBytes": resolved_settings.upload_max_trip_bytes,
@@ -1323,6 +1326,25 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> TripResponse:
         require_csrf(request)
+        # Serializing on the user row keeps concurrent create requests within the pilot quota.
+        db.execute(
+            select(orm.User.id).where(orm.User.id == auth.user.id).with_for_update()
+        ).scalar_one()
+        owned_trip_count = int(
+            db.scalar(
+                select(func.count())
+                .select_from(orm.Trip)
+                .where(orm.Trip.created_by == auth.user.id)
+            )
+            or 0
+        )
+        if owned_trip_count >= resolved_settings.max_trips_per_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Trip limit reached ({resolved_settings.max_trips_per_user} trips per user)"
+                ),
+            )
         now = datetime.now(UTC)
         trip = orm.Trip(
             title=payload.title.strip(),
@@ -1569,7 +1591,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .order_by(orm.Trip.created_at.desc(), orm.Trip.id)
         ).all()
         return TripsListResponse(
-            trips=[trip_response(trip, role, member_id) for trip, role, member_id in rows]
+            trips=[trip_response(trip, role, member_id) for trip, role, member_id in rows],
+            quota=trip_quota(db, auth.user.id),
         )
 
     @app.get("/trips/map-points", response_model=TripsMapPointsResponse)
@@ -1771,6 +1794,51 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             "allowedExtensions": sorted(resolved_settings.allowed_upload_extensions),
             "allowedMimeTypes": sorted(resolved_settings.allowed_upload_mime_types),
         }
+
+    def trip_quota(db: DbSession, user_id: UUID) -> TripQuotaResponse:
+        owned_trip_count = int(
+            db.scalar(
+                select(func.count()).select_from(orm.Trip).where(orm.Trip.created_by == user_id)
+            )
+            or 0
+        )
+        return TripQuotaResponse(
+            maxTripsPerUser=resolved_settings.max_trips_per_user,
+            ownedTripCount=owned_trip_count,
+        )
+
+    def upload_quota(db: DbSession, trip_id: UUID) -> UploadQuotaResponse:
+        completed_media_count = int(
+            db.scalar(
+                select(func.count())
+                .select_from(orm.MediaItem)
+                .where(orm.MediaItem.trip_id == trip_id, orm.MediaItem.deleted_at.is_(None))
+            )
+            or 0
+        )
+        reserved_upload_count = int(
+            db.scalar(
+                select(func.count())
+                .select_from(orm.UploadFile)
+                .join(orm.UploadSession, orm.UploadSession.id == orm.UploadFile.upload_session_id)
+                .where(
+                    orm.UploadSession.trip_id == trip_id,
+                    orm.UploadFile.media_item_id.is_(None),
+                    orm.UploadFile.state.not_in(
+                        [UploadState.CANCELLED.value, UploadState.FAILED.value]
+                    ),
+                )
+            )
+            or 0
+        )
+        reserved_file_count = completed_media_count + reserved_upload_count
+        return UploadQuotaResponse(
+            maxFilesPerTrip=resolved_settings.upload_max_files_per_trip,
+            reservedFileCount=reserved_file_count,
+            remainingFileCount=max(
+                resolved_settings.upload_max_files_per_trip - reserved_file_count, 0
+            ),
+        )
 
     def validate_upload_file(filename: str, byte_size: int, mime_type: str) -> None:
         extension = PurePosixPath(filename).suffix.lower()
@@ -3926,9 +3994,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 for upload_file in files
             ],
             limits=upload_limits(),
+            quota=upload_quota(db, upload_session.trip_id),
         )
 
     def upload_session_response_from_files(
+        db: DbSession,
         upload_session: orm.UploadSession,
         files: list[orm.UploadFile],
         *,
@@ -3945,6 +4015,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 for upload_file in files
             ],
             limits=upload_limits(),
+            quota=upload_quota(db, upload_session.trip_id),
         )
 
     def upload_session_for_actor(
@@ -3987,6 +4058,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if member.role == TripMemberRole.VIEWER.value:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
 
+        # Serialize registrations for the trip so pending upload grants count as reservations.
+        trip = db.execute(
+            select(orm.Trip).where(orm.Trip.id == trip_id).with_for_update()
+        ).scalar_one_or_none()
+        if trip is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+
         if len(payload.files) > resolved_settings.upload_max_files_per_trip:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Too many files for one trip"
@@ -3999,20 +4077,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         for file in payload.files:
             validate_upload_file(file.filename, file.byte_size, file.mime_type)
 
-        existing_count = db.execute(
-            select(func.count())
-            .select_from(orm.MediaItem)
-            .where(orm.MediaItem.trip_id == trip_id, orm.MediaItem.deleted_at.is_(None))
-        ).scalar_one()
+        quota = upload_quota(db, trip_id)
         existing_bytes = db.execute(
             select(func.coalesce(func.sum(orm.MediaItem.byte_size), 0)).where(
                 orm.MediaItem.trip_id == trip_id,
                 orm.MediaItem.deleted_at.is_(None),
             )
         ).scalar_one()
-        if existing_count + len(payload.files) > resolved_settings.upload_max_files_per_trip:
+        if quota.reserved_file_count + len(payload.files) > quota.max_files_per_trip:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Trip file limit exceeded"
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Trip photo limit reached ({quota.max_files_per_trip} photos per trip)",
             )
         current_trip_bytes = int(existing_bytes or 0)
         if current_trip_bytes + total_bytes > resolved_settings.upload_max_trip_bytes:
@@ -4054,7 +4129,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             created_files.append(upload_file)
         db.commit()
         return upload_session_response_from_files(
-            upload_session, created_files, include_grants=True
+            db, upload_session, created_files, include_grants=True
         )
 
     @app.get("/upload-sessions", response_model=UploadSessionsListResponse)
@@ -4073,7 +4148,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             uploadSessions=[
                 upload_session_response(db, upload_session, include_grants=True)
                 for upload_session in sessions
-            ]
+            ],
+            quota=upload_quota(db, trip_id),
         )
 
     @app.get("/upload-sessions/{upload_session_id}", response_model=UploadSessionResponse)

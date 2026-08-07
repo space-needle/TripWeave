@@ -147,8 +147,14 @@ class TripResponse(BaseModel):
     updated_at: datetime = Field(alias="updatedAt")
 
 
+class TripQuotaResponse(BaseModel):
+    max_trips_per_user: int = Field(alias="maxTripsPerUser")
+    owned_trip_count: int = Field(alias="ownedTripCount")
+
+
 class TripsListResponse(BaseModel):
     trips: list[TripResponse]
+    quota: TripQuotaResponse
 
 
 class TripMapBoundsResponse(BaseModel):
@@ -290,6 +296,12 @@ class UploadFileResponse(BaseModel):
     grant: UploadGrantResponse | None = None
 
 
+class UploadQuotaResponse(BaseModel):
+    max_files_per_trip: int = Field(alias="maxFilesPerTrip")
+    reserved_file_count: int = Field(alias="reservedFileCount")
+    remaining_file_count: int = Field(alias="remainingFileCount")
+
+
 class UploadSessionResponse(BaseModel):
     id: UUID
     trip_id: UUID = Field(alias="tripId")
@@ -298,10 +310,12 @@ class UploadSessionResponse(BaseModel):
     declared_total_bytes: int | None = Field(alias="declaredTotalBytes")
     files: list[UploadFileResponse]
     limits: dict[str, object]
+    quota: UploadQuotaResponse
 
 
 class UploadSessionsListResponse(BaseModel):
     upload_sessions: list[UploadSessionResponse] = Field(alias="uploadSessions")
+    quota: UploadQuotaResponse
 
 
 class CompleteUploadFileResponse(BaseModel):

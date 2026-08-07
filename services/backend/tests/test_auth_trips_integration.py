@@ -380,6 +380,74 @@ def test_authentication_lifecycle_and_trip_management(client: TestClient) -> Non
     assert client.get(f"/trips/{trip_id}").status_code == 404
 
 
+def test_pilot_trip_and_photo_quotas_reserve_pending_uploads(client: TestClient) -> None:
+    csrf_token = register(client, "pilot-limits@example.com")
+
+    for index in range(5):
+        create_trip(client, csrf_token, f"Pilot trip {index}")
+
+    trips = client.get("/trips")
+    assert trips.status_code == 200
+    assert trips.json()["quota"] == {"maxTripsPerUser": 5, "ownedTripCount": 5}
+
+    over_trip_limit = client.post(
+        "/trips",
+        headers={"x-csrf-token": csrf_token},
+        json={"title": "One too many", "timezoneId": "Asia/Tokyo"},
+    )
+    assert over_trip_limit.status_code == 409
+    assert over_trip_limit.json()["detail"] == "Trip limit reached (5 trips per user)"
+
+    trip_id = trips.json()["trips"][0]["id"]
+    payload = {
+        "files": [
+            {"filename": f"photo-{index}.jpg", "byteSize": 1, "mimeType": "image/jpeg"}
+            for index in range(99)
+        ]
+    }
+    first_upload = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json=payload,
+    )
+    assert first_upload.status_code == 201
+    assert first_upload.json()["quota"] == {
+        "maxFilesPerTrip": 100,
+        "reservedFileCount": 99,
+        "remainingFileCount": 1,
+    }
+
+    final_slot = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json={"files": [{"filename": "photo-99.jpg", "byteSize": 1, "mimeType": "image/jpeg"}]},
+    )
+    assert final_slot.status_code == 201
+    assert final_slot.json()["quota"]["remainingFileCount"] == 0
+
+    over_photo_limit = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json={"files": [{"filename": "photo-100.jpg", "byteSize": 1, "mimeType": "image/jpeg"}]},
+    )
+    assert over_photo_limit.status_code == 409
+    assert over_photo_limit.json()["detail"] == "Trip photo limit reached (100 photos per trip)"
+
+    cancelled_file_id = first_upload.json()["files"][0]["id"]
+    cancelled = client.delete(
+        f"/upload-files/{cancelled_file_id}", headers={"x-csrf-token": csrf_token}
+    )
+    assert cancelled.status_code == 204
+
+    available_again = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json={"files": [{"filename": "replacement.jpg", "byteSize": 1, "mimeType": "image/jpeg"}]},
+    )
+    assert available_again.status_code == 201
+    assert available_again.json()["quota"]["reservedFileCount"] == 100
+
+
 def test_local_ops_endpoint_is_authenticated(client: TestClient) -> None:
     assert client.get("/ops/local-mvp").status_code == 401
 
@@ -397,6 +465,7 @@ def test_local_ops_endpoint_is_authenticated(client: TestClient) -> None:
     assert "counts" in body
     assert body["counts"]["users"] >= 1
     assert "limits" in body
+    assert body["limits"]["maxTripsPerUser"] == 5
     assert body["limits"]["maxFilesPerTrip"] >= 1
     assert "environment" in body
     assert "media_private" in body["environment"]["storageAliases"]

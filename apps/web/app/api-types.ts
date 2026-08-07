@@ -441,6 +441,11 @@ export type TripMapTripResponse = {
   representativeThumbnailUrl?: string | null;
 };
 
+export type TripQuotaResponse = {
+  maxTripsPerUser: number;
+  ownedTripCount: number;
+};
+
 export type TripResponse = {
   id: string;
   title: string;
@@ -470,6 +475,7 @@ export type TripUpdateRequest = {
 
 export type TripsListResponse = {
   trips: TripResponse[];
+  quota: TripQuotaResponse;
 };
 
 export type TripsMapPointsResponse = {
@@ -509,6 +515,12 @@ export type UploadGrantResponse = {
   contentType?: string | null;
 };
 
+export type UploadQuotaResponse = {
+  maxFilesPerTrip: number;
+  reservedFileCount: number;
+  remainingFileCount: number;
+};
+
 export type UploadSessionCreateRequest = {
   files: UploadFileRegisterRequest[];
 };
@@ -521,10 +533,12 @@ export type UploadSessionResponse = {
   declaredTotalBytes: number | null;
   files: UploadFileResponse[];
   limits: Record<string, unknown>;
+  quota: UploadQuotaResponse;
 };
 
 export type UploadSessionsListResponse = {
   uploadSessions: UploadSessionResponse[];
+  quota: UploadQuotaResponse;
 };
 
 export type UserResponse = {
