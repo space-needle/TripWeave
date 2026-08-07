@@ -4480,6 +4480,31 @@ button.thumb-frame:focus-visible {
   font-size: 0.84rem;
 }
 
+.admin-distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-distribution-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fbfa;
+  padding: 14px;
+}
+
+.admin-distribution-card span {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.admin-distribution-card small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -4572,6 +4597,14 @@ button.thumb-frame:focus-visible {
   white-space: nowrap;
 }
 
+.admin-update-tier {
+  display: block;
+  margin-top: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+}
+
 .admin-create {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -4601,6 +4634,10 @@ button.thumb-frame:focus-visible {
   }
 
   .admin-tier-list {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-distribution-grid {
     grid-template-columns: 1fr;
   }
 

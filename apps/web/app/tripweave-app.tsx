@@ -3023,6 +3023,10 @@ function AdminDashboard() {
   const [adminUsers, setAdminUsers] = useState<
     import("./api-types").AdminUserResponse[]
   >([]);
+  const [pendingTierIds, setPendingTierIds] = useState<Record<string, string>>(
+    {},
+  );
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [tierForm, setTierForm] = useState({
     slug: "",
     name: "",
@@ -3141,15 +3145,32 @@ function AdminDashboard() {
             <p>How usage is spread across users and trips.</p>
           </div>
         </div>
-        <p className="admin-note">
-          Distribution p50/p90: user trips{" "}
-          {dashboard.distributions.trips_p50 ?? 0} /{" "}
-          {dashboard.distributions.trips_p90 ?? 0}, user photos{" "}
-          {dashboard.distributions.photos_p50 ?? 0} /{" "}
-          {dashboard.distributions.photos_p90 ?? 0}, trip photos{" "}
-          {dashboard.distributions.trip_photos_p50 ?? 0} /{" "}
-          {dashboard.distributions.trip_photos_p90 ?? 0}.
-        </p>
+        <div className="admin-distribution-grid">
+          <div className="admin-distribution-card">
+            <strong>User trips</strong>
+            <span>Average {dashboard.distributions.trips_avg ?? 0}</span>
+            <small>
+              p50 {dashboard.distributions.trips_p50 ?? 0} / p90{" "}
+              {dashboard.distributions.trips_p90 ?? 0}
+            </small>
+          </div>
+          <div className="admin-distribution-card">
+            <strong>User photos</strong>
+            <span>Average {dashboard.distributions.photos_avg ?? 0}</span>
+            <small>
+              p50 {dashboard.distributions.photos_p50 ?? 0} / p90{" "}
+              {dashboard.distributions.photos_p90 ?? 0}
+            </small>
+          </div>
+          <div className="admin-distribution-card">
+            <strong>Photos per trip</strong>
+            <span>Average {dashboard.distributions.trip_photos_avg ?? 0}</span>
+            <small>
+              p50 {dashboard.distributions.trip_photos_p50 ?? 0} / p90{" "}
+              {dashboard.distributions.trip_photos_p90 ?? 0}
+            </small>
+          </div>
+        </div>
       </section>
       <section className="admin-section">
         <div className="admin-section-heading">
@@ -3170,6 +3191,17 @@ function AdminDashboard() {
             </div>
           ))}
         </div>
+      </section>
+      <section className="admin-section admin-users-section">
+        <div className="admin-section-heading">
+          <div>
+            <h3>User management</h3>
+            <p>
+              Find an account, review its usage, and explicitly save tier
+              changes.
+            </p>
+          </div>
+        </div>
         <form
           className="admin-search"
           onSubmit={async (event) => {
@@ -3177,6 +3209,7 @@ function AdminDashboard() {
             try {
               const result = await api.adminUsers(userQuery);
               setAdminUsers(result.users);
+              setPendingTierIds({});
               setAdminError("");
             } catch (error) {
               setAdminError(
@@ -3232,13 +3265,37 @@ function AdminDashboard() {
                     </td>
                     <td>
                       <select
-                        value={user.tier.id}
+                        value={pendingTierIds[user.id] ?? user.tier.id}
                         aria-label={`Tier for ${user.email}`}
-                        onChange={async (event) => {
+                        onChange={(event) =>
+                          setPendingTierIds((current) => ({
+                            ...current,
+                            [user.id]: event.target.value,
+                          }))
+                        }
+                      >
+                        {tiers.map((tier) => (
+                          <option key={tier.id} value={tier.id}>
+                            {tier.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="secondary-button admin-update-tier"
+                        type="button"
+                        disabled={
+                          updatingUserId === user.id ||
+                          (pendingTierIds[user.id] ?? user.tier.id) ===
+                            user.tier.id
+                        }
+                        onClick={async () => {
+                          const nextTierId = pendingTierIds[user.id];
+                          if (!nextTierId) return;
+                          setUpdatingUserId(user.id);
                           try {
                             const result = await api.assignAdminTier(
                               user.id,
-                              event.target.value,
+                              nextTierId,
                             );
                             setAdminUsers((current) =>
                               current.map((item) =>
@@ -3247,6 +3304,11 @@ function AdminDashboard() {
                                   : item,
                               ),
                             );
+                            setPendingTierIds((current) => {
+                              const next = { ...current };
+                              delete next[user.id];
+                              return next;
+                            });
                             setAdminError("");
                           } catch (error) {
                             setAdminError(
@@ -3254,15 +3316,15 @@ function AdminDashboard() {
                                 ? error.message
                                 : "Unable to assign tier",
                             );
+                          } finally {
+                            setUpdatingUserId(null);
                           }
                         }}
                       >
-                        {tiers.map((tier) => (
-                          <option key={tier.id} value={tier.id}>
-                            {tier.name}
-                          </option>
-                        ))}
-                      </select>
+                        {updatingUserId === user.id
+                          ? "Updating..."
+                          : "Update tier"}
+                      </button>
                     </td>
                   </tr>
                 ))}
