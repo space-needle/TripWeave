@@ -130,6 +130,9 @@ from tripweave.entrypoints.api.schemas import (
     StoryPhotoProjectionResponse,
     StoryUpdateStatusResponse,
     StoryVersionResponse,
+    TierCreateRequest,
+    TierListResponse,
+    TierResponse,
     TripCreateRequest,
     TripMapBoundsResponse,
     TripMapPointResponse,
@@ -146,6 +149,7 @@ from tripweave.entrypoints.api.schemas import (
     UploadSessionResponse,
     UploadSessionsListResponse,
     UserResponse,
+    UserTierResponse,
 )
 from tripweave.logging import configure_logging
 
@@ -570,6 +574,69 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Quota admin access required"
             )
+
+    def tier_response(tier: orm.SubscriptionTier) -> TierResponse:
+        return TierResponse(
+            id=tier.id,
+            slug=tier.slug,
+            name=tier.name,
+            maxTripsPerUser=tier.max_trips_per_user,
+            maxFilesPerTrip=tier.max_files_per_trip,
+            monthlyUploadBytes=tier.monthly_upload_bytes,
+            isActive=tier.is_active,
+        )
+
+    @app.get("/admin/tiers", response_model=TierListResponse)
+    def list_tiers(
+        auth: AuthenticatedUser = Depends(current_user), db: DbSession = Depends(db_session)
+    ) -> TierListResponse:
+        require_quota_admin(auth)
+        return TierListResponse(
+            tiers=[
+                tier_response(tier)
+                for tier in db.scalars(
+                    select(orm.SubscriptionTier).order_by(orm.SubscriptionTier.created_at)
+                ).all()
+            ]
+        )
+
+    @app.post("/admin/tiers", response_model=TierResponse, status_code=status.HTTP_201_CREATED)
+    def create_tier(
+        payload: TierCreateRequest,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> TierResponse:
+        require_csrf(request)
+        require_quota_admin(auth)
+        tier = orm.SubscriptionTier(**payload.model_dump(by_alias=False))
+        db.add(tier)
+        db.commit()
+        return tier_response(tier)
+
+    @app.put("/admin/users/{user_id}/tier", response_model=UserTierResponse)
+    def assign_tier(
+        user_id: UUID,
+        tier_id: UUID,
+        request: Request,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> UserTierResponse:
+        require_csrf(request)
+        require_quota_admin(auth)
+        user = db.get(orm.User, user_id)
+        tier = db.get(orm.SubscriptionTier, tier_id)
+        if user is None or tier is None or not tier.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User or tier not found"
+            )
+        assignment = db.get(orm.UserTierAssignment, user_id)
+        if assignment is None:
+            db.add(orm.UserTierAssignment(user_id=user_id, tier_id=tier_id))
+        else:
+            assignment.tier_id = tier_id
+        db.commit()
+        return UserTierResponse(userId=user.id, email=user.email, tier=tier_response(tier))
 
     @app.get("/admin/quota-overrides", response_model=QuotaOverridesListResponse)
     def list_quota_overrides(

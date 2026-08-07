@@ -180,6 +180,34 @@ class QuotaOverridesListResponse(BaseModel):
     overrides: list[QuotaOverrideResponse]
 
 
+class TierResponse(BaseModel):
+    id: UUID
+    slug: str
+    name: str
+    max_trips_per_user: int | None = Field(alias="maxTripsPerUser")
+    max_files_per_trip: int | None = Field(alias="maxFilesPerTrip")
+    monthly_upload_bytes: int = Field(alias="monthlyUploadBytes")
+    is_active: bool = Field(alias="isActive")
+
+
+class TierCreateRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
+    name: str = Field(min_length=1, max_length=120)
+    max_trips_per_user: int | None = Field(default=None, alias="maxTripsPerUser", ge=1)
+    max_files_per_trip: int | None = Field(default=None, alias="maxFilesPerTrip", ge=1)
+    monthly_upload_bytes: int = Field(alias="monthlyUploadBytes", gt=0)
+
+
+class TierListResponse(BaseModel):
+    tiers: list[TierResponse]
+
+
+class UserTierResponse(BaseModel):
+    user_id: UUID = Field(alias="userId")
+    email: str
+    tier: TierResponse
+
+
 class TripsListResponse(BaseModel):
     trips: list[TripResponse]
     quota: TripQuotaResponse
