@@ -7,6 +7,7 @@ export type AdminUserResponse = {
   tier: TierResponse;
   tripCount: number;
   photoCount: number;
+  monthlyUploadedBytes: number;
 };
 
 export type AdminUsersResponse = {

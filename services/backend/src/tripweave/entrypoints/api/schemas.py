@@ -187,6 +187,7 @@ class AdminUserResponse(BaseModel):
     tier: TierResponse
     trip_count: int = Field(alias="tripCount")
     photo_count: int = Field(alias="photoCount")
+    monthly_uploaded_bytes: int = Field(alias="monthlyUploadedBytes")
 
 
 class AdminUsersResponse(BaseModel):

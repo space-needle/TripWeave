@@ -649,6 +649,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             statement = statement.where(orm.User.email.ilike(f"%{query.strip()}%"))
         users = db.scalars(statement).all()
         result: list[AdminUserResponse] = []
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         for user in users:
             tier = db.scalar(
                 select(orm.SubscriptionTier)
@@ -679,6 +680,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 )
                 or 0
             )
+            monthly_uploaded_bytes = int(
+                db.scalar(
+                    select(func.coalesce(func.sum(orm.MediaItem.byte_size), 0))
+                    .join(orm.Trip, orm.Trip.id == orm.MediaItem.trip_id)
+                    .where(
+                        orm.Trip.created_by == user.id,
+                        orm.MediaItem.deleted_at.is_(None),
+                        orm.MediaItem.created_at >= month_start,
+                    )
+                )
+                or 0
+            )
             result.append(
                 AdminUserResponse(
                     id=user.id,
@@ -687,6 +700,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     tier=tier_response(tier),
                     tripCount=trip_count,
                     photoCount=photo_count,
+                    monthlyUploadedBytes=monthly_uploaded_bytes,
                 )
             )
         return AdminUsersResponse(users=result)

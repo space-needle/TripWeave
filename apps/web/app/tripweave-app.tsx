@@ -2989,6 +2989,18 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = -1;
+  do {
+    value /= 1024;
+    unitIndex += 1;
+  } while (value >= 1024 && unitIndex < units.length - 1);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 function AdminDashboard() {
   const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(
     null,
@@ -3200,7 +3212,18 @@ function AdminDashboard() {
                     <small>{user.displayName}</small>
                   </td>
                   <td>
-                    {user.tripCount} trips / {user.photoCount} photos
+                    <div>
+                      {user.tripCount} /{" "}
+                      {user.tier.maxTripsPerUser ?? "unlimited"} trips
+                    </div>
+                    <div>
+                      {user.photoCount} /{" "}
+                      {user.tier.maxFilesPerTrip ?? "unlimited"} photos
+                    </div>
+                    <div>
+                      {formatBytes(user.monthlyUploadedBytes)} /{" "}
+                      {formatBytes(user.tier.monthlyUploadBytes)} this month
+                    </div>
                   </td>
                   <td>
                     <select
