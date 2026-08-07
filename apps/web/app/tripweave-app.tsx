@@ -326,7 +326,7 @@ export default function TripWeaveApp() {
 
 function AdminWorkspace() {
   return (
-    <main className="app-shell">
+    <main className="app-shell admin-shell">
       <AdminDashboard />
     </main>
   );
@@ -3061,186 +3061,218 @@ function AdminDashboard() {
   }
   const latest = dashboard.trend.at(-1);
   return (
-    <section className="panel stack" aria-label="Operations dashboard">
-      <div className="panel-heading">
+    <section className="admin-dashboard" aria-label="Operations dashboard">
+      <div className="admin-heading">
         <h2>Operations overview</h2>
+        <p>Usage, audience activity, and quota controls</p>
         <span>Last 30 days</span>
       </div>
-      <h3>Usage summary</h3>
-      <div className="metric-grid">
-        <strong>
-          {dashboard.totals.users}
-          <small>Users</small>
-        </strong>
-        <strong>
-          {dashboard.totals.trips}
-          <small>Trips</small>
-        </strong>
-        <strong>
-          {dashboard.totals.photos}
-          <small>Photos</small>
-        </strong>
-        <strong>
-          {latest?.active_users ?? 0}
-          <small>Signed-in today</small>
-        </strong>
-        <strong>
-          {latest?.trip_views ?? 0}
-          <small>Story views today</small>
-        </strong>
-      </div>
-      <p>
-        Signed-in users counts users who started a session that day. Story views
-        count public story page requests; anonymous viewers are not mapped to
-        TripWeave accounts.
-      </p>
-      <h3>Daily activity</h3>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>New users</th>
-              <th>Signed-in users</th>
-              <th>New trips</th>
-              <th>Photos</th>
-              <th>Story views</th>
-              <th>Trips viewed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard.trend.map((row) => (
-              <tr key={row.day}>
-                <td>{row.day}</td>
-                <td>{row.users}</td>
-                <td>{row.active_users}</td>
-                <td>{row.trips}</td>
-                <td>{row.photos}</td>
-                <td>{row.trip_views}</td>
-                <td>{row.viewed_trips}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <h3>Usage distributions</h3>
-      <p>
-        Distribution p50/p90: user trips{" "}
-        {dashboard.distributions.trips_p50 ?? 0} /{" "}
-        {dashboard.distributions.trips_p90 ?? 0}, user photos{" "}
-        {dashboard.distributions.photos_p50 ?? 0} /{" "}
-        {dashboard.distributions.photos_p90 ?? 0}, trip photos{" "}
-        {dashboard.distributions.trip_photos_p50 ?? 0} /{" "}
-        {dashboard.distributions.trip_photos_p90 ?? 0}.
-      </p>
-      <div className="panel-heading">
-        <h3>Tier management</h3>
-      </div>
-      {tiers.map((tier) => (
-        <p key={tier.id}>
-          {tier.name}: {tier.maxTripsPerUser ?? "unlimited"} trips,{" "}
-          {tier.maxFilesPerTrip ?? "unlimited"} photos
+      <section className="admin-section">
+        <h3>Usage summary</h3>
+        <div className="admin-metrics">
+          <strong className="admin-metric">
+            {dashboard.totals.users}
+            <small>Users</small>
+          </strong>
+          <strong className="admin-metric">
+            {dashboard.totals.trips}
+            <small>Trips</small>
+          </strong>
+          <strong className="admin-metric">
+            {dashboard.totals.photos}
+            <small>Photos</small>
+          </strong>
+          <strong className="admin-metric">
+            {latest?.active_users ?? 0}
+            <small>Signed-in today</small>
+          </strong>
+          <strong className="admin-metric">
+            {latest?.trip_views ?? 0}
+            <small>Story views today</small>
+          </strong>
+        </div>
+        <p className="admin-note">
+          Signed-in users counts users who started a session that day. Story
+          views count public story page requests; anonymous viewers are not
+          mapped to TripWeave accounts.
         </p>
-      ))}
-      <form
-        className="stack"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          try {
-            const result = await api.adminUsers(userQuery);
-            setAdminUsers(result.users);
-            setAdminError("");
-          } catch (error) {
-            setAdminError(
-              error instanceof Error ? error.message : "Unable to find users",
-            );
-          }
-        }}
-      >
-        <h3>Find user</h3>
-        <label>
-          Email
-          <input
-            value={userQuery}
-            onChange={(event) => setUserQuery(event.target.value)}
-            placeholder="Search by email"
-          />
-        </label>
-        <button type="submit">Search users</button>
-      </form>
-      {adminUsers.length > 0 ? (
-        <div className="table-scroll">
-          <table>
+      </section>
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <h3>Daily activity</h3>
+            <p>New accounts, content creation, and public story reach.</p>
+          </div>
+          <span>30 days</span>
+        </div>
+        <div className="admin-table-wrap">
+          <table className="admin-table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Usage</th>
-                <th>Tier</th>
+                <th>Date</th>
+                <th>New users</th>
+                <th>Signed-in users</th>
+                <th>New trips</th>
+                <th>Photos</th>
+                <th>Story views</th>
+                <th>Trips viewed</th>
               </tr>
             </thead>
             <tbody>
-              {adminUsers.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <strong>{user.email}</strong>
-                    <small>{user.displayName}</small>
-                  </td>
-                  <td>
-                    <div>
-                      {user.tripCount} /{" "}
-                      {user.tier.maxTripsPerUser ?? "unlimited"} trips
-                    </div>
-                    <div>
-                      {user.photoCount} /{" "}
-                      {user.tier.maxFilesPerTrip ?? "unlimited"} photos
-                    </div>
-                    <div>
-                      {formatBytes(user.monthlyUploadedBytes)} /{" "}
-                      {formatBytes(user.tier.monthlyUploadBytes)} this month
-                    </div>
-                  </td>
-                  <td>
-                    <select
-                      value={user.tier.id}
-                      aria-label={`Tier for ${user.email}`}
-                      onChange={async (event) => {
-                        try {
-                          const result = await api.assignAdminTier(
-                            user.id,
-                            event.target.value,
-                          );
-                          setAdminUsers((current) =>
-                            current.map((item) =>
-                              item.id === user.id
-                                ? { ...item, tier: result.tier }
-                                : item,
-                            ),
-                          );
-                          setAdminError("");
-                        } catch (error) {
-                          setAdminError(
-                            error instanceof Error
-                              ? error.message
-                              : "Unable to assign tier",
-                          );
-                        }
-                      }}
-                    >
-                      {tiers.map((tier) => (
-                        <option key={tier.id} value={tier.id}>
-                          {tier.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
+              {dashboard.trend.map((row) => (
+                <tr key={row.day}>
+                  <td>{row.day}</td>
+                  <td>{row.users}</td>
+                  <td>{row.active_users}</td>
+                  <td>{row.trips}</td>
+                  <td>{row.photos}</td>
+                  <td>{row.trip_views}</td>
+                  <td>{row.viewed_trips}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : null}
-      {adminError ? <p className="error">{adminError}</p> : null}
-      <details>
+      </section>
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <h3>Usage distributions</h3>
+            <p>How usage is spread across users and trips.</p>
+          </div>
+        </div>
+        <p className="admin-note">
+          Distribution p50/p90: user trips{" "}
+          {dashboard.distributions.trips_p50 ?? 0} /{" "}
+          {dashboard.distributions.trips_p90 ?? 0}, user photos{" "}
+          {dashboard.distributions.photos_p50 ?? 0} /{" "}
+          {dashboard.distributions.photos_p90 ?? 0}, trip photos{" "}
+          {dashboard.distributions.trip_photos_p50 ?? 0} /{" "}
+          {dashboard.distributions.trip_photos_p90 ?? 0}.
+        </p>
+      </section>
+      <section className="admin-section">
+        <div className="admin-section-heading">
+          <div>
+            <h3>Tier management</h3>
+            <p>Review plan limits and update individual accounts.</p>
+          </div>
+        </div>
+        <div className="admin-tier-list">
+          {tiers.map((tier) => (
+            <div className="admin-tier-item" key={tier.id}>
+              <strong>{tier.name}</strong>
+              <span>
+                {tier.maxTripsPerUser ?? "unlimited"} trips /{" "}
+                {tier.maxFilesPerTrip ?? "unlimited"} photos /{" "}
+                {formatBytes(tier.monthlyUploadBytes)} monthly
+              </span>
+            </div>
+          ))}
+        </div>
+        <form
+          className="admin-search"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              const result = await api.adminUsers(userQuery);
+              setAdminUsers(result.users);
+              setAdminError("");
+            } catch (error) {
+              setAdminError(
+                error instanceof Error ? error.message : "Unable to find users",
+              );
+            }
+          }}
+        >
+          <div>
+            <h4>Find a user</h4>
+            <p>Search by email to review usage and change a tier.</p>
+          </div>
+          <label>
+            Email
+            <input
+              value={userQuery}
+              onChange={(event) => setUserQuery(event.target.value)}
+              placeholder="Search by email"
+            />
+          </label>
+          <button type="submit">Search users</button>
+        </form>
+        {adminUsers.length > 0 ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Usage</th>
+                  <th>Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <strong>{user.email}</strong>
+                      <small>{user.displayName}</small>
+                    </td>
+                    <td>
+                      <div>
+                        {user.tripCount} /{" "}
+                        {user.tier.maxTripsPerUser ?? "unlimited"} trips
+                      </div>
+                      <div>
+                        {user.photoCount} /{" "}
+                        {user.tier.maxFilesPerTrip ?? "unlimited"} photos
+                      </div>
+                      <div>
+                        {formatBytes(user.monthlyUploadedBytes)} /{" "}
+                        {formatBytes(user.tier.monthlyUploadBytes)} this month
+                      </div>
+                    </td>
+                    <td>
+                      <select
+                        value={user.tier.id}
+                        aria-label={`Tier for ${user.email}`}
+                        onChange={async (event) => {
+                          try {
+                            const result = await api.assignAdminTier(
+                              user.id,
+                              event.target.value,
+                            );
+                            setAdminUsers((current) =>
+                              current.map((item) =>
+                                item.id === user.id
+                                  ? { ...item, tier: result.tier }
+                                  : item,
+                              ),
+                            );
+                            setAdminError("");
+                          } catch (error) {
+                            setAdminError(
+                              error instanceof Error
+                                ? error.message
+                                : "Unable to assign tier",
+                            );
+                          }
+                        }}
+                      >
+                        {tiers.map((tier) => (
+                          <option key={tier.id} value={tier.id}>
+                            {tier.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {adminError ? <p className="error">{adminError}</p> : null}
+      </section>
+      <details className="admin-create">
         <summary>Create tier</summary>
         <form
           className="stack"

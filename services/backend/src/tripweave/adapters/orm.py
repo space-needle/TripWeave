@@ -123,7 +123,7 @@ class SubscriptionTier(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
 
-class UserTierAssignment(Base, TimestampMixin):
+class UserTierAssignment(Base):
     __tablename__ = "user_tier_assignments"
     user_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
