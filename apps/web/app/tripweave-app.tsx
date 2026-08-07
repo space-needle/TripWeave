@@ -2996,6 +2996,13 @@ function AdminDashboard() {
   const [tiers, setTiers] = useState<import("./api-types").TierResponse[]>([]);
   const [userId, setUserId] = useState("");
   const [tierId, setTierId] = useState("");
+  const [tierForm, setTierForm] = useState({
+    slug: "",
+    name: "",
+    trips: "",
+    photos: "",
+    bytes: "",
+  });
   const [adminError, setAdminError] = useState("");
   useEffect(() => {
     void api
@@ -3015,6 +3022,78 @@ function AdminDashboard() {
         <h2>Operations</h2>
         <span>Last 30 days</span>
       </div>
+      <form
+        className="stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          try {
+            const tier = await api.createAdminTier({
+              slug: tierForm.slug,
+              name: tierForm.name,
+              maxTripsPerUser: tierForm.trips ? Number(tierForm.trips) : null,
+              maxFilesPerTrip: tierForm.photos ? Number(tierForm.photos) : null,
+              monthlyUploadBytes: Number(tierForm.bytes),
+            });
+            setTiers((current) => [...current, tier]);
+            setTierForm({
+              slug: "",
+              name: "",
+              trips: "",
+              photos: "",
+              bytes: "",
+            });
+            setAdminError("");
+          } catch (error) {
+            setAdminError(
+              error instanceof Error ? error.message : "Unable to create tier",
+            );
+          }
+        }}
+      >
+        <h3>Create tier</h3>
+        <input
+          placeholder="slug"
+          value={tierForm.slug}
+          onChange={(event) =>
+            setTierForm({ ...tierForm, slug: event.target.value })
+          }
+          required
+        />
+        <input
+          placeholder="name"
+          value={tierForm.name}
+          onChange={(event) =>
+            setTierForm({ ...tierForm, name: event.target.value })
+          }
+          required
+        />
+        <input
+          placeholder="max trips (blank = unlimited)"
+          type="number"
+          value={tierForm.trips}
+          onChange={(event) =>
+            setTierForm({ ...tierForm, trips: event.target.value })
+          }
+        />
+        <input
+          placeholder="max photos (blank = unlimited)"
+          type="number"
+          value={tierForm.photos}
+          onChange={(event) =>
+            setTierForm({ ...tierForm, photos: event.target.value })
+          }
+        />
+        <input
+          placeholder="monthly upload bytes"
+          type="number"
+          value={tierForm.bytes}
+          onChange={(event) =>
+            setTierForm({ ...tierForm, bytes: event.target.value })
+          }
+          required
+        />
+        <button type="submit">Create tier</button>
+      </form>
       <div className="metric-grid">
         <strong>
           {dashboard.totals.users}
