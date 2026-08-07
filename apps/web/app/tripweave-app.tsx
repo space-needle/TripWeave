@@ -20,7 +20,13 @@ import maplibregl, {
   Marker,
 } from "maplibre-gl";
 import QRCode from "qrcode";
-import { ApiError, api, guestApi, uploadWithProgress } from "./api-client";
+import {
+  AdminDashboardResponse,
+  ApiError,
+  api,
+  guestApi,
+  uploadWithProgress,
+} from "./api-client";
 import type {
   AreaVisitResponse,
   AreaVisitStopResponse,
@@ -2922,6 +2928,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
 
   return (
     <main className="app-shell">
+      <AdminDashboard />
       <section className="panel stack">
         <p className="eyebrow">Contributor upload</p>
         <h1>
@@ -2979,6 +2986,79 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function AdminDashboard() {
+  const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(
+    null,
+  );
+  useEffect(() => {
+    void api
+      .adminDashboard()
+      .then(setDashboard)
+      .catch(() => setDashboard(null));
+  }, []);
+  if (!dashboard) return null;
+  const latest = dashboard.trend.at(-1);
+  return (
+    <section className="panel stack" aria-label="Operations dashboard">
+      <div className="panel-heading">
+        <h2>Operations</h2>
+        <span>Last 30 days</span>
+      </div>
+      <div className="metric-grid">
+        <strong>
+          {dashboard.totals.users}
+          <small>Users</small>
+        </strong>
+        <strong>
+          {dashboard.totals.trips}
+          <small>Trips</small>
+        </strong>
+        <strong>
+          {dashboard.totals.photos}
+          <small>Photos</small>
+        </strong>
+        <strong>
+          {latest?.active_users ?? 0}
+          <small>Active today</small>
+        </strong>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>New users</th>
+              <th>Active</th>
+              <th>Trips</th>
+              <th>Photos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dashboard.trend.map((row) => (
+              <tr key={row.day}>
+                <td>{row.day}</td>
+                <td>{row.users}</td>
+                <td>{row.active_users}</td>
+                <td>{row.trips}</td>
+                <td>{row.photos}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Distribution p50/p90: user trips{" "}
+        {dashboard.distributions.trips_p50 ?? 0} /{" "}
+        {dashboard.distributions.trips_p90 ?? 0}, user photos{" "}
+        {dashboard.distributions.photos_p50 ?? 0} /{" "}
+        {dashboard.distributions.photos_p90 ?? 0}, trip photos{" "}
+        {dashboard.distributions.trip_photos_p50 ?? 0} /{" "}
+        {dashboard.distributions.trip_photos_p90 ?? 0}.
+      </p>
+    </section>
   );
 }
 

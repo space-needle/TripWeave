@@ -33,6 +33,18 @@ import type {
   UploadSessionsListResponse,
 } from "./api-types";
 
+export type AdminDashboardResponse = {
+  totals: { users: number; trips: number; photos: number };
+  trend: Array<{
+    day: string;
+    users: number;
+    trips: number;
+    photos: number;
+    active_users: number;
+  }>;
+  distributions: Record<string, number | null>;
+};
+
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 
 export function resolveApiBaseUrl(
@@ -156,6 +168,9 @@ export const api = {
   },
   trips(): Promise<TripsListResponse> {
     return apiRequest<TripsListResponse>("/trips");
+  },
+  adminDashboard(): Promise<AdminDashboardResponse> {
+    return apiRequest<AdminDashboardResponse>("/admin/dashboard");
   },
   tripMapPoints(start?: string, end?: string): Promise<TripsMapPointsResponse> {
     const params = new URLSearchParams();

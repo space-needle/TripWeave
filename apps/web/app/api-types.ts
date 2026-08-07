@@ -412,6 +412,28 @@ export type StoryVersionResponse = {
   errorMessage?: string | null;
 };
 
+export type TierCreateRequest = {
+  slug: string;
+  name: string;
+  maxTripsPerUser?: number | null;
+  maxFilesPerTrip?: number | null;
+  monthlyUploadBytes: number;
+};
+
+export type TierListResponse = {
+  tiers: TierResponse[];
+};
+
+export type TierResponse = {
+  id: string;
+  slug: string;
+  name: string;
+  maxTripsPerUser: number | null;
+  maxFilesPerTrip: number | null;
+  monthlyUploadBytes: number;
+  isActive: boolean;
+};
+
 export type TripCreateRequest = {
   title: string;
   description?: string | null;
@@ -564,6 +586,12 @@ export type UserResponse = {
   id: string;
   email: string;
   display_name: string;
+};
+
+export type UserTierResponse = {
+  userId: string;
+  email: string;
+  tier: TierResponse;
 };
 
 export type ValidationError = {

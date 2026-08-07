@@ -1,4 +1,4 @@
-# ruff: noqa: B008
+# ruff: noqa: B008, E501
 import json
 import os
 import secrets
@@ -637,6 +637,67 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             assignment.tier_id = tier_id
         db.commit()
         return UserTierResponse(userId=user.id, email=user.email, tier=tier_response(tier))
+
+    @app.get("/admin/dashboard")
+    def admin_dashboard(
+        auth: AuthenticatedUser = Depends(current_user), db: DbSession = Depends(db_session)
+    ) -> dict[str, object]:
+        require_quota_admin(auth)
+        trend_rows = (
+            db.execute(
+                text(
+                    """
+                WITH days AS (
+                    SELECT generate_series(
+                        current_date - interval '29 days', current_date, interval '1 day'
+                    )::date AS day
+                )
+                SELECT days.day,
+                    (SELECT count(*) FROM users WHERE created_at::date = days.day) AS users,
+                    (SELECT count(*) FROM trips WHERE created_at::date = days.day) AS trips,
+                    (SELECT count(*) FROM media_items WHERE deleted_at IS NULL AND created_at::date = days.day) AS photos,
+                    (SELECT count(DISTINCT user_id) FROM sessions WHERE created_at::date = days.day) AS active_users
+                FROM days ORDER BY days.day
+                """
+                )
+            )
+            .mappings()
+            .all()
+        )
+        distributions = (
+            db.execute(
+                text(
+                    """
+                SELECT
+                    (SELECT avg(value)::float FROM (SELECT count(*) value FROM trips GROUP BY created_by) x) AS trips_avg,
+                    (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM trips GROUP BY created_by) x) AS trips_p50,
+                    (SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM trips GROUP BY created_by) x) AS trips_p90,
+                    (SELECT avg(value)::float FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY contributor_member_id) x) AS photos_avg,
+                    (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY contributor_member_id) x) AS photos_p50,
+                    (SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY contributor_member_id) x) AS photos_p90,
+                    (SELECT avg(value)::float FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY trip_id) x) AS trip_photos_avg,
+                    (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY trip_id) x) AS trip_photos_p50,
+                    (SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY value) FROM (SELECT count(*) value FROM media_items WHERE deleted_at IS NULL GROUP BY trip_id) x) AS trip_photos_p90
+                """
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return {
+            "totals": {
+                "users": db.scalar(select(func.count()).select_from(orm.User)) or 0,
+                "trips": db.scalar(select(func.count()).select_from(orm.Trip)) or 0,
+                "photos": db.scalar(
+                    select(func.count())
+                    .select_from(orm.MediaItem)
+                    .where(orm.MediaItem.deleted_at.is_(None))
+                )
+                or 0,
+            },
+            "trend": [dict(row) for row in trend_rows],
+            "distributions": dict(distributions),
+        }
 
     @app.get("/admin/quota-overrides", response_model=QuotaOverridesListResponse)
     def list_quota_overrides(
