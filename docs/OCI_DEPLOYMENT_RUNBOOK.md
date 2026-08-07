@@ -122,6 +122,19 @@ TRIPWEAVE_HEALTH_BASE_URL=http://<instance_public_ip> deploy/scripts/deploy.sh
 curl -fsS http://<instance_public_ip>/api/health/ready
 ```
 
+After deployment, verify operator access:
+
+1. Set `TRIPWEAVE_QUOTA_ADMIN_EMAILS` in `/etc/tripweave/tripweave.env` to the exact email
+   address of an existing TripWeave account. Use comma-separated addresses for multiple
+   operators; do not commit this file or its real values.
+2. Sign in to the web app with that account.
+3. Open `http://<instance_public_ip>/admin`.
+4. Confirm that the operations totals load, user search returns results, and a test tier
+   assignment is reflected after refresh.
+
+An account whose email is not in the allowlist receives `Operator access required` at `/admin`.
+After DNS and HTTPS are configured, repeat the check at `https://<domain>/admin`.
+
 ## DNS And HTTPS
 
 After IP verification:
