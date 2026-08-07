@@ -304,6 +304,9 @@ export default function TripWeaveApp() {
       />
     );
   }
+  if (path === "/admin" || path === "/admin/") {
+    return <AdminWorkspace />;
+  }
   if (path.startsWith("/story/")) {
     const storyPath = path.slice("/story/".length);
     const slideshowSuffix = "/slideshow";
@@ -319,6 +322,14 @@ export default function TripWeaveApp() {
     );
   }
   return <OwnerWorkspace />;
+}
+
+function AdminWorkspace() {
+  return (
+    <main className="app-shell">
+      <AdminDashboard />
+    </main>
+  );
 }
 
 function OwnerWorkspace() {
@@ -2928,7 +2939,6 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
 
   return (
     <main className="app-shell">
-      <AdminDashboard />
       <section className="panel stack">
         <p className="eyebrow">Contributor upload</p>
         <h1>
@@ -3005,6 +3015,9 @@ function AdminDashboard() {
   const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(
     null,
   );
+  const [adminLoadState, setAdminLoadState] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const [tiers, setTiers] = useState<import("./api-types").TierResponse[]>([]);
   const [userQuery, setUserQuery] = useState("");
   const [adminUsers, setAdminUsers] = useState<
@@ -3021,14 +3034,31 @@ function AdminDashboard() {
   useEffect(() => {
     void api
       .adminDashboard()
-      .then(setDashboard)
-      .catch(() => setDashboard(null));
+      .then((result) => {
+        setDashboard(result);
+        setAdminLoadState("ready");
+      })
+      .catch(() => setAdminLoadState("unavailable"));
     void api
       .adminTiers()
       .then((result) => setTiers(result.tiers))
       .catch(() => undefined);
   }, []);
-  if (!dashboard) return null;
+  if (adminLoadState === "loading") {
+    return (
+      <section className="panel stack" aria-label="Operations dashboard">
+        <h1>Loading operations dashboard</h1>
+      </section>
+    );
+  }
+  if (!dashboard) {
+    return (
+      <section className="panel stack" aria-label="Operations dashboard">
+        <h1>Operator access required</h1>
+        <p>Sign in with an account configured for operator access.</p>
+      </section>
+    );
+  }
   const latest = dashboard.trend.at(-1);
   return (
     <section className="panel stack" aria-label="Operations dashboard">
