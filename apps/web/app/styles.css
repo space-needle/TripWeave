@@ -3642,17 +3642,6 @@ button.thumb-frame:focus-visible {
   object-fit: contain;
 }
 
-.photo-browser-image.portrait {
-  width: auto;
-  height: 100%;
-  max-width: none;
-}
-
-.photo-browser-image.square {
-  width: auto;
-  height: 100%;
-}
-
 .photo-browser-missing {
   display: grid;
   place-items: center;

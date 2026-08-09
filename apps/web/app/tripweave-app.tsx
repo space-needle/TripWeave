@@ -6835,14 +6835,6 @@ function PhotoBrowser({
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
   const hasMultiple = photos.length > 1;
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [imageOrientation, setImageOrientation] = useState<{
-    photoId: string;
-    value: "landscape" | "portrait" | "square";
-  } | null>(null);
-  const selectedImageOrientation =
-    imageOrientation && imageOrientation.photoId === selectedPhoto?.id
-      ? imageOrientation.value
-      : null;
 
   const moveBy = useCallback(
     (delta: number) => {
@@ -6957,30 +6949,9 @@ function PhotoBrowser({
           ) : null}
           {selectedPhoto.imageUrl ? (
             <img
-              className={
-                selectedImageOrientation
-                  ? `photo-browser-image ${selectedImageOrientation}`
-                  : "photo-browser-image"
-              }
+              className="photo-browser-image"
               src={selectedPhoto.imageUrl}
               alt={selectedPhoto.filename ?? "Trip photo"}
-              onLoad={(event) => {
-                const image = event.currentTarget;
-                if (image.naturalWidth === image.naturalHeight) {
-                  setImageOrientation({
-                    photoId: selectedPhoto.id,
-                    value: "square",
-                  });
-                } else {
-                  setImageOrientation({
-                    photoId: selectedPhoto.id,
-                    value:
-                      image.naturalWidth > image.naturalHeight
-                        ? "landscape"
-                        : "portrait",
-                  });
-                }
-              }}
             />
           ) : (
             <div className="photo-browser-missing">Preview unavailable</div>
