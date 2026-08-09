@@ -3559,7 +3559,7 @@ button.thumb-frame:focus-visible {
   z-index: 80;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 0;
 }
 
 .photo-browser-backdrop {
@@ -3574,13 +3574,15 @@ button.thumb-frame:focus-visible {
 
 .photo-browser-panel {
   position: relative;
-  width: min(100%, 980px);
-  max-height: min(92vh, 820px);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 16px;
+  border-radius: 0;
   background: #111820;
   color: #fff;
   box-shadow: 0 28px 70px rgb(0 0 0 / 42%);
@@ -3624,15 +3626,17 @@ button.thumb-frame:focus-visible {
 
 .photo-browser-stage {
   position: relative;
-  min-height: 280px;
+  min-height: 0;
   display: grid;
   place-items: center;
   background: #0a0f14;
 }
 
 .photo-browser-stage img {
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  max-height: 66vh;
+  max-height: 100%;
   object-fit: contain;
 }
 
@@ -4096,20 +4100,18 @@ button.thumb-frame:focus-visible {
   }
 
   .photo-browser {
-    padding: 10px;
+    padding: 0;
   }
 
   .photo-browser-panel {
-    max-height: 94vh;
-    border-radius: 12px;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
   }
 
   .photo-browser-stage {
-    min-height: 220px;
-  }
-
-  .photo-browser-stage img {
-    max-height: 58vh;
+    min-height: 0;
   }
 
   .story-timeline {
