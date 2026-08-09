@@ -448,6 +448,49 @@ def test_pilot_trip_and_photo_quotas_reserve_pending_uploads(client: TestClient)
     assert available_again.json()["quota"]["reservedFileCount"] == 100
 
 
+def test_unlimited_tier_bypasses_trip_and_photo_count_limits(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "unlimited@example.com")
+    user_id = client.get("/auth/me").json()["user"]["id"]
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE user_tier_assignments
+                SET tier_id = (SELECT id FROM subscription_tiers WHERE slug = 'unlimited')
+                WHERE user_id = CAST(:user_id AS uuid)
+                """
+            ),
+            {"user_id": user_id},
+        )
+
+    for index in range(6):
+        create_trip(client, csrf_token, f"Unlimited trip {index}")
+
+    trips = client.get("/trips")
+    assert trips.status_code == 200
+    assert trips.json()["quota"] == {"maxTripsPerUser": None, "ownedTripCount": 6}
+
+    trip_id = trips.json()["trips"][0]["id"]
+    upload = client.post(
+        f"/trips/{trip_id}/upload-sessions",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "files": [
+                {"filename": f"photo-{index}.jpg", "byteSize": 1, "mimeType": "image/jpeg"}
+                for index in range(101)
+            ]
+        },
+    )
+    assert upload.status_code == 201
+    assert upload.json()["quota"] == {
+        "maxFilesPerTrip": None,
+        "reservedFileCount": 101,
+        "remainingFileCount": None,
+    }
+
+
 def test_local_ops_endpoint_is_authenticated(client: TestClient) -> None:
     assert client.get("/ops/local-mvp").status_code == 401
 

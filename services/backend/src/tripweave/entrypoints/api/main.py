@@ -1555,7 +1555,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             or 0
         )
         max_trips_per_user, _, _ = quota_limits_for_user(db, auth.user.id)
-        if owned_trip_count >= max_trips_per_user:
+        if max_trips_per_user is not None and owned_trip_count >= max_trips_per_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Trip limit reached ({max_trips_per_user} trips per user)",
@@ -2074,10 +2074,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             monthlyUploadBytes=monthly_upload_bytes,
             monthlyUploadedBytes=monthly_uploaded_bytes,
             reservedFileCount=reserved_file_count,
-            remainingFileCount=max(max_files_per_trip - reserved_file_count, 0),
+            remainingFileCount=(
+                max(max_files_per_trip - reserved_file_count, 0)
+                if max_files_per_trip is not None
+                else None
+            ),
         )
 
-    def quota_limits_for_user(db: DbSession, user_id: UUID) -> tuple[int, int, int]:
+    def quota_limits_for_user(db: DbSession, user_id: UUID) -> tuple[int | None, int | None, int]:
         tier = db.scalar(
             select(orm.SubscriptionTier)
             .join(orm.UserTierAssignment, orm.UserTierAssignment.tier_id == orm.SubscriptionTier.id)
@@ -2088,12 +2092,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 select(orm.SubscriptionTier).where(orm.SubscriptionTier.slug == "basic")
             )
         return (
-            tier.max_trips_per_user
-            if tier and tier.max_trips_per_user is not None
-            else resolved_settings.max_trips_per_user,
-            tier.max_files_per_trip
-            if tier and tier.max_files_per_trip is not None
-            else resolved_settings.upload_max_files_per_trip,
+            tier.max_trips_per_user if tier else resolved_settings.max_trips_per_user,
+            tier.max_files_per_trip if tier else resolved_settings.upload_max_files_per_trip,
             tier.monthly_upload_bytes if tier else resolved_settings.upload_max_trip_bytes,
         )
 
@@ -4336,7 +4336,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Monthly upload limit reached for this tier",
             )
-        if len(payload.files) > quota.max_files_per_trip:
+        if quota.max_files_per_trip is not None and len(payload.files) > quota.max_files_per_trip:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Too many files for one trip"
             )
@@ -4346,7 +4346,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 orm.MediaItem.deleted_at.is_(None),
             )
         ).scalar_one()
-        if quota.reserved_file_count + len(payload.files) > quota.max_files_per_trip:
+        if (
+            quota.max_files_per_trip is not None
+            and quota.reserved_file_count + len(payload.files) > quota.max_files_per_trip
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Trip photo limit reached ({quota.max_files_per_trip} photos per trip)",

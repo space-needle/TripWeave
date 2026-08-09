@@ -478,7 +478,7 @@ export type TripMapTripResponse = {
 };
 
 export type TripQuotaResponse = {
-  maxTripsPerUser: number;
+  maxTripsPerUser: number | null;
   ownedTripCount: number;
 };
 
@@ -552,11 +552,11 @@ export type UploadGrantResponse = {
 };
 
 export type UploadQuotaResponse = {
-  maxFilesPerTrip: number;
+  maxFilesPerTrip: number | null;
   monthlyUploadBytes: number;
   monthlyUploadedBytes: number;
   reservedFileCount: number;
-  remainingFileCount: number;
+  remainingFileCount: number | null;
 };
 
 export type UploadSessionCreateRequest = {

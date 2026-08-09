@@ -410,7 +410,9 @@ function OwnerWorkspace() {
   const canOrganizeSelectedTrip =
     selectedTrip !== null && ["owner", "editor"].includes(selectedTrip.role);
   const tripQuotaReached =
-    tripQuota !== null && tripQuota.ownedTripCount >= tripQuota.maxTripsPerUser;
+    tripQuota !== null &&
+    tripQuota.maxTripsPerUser !== null &&
+    tripQuota.ownedTripCount >= tripQuota.maxTripsPerUser;
   const uploadQuotaReached =
     uploadQuota !== null &&
     (uploadQuota.remainingFileCount === 0 ||
@@ -996,7 +998,11 @@ function OwnerWorkspace() {
       return;
     }
     setUploadError("");
-    if (uploadQuota && files.length > uploadQuota.remainingFileCount) {
+    if (
+      uploadQuota !== null &&
+      uploadQuota.remainingFileCount !== null &&
+      files.length > uploadQuota.remainingFileCount
+    ) {
       setUploadError(
         `This trip can hold ${uploadQuota.maxFilesPerTrip} photos. Remove or cancel an upload before adding more.`,
       );
@@ -2865,7 +2871,11 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       return;
     }
     setError("");
-    if (uploadQuota && files.length > uploadQuota.remainingFileCount) {
+    if (
+      uploadQuota !== null &&
+      uploadQuota.remainingFileCount !== null &&
+      files.length > uploadQuota.remainingFileCount
+    ) {
       setError(
         `This trip can hold ${uploadQuota.maxFilesPerTrip} photos. Remove or cancel an upload before adding more.`,
       );
@@ -3031,6 +3041,9 @@ function formatBytes(bytes: number): string {
 }
 
 function tripQuotaMessage(quota: TripQuotaResponse): string {
+  if (quota.maxTripsPerUser === null) {
+    return `Trip quota: ${quota.ownedTripCount} trips used · unlimited trips.`;
+  }
   const remaining = Math.max(quota.maxTripsPerUser - quota.ownedTripCount, 0);
   if (remaining === 0) {
     return `Trip quota reached: ${quota.ownedTripCount} of ${quota.maxTripsPerUser} trips used. Ask an operator to move this account to a higher tier.`;
@@ -3044,6 +3057,9 @@ function uploadQuotaMessage(quota: UploadQuotaResponse): string {
   }
   if (quota.remainingFileCount === 0) {
     return `Photo quota reached: ${quota.reservedFileCount} of ${quota.maxFilesPerTrip} slots used or reserved. Cancel an upload or ask an operator to move this trip to a higher tier.`;
+  }
+  if (quota.maxFilesPerTrip === null) {
+    return `Photo quota: ${quota.reservedFileCount} slots used or reserved · unlimited photos.`;
   }
   return `Photo quota: ${quota.reservedFileCount} of ${quota.maxFilesPerTrip} slots used or reserved · ${quota.remainingFileCount} remaining.`;
 }
