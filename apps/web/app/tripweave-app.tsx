@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import maplibregl, {
   GeoJSONSource,
   LngLatBounds,
@@ -6947,8 +6948,10 @@ function PhotoBrowser({
     const completedDelta = completedSwipeRef.current;
     completedSwipeRef.current = null;
     if (completedDelta !== null) {
-      onSelect(photoAtOffset(completedDelta)?.id ?? selectedPhoto!.id);
-      requestAnimationFrame(() => updateSwipeOffset(0, false));
+      flushSync(() => {
+        onSelect(photoAtOffset(completedDelta)?.id ?? selectedPhoto!.id);
+      });
+      updateSwipeOffset(0, false);
       return;
     }
     updateSwipeOffset(0, false);
