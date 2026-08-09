@@ -111,18 +111,12 @@ test("local MVP publication path", async ({ page }) => {
     data: {},
   });
   expect(inviteOne.status()).toBe(201);
-  const inviteTwo = await owner.context.post(`/trips/${trip.id}/invitations`, {
-    headers: { "x-csrf-token": owner.csrf },
-    data: {},
-  });
-  expect(inviteTwo.status()).toBe(201);
-
   const contributorOne = await acceptInvite(
     (await inviteOne.json()).inviteUrl,
     "Contributor One",
   );
   const contributorTwo = await acceptInvite(
-    (await inviteTwo.json()).inviteUrl,
+    (await inviteOne.json()).inviteUrl,
     "Contributor Two",
   );
 

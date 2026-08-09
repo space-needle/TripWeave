@@ -232,7 +232,7 @@ class TripInvitation(Base):
         String(40), nullable=False, server_default=text("'pending'")
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("25"))
     use_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

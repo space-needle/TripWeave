@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     invitation_lifetime_seconds: int = Field(
         default=604800, ge=60, alias="TRIPWEAVE_INVITATION_SECONDS"
     )
+    invitation_max_uses: int = Field(
+        default=25, ge=1, le=1000, alias="TRIPWEAVE_INVITATION_MAX_USES"
+    )
     auth_rate_limit_window_seconds: int = Field(
         default=60, ge=1, alias="TRIPWEAVE_AUTH_RATE_LIMIT_WINDOW_SECONDS"
     )

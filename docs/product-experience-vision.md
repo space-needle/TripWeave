@@ -32,7 +32,8 @@ Current core capabilities include:
 
 - Account registration and login for trip owners.
 - Owner-created trips with title, dates, timezone, and settings.
-- Contributor invite links.
+- Shared contributor invite links. One link can be sent to the whole travel group;
+  each person joins with their own account and becomes a separate contributor.
 - Contributors accept invite links after logging in or creating an account.
 - Account-linked contributors can upload photos and return to joined trips from
   their trip library.

@@ -1528,6 +1528,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
             )
+        if invitation.use_count >= invitation.max_uses:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
         return invitation
 
     @app.post("/trips", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
@@ -1617,7 +1621,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             + timedelta(
                 seconds=payload.expires_in_seconds or resolved_settings.invitation_lifetime_seconds
             ),
-            max_uses=1,
+            max_uses=resolved_settings.invitation_max_uses,
             use_count=0,
         )
         db.add(invitation)
@@ -1686,34 +1690,41 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> GuestMemberResponse:
         require_csrf(request)
-        invitation = active_invitation_for_token(db, token)
+        invitation = db.execute(
+            select(orm.TripInvitation)
+            .where(orm.TripInvitation.token_hash == hash_token(token))
+            .with_for_update()
+        ).scalar_one_or_none()
+        if invitation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
         now = datetime.now(UTC)
-        member = (
-            db.get(orm.TripMember, invitation.accepted_member_id)
-            if invitation.accepted_member_id is not None
-            else None
-        )
+        if (
+            invitation.revoked_at is not None
+            or invitation.status == InvitationStatus.REVOKED.value
+            or invitation.expires_at <= now
+            or invitation.use_count >= invitation.max_uses
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
+            )
+        member = member_for_trip(db, invitation.trip_id, auth.user.id)
         if member is None:
-            member = member_for_trip(db, invitation.trip_id, auth.user.id)
-            if member is None:
-                if invitation.use_count >= invitation.max_uses:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
-                    )
-                member = orm.TripMember(
-                    trip_id=invitation.trip_id,
-                    user_id=auth.user.id,
-                    role=invitation.role,
-                    display_name=(payload.display_name or auth.user.display_name).strip(),
-                    joined_at=now,
-                )
-                db.add(member)
-                db.flush()
-            invitation.accepted_member_id = member.id
+            member = orm.TripMember(
+                trip_id=invitation.trip_id,
+                user_id=auth.user.id,
+                role=invitation.role,
+                display_name=(payload.display_name or auth.user.display_name).strip(),
+                joined_at=now,
+            )
+            db.add(member)
+            db.flush()
             invitation.accepted_at = now
             invitation.use_count += 1
-            invitation.status = InvitationStatus.ACCEPTED.value
-        elif member.removed_at is not None or member.user_id != auth.user.id:
+            if invitation.use_count >= invitation.max_uses:
+                invitation.status = InvitationStatus.ACCEPTED.value
+        elif member.removed_at is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
             )

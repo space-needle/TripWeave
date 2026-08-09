@@ -641,7 +641,7 @@ def test_trip_map_points_include_only_owned_trips_and_filter_by_date(
     assert invalid.status_code == 400
 
 
-def test_owner_invites_account_contributor_and_contributor_uploads_with_attribution(
+def test_owner_shared_invite_adds_multiple_account_contributors_with_attribution(
     client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:
     url = get_test_database_url()
@@ -649,6 +649,7 @@ def test_owner_invites_account_contributor_and_contributor_uploads_with_attribut
     csrf_owner = register(client, "invite-owner@example.com")
     trip = create_trip(client, csrf_owner)
     invitation = create_invitation(client, csrf_owner, trip["id"])
+    assert invitation["maxUses"] == 25
     token = token_from_invite_url(str(invitation["inviteUrl"]))
 
     contributor_client = TestClient(
@@ -699,7 +700,12 @@ def test_owner_invites_account_contributor_and_contributor_uploads_with_attribut
         headers={"x-csrf-token": csrf_other},
         json={},
     )
-    assert reused_elsewhere.status_code == 404
+    assert reused_elsewhere.status_code == 200
+    assert reused_elsewhere.json()["displayName"] == "imposter"
+
+    invitations = client.get(f"/trips/{trip['id']}/invitations")
+    assert invitations.status_code == 200
+    assert invitations.json()["invitations"][0]["useCount"] == 2
 
     media_item_id = upload_completed_jpeg(
         contributor_client,

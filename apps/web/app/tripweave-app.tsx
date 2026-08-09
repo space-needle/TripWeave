@@ -2365,7 +2365,7 @@ function OwnerWorkspace() {
                     onClick={createInvite}
                     disabled={isBusy}
                   >
-                    Create invite link
+                    Create shared invite link
                   </button>
                   {latestInviteUrl ? (
                     <button type="button" onClick={copyInviteUrl}>
@@ -8874,10 +8874,10 @@ function InvitationList({
             <strong>{invitation.role}</strong>
             <small>
               {invitation.status} · {invitation.useCount}/{invitation.maxUses}{" "}
-              used
+              joined
             </small>
           </div>
-          {invitation.status === "pending" ? (
+          {invitation.status !== "revoked" ? (
             <button type="button" onClick={() => onRevoke(invitation)}>
               Revoke
             </button>
