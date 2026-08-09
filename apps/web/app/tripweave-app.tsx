@@ -6835,6 +6835,22 @@ function PhotoBrowser({
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
   const hasMultiple = photos.length > 1;
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeTargetDelta, setSwipeTargetDelta] = useState<number | null>(
+    null,
+  );
+  const [isSwipeSettling, setIsSwipeSettling] = useState(false);
+
+  const photoAtOffset = useCallback(
+    (delta: number) => {
+      if (!selectedPhoto || photos.length === 0) {
+        return null;
+      }
+      const index = (selectedIndex + delta + photos.length) % photos.length;
+      return photos[index];
+    },
+    [photos, selectedIndex, selectedPhoto],
+  );
 
   const moveBy = useCallback(
     (delta: number) => {
@@ -6870,10 +6886,31 @@ function PhotoBrowser({
       return;
     }
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    setIsSwipeSettling(false);
   }
 
   function forgetTouch() {
     touchStartRef.current = null;
+    setSwipeOffset(0);
+    setSwipeTargetDelta(null);
+    setIsSwipeSettling(false);
+  }
+
+  function handleTouchMove(event: TouchEvent<HTMLDivElement>) {
+    const start = touchStartRef.current;
+    const touch = event.touches[0];
+    if (!start || !touch || !hasMultiple || isSwipeSettling) {
+      return;
+    }
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 6 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
+      return;
+    }
+    const stageWidth = event.currentTarget.clientWidth;
+    const boundedOffset = Math.max(-stageWidth, Math.min(stageWidth, deltaX));
+    setSwipeOffset(boundedOffset);
+    setSwipeTargetDelta(deltaX > 0 ? -1 : 1);
   }
 
   function handleTouchEnd(event: TouchEvent<HTMLDivElement>) {
@@ -6887,18 +6924,37 @@ function PhotoBrowser({
     const deltaY = touch.clientY - start.y;
     const horizontalDistance = Math.abs(deltaX);
     const verticalDistance = Math.abs(deltaY);
+    const stageWidth = event.currentTarget.clientWidth;
     if (
       horizontalDistance < 48 ||
       horizontalDistance < verticalDistance * 1.25
     ) {
+      setSwipeOffset(0);
+      setSwipeTargetDelta(null);
+      setIsSwipeSettling(true);
       return;
     }
-    moveBy(deltaX > 0 ? -1 : 1);
+    const delta = deltaX > 0 ? -1 : 1;
+    setSwipeTargetDelta(delta);
+    setSwipeOffset(delta * -stageWidth);
+    setIsSwipeSettling(true);
+  }
+
+  function finishSwipe() {
+    if (swipeTargetDelta !== null && swipeOffset !== 0) {
+      const completedDelta = swipeOffset > 0 ? -1 : 1;
+      onSelect(photoAtOffset(completedDelta)?.id ?? selectedPhoto!.id);
+    }
+    setSwipeOffset(0);
+    setSwipeTargetDelta(null);
+    setIsSwipeSettling(false);
   }
 
   if (!selectedPhoto) {
     return null;
   }
+  const swipeTargetPhoto =
+    swipeTargetDelta === null ? null : photoAtOffset(swipeTargetDelta);
 
   return (
     <div
@@ -6934,6 +6990,7 @@ function PhotoBrowser({
         <div
           className="photo-browser-stage"
           onTouchStart={rememberTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchCancel={forgetTouch}
           onTouchEnd={handleTouchEnd}
         >
@@ -6948,11 +7005,42 @@ function PhotoBrowser({
             </button>
           ) : null}
           {selectedPhoto.imageUrl ? (
-            <img
-              className="photo-browser-image"
-              src={selectedPhoto.imageUrl}
-              alt={selectedPhoto.filename ?? "Trip photo"}
-            />
+            <div className="photo-browser-swipe-track">
+              {swipeTargetDelta !== null ? (
+                swipeTargetPhoto?.imageUrl ? (
+                  <img
+                    className={`photo-browser-image photo-browser-image-adjacent${
+                      isSwipeSettling ? " is-settling" : ""
+                    }`}
+                    src={swipeTargetPhoto.imageUrl}
+                    alt=""
+                    style={{
+                      transform: `translate3d(calc(${swipeTargetDelta * 100}% + ${swipeOffset}px), 0, 0)`,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={`photo-browser-missing photo-browser-image-adjacent${
+                      isSwipeSettling ? " is-settling" : ""
+                    }`}
+                    style={{
+                      transform: `translate3d(calc(${swipeTargetDelta * 100}% + ${swipeOffset}px), 0, 0)`,
+                    }}
+                  >
+                    Preview unavailable
+                  </div>
+                )
+              ) : null}
+              <img
+                className={`photo-browser-image${
+                  isSwipeSettling ? " is-settling" : ""
+                }`}
+                src={selectedPhoto.imageUrl}
+                alt={selectedPhoto.filename ?? "Trip photo"}
+                style={{ transform: `translate3d(${swipeOffset}px, 0, 0)` }}
+                onTransitionEnd={finishSwipe}
+              />
+            </div>
           ) : (
             <div className="photo-browser-missing">Preview unavailable</div>
           )}
