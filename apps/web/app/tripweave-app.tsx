@@ -6946,10 +6946,12 @@ function PhotoBrowser({
   function finishSwipe() {
     const completedDelta = completedSwipeRef.current;
     completedSwipeRef.current = null;
-    updateSwipeOffset(0, false);
     if (completedDelta !== null) {
       onSelect(photoAtOffset(completedDelta)?.id ?? selectedPhoto!.id);
+      requestAnimationFrame(() => updateSwipeOffset(0, false));
+      return;
     }
+    updateSwipeOffset(0, false);
   }
 
   if (!selectedPhoto) {
