@@ -3637,6 +3637,7 @@ button.thumb-frame:focus-visible {
 .photo-browser-swipe-track {
   position: absolute;
   inset: 0;
+  --photo-browser-swipe-offset: 0px;
 }
 
 .photo-browser-image {
@@ -3651,13 +3652,36 @@ button.thumb-frame:focus-visible {
   will-change: transform;
 }
 
-.photo-browser-image.is-settling,
-.photo-browser-missing.is-settling {
+.photo-browser-swipe-track.is-settling .photo-browser-image,
+.photo-browser-swipe-track.is-settling .photo-browser-missing {
   transition: transform 180ms ease-out;
 }
 
 .photo-browser-image-adjacent {
   pointer-events: none;
+}
+
+.photo-browser-image.current,
+.photo-browser-missing.current {
+  transform: translate3d(var(--photo-browser-swipe-offset), 0, 0);
+}
+
+.photo-browser-image.previous,
+.photo-browser-missing.previous {
+  transform: translate3d(
+    calc(-100% + var(--photo-browser-swipe-offset)),
+    0,
+    0
+  );
+}
+
+.photo-browser-image.next,
+.photo-browser-missing.next {
+  transform: translate3d(
+    calc(100% + var(--photo-browser-swipe-offset)),
+    0,
+    0
+  );
 }
 
 .photo-browser-missing {

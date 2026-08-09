@@ -6835,11 +6835,8 @@ function PhotoBrowser({
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
   const hasMultiple = photos.length > 1;
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const [swipeTargetDelta, setSwipeTargetDelta] = useState<number | null>(
-    null,
-  );
-  const [isSwipeSettling, setIsSwipeSettling] = useState(false);
+  const swipeTrackRef = useRef<HTMLDivElement>(null);
+  const completedSwipeRef = useRef<number | null>(null);
 
   const photoAtOffset = useCallback(
     (delta: number) => {
@@ -6886,20 +6883,29 @@ function PhotoBrowser({
       return;
     }
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    setIsSwipeSettling(false);
+    completedSwipeRef.current = null;
+    updateSwipeOffset(0, false);
   }
 
   function forgetTouch() {
     touchStartRef.current = null;
-    setSwipeOffset(0);
-    setSwipeTargetDelta(null);
-    setIsSwipeSettling(false);
+    completedSwipeRef.current = null;
+    updateSwipeOffset(0, true);
+  }
+
+  function updateSwipeOffset(offset: number, isSettling: boolean) {
+    const track = swipeTrackRef.current;
+    if (!track) {
+      return;
+    }
+    track.style.setProperty("--photo-browser-swipe-offset", `${offset}px`);
+    track.classList.toggle("is-settling", isSettling);
   }
 
   function handleTouchMove(event: TouchEvent<HTMLDivElement>) {
     const start = touchStartRef.current;
     const touch = event.touches[0];
-    if (!start || !touch || !hasMultiple || isSwipeSettling) {
+    if (!start || !touch || !hasMultiple) {
       return;
     }
     const deltaX = touch.clientX - start.x;
@@ -6909,8 +6915,7 @@ function PhotoBrowser({
     }
     const stageWidth = event.currentTarget.clientWidth;
     const boundedOffset = Math.max(-stageWidth, Math.min(stageWidth, deltaX));
-    setSwipeOffset(boundedOffset);
-    setSwipeTargetDelta(deltaX > 0 ? -1 : 1);
+    updateSwipeOffset(boundedOffset, false);
   }
 
   function handleTouchEnd(event: TouchEvent<HTMLDivElement>) {
@@ -6929,32 +6934,29 @@ function PhotoBrowser({
       horizontalDistance < 48 ||
       horizontalDistance < verticalDistance * 1.25
     ) {
-      setSwipeOffset(0);
-      setSwipeTargetDelta(null);
-      setIsSwipeSettling(true);
+      completedSwipeRef.current = null;
+      updateSwipeOffset(0, true);
       return;
     }
     const delta = deltaX > 0 ? -1 : 1;
-    setSwipeTargetDelta(delta);
-    setSwipeOffset(delta * -stageWidth);
-    setIsSwipeSettling(true);
+    completedSwipeRef.current = delta;
+    updateSwipeOffset(delta * -stageWidth, true);
   }
 
   function finishSwipe() {
-    if (swipeTargetDelta !== null && swipeOffset !== 0) {
-      const completedDelta = swipeOffset > 0 ? -1 : 1;
+    const completedDelta = completedSwipeRef.current;
+    completedSwipeRef.current = null;
+    updateSwipeOffset(0, false);
+    if (completedDelta !== null) {
       onSelect(photoAtOffset(completedDelta)?.id ?? selectedPhoto!.id);
     }
-    setSwipeOffset(0);
-    setSwipeTargetDelta(null);
-    setIsSwipeSettling(false);
   }
 
   if (!selectedPhoto) {
     return null;
   }
-  const swipeTargetPhoto =
-    swipeTargetDelta === null ? null : photoAtOffset(swipeTargetDelta);
+  const previousPhoto = photoAtOffset(-1);
+  const nextPhoto = photoAtOffset(1);
 
   return (
     <div
@@ -7005,41 +7007,35 @@ function PhotoBrowser({
             </button>
           ) : null}
           {selectedPhoto.imageUrl ? (
-            <div className="photo-browser-swipe-track">
-              {swipeTargetDelta !== null ? (
-                swipeTargetPhoto?.imageUrl ? (
-                  <img
-                    className={`photo-browser-image photo-browser-image-adjacent${
-                      isSwipeSettling ? " is-settling" : ""
-                    }`}
-                    src={swipeTargetPhoto.imageUrl}
-                    alt=""
-                    style={{
-                      transform: `translate3d(calc(${swipeTargetDelta * 100}% + ${swipeOffset}px), 0, 0)`,
-                    }}
-                  />
-                ) : (
-                  <div
-                    className={`photo-browser-missing photo-browser-image-adjacent${
-                      isSwipeSettling ? " is-settling" : ""
-                    }`}
-                    style={{
-                      transform: `translate3d(calc(${swipeTargetDelta * 100}% + ${swipeOffset}px), 0, 0)`,
-                    }}
-                  >
-                    Preview unavailable
-                  </div>
-                )
-              ) : null}
+            <div className="photo-browser-swipe-track" ref={swipeTrackRef}>
+              {previousPhoto?.imageUrl ? (
+                <img
+                  className="photo-browser-image photo-browser-image-adjacent previous"
+                  src={previousPhoto.imageUrl}
+                  alt=""
+                />
+              ) : (
+                <div className="photo-browser-missing photo-browser-image-adjacent previous">
+                  Preview unavailable
+                </div>
+              )}
               <img
-                className={`photo-browser-image${
-                  isSwipeSettling ? " is-settling" : ""
-                }`}
+                className="photo-browser-image current"
                 src={selectedPhoto.imageUrl}
                 alt={selectedPhoto.filename ?? "Trip photo"}
-                style={{ transform: `translate3d(${swipeOffset}px, 0, 0)` }}
                 onTransitionEnd={finishSwipe}
               />
+              {nextPhoto?.imageUrl ? (
+                <img
+                  className="photo-browser-image photo-browser-image-adjacent next"
+                  src={nextPhoto.imageUrl}
+                  alt=""
+                />
+              ) : (
+                <div className="photo-browser-missing photo-browser-image-adjacent next">
+                  Preview unavailable
+                </div>
+              )}
             </div>
           ) : (
             <div className="photo-browser-missing">Preview unavailable</div>
