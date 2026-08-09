@@ -7,6 +7,7 @@ import {
   FormEvent,
   Fragment,
   KeyboardEvent,
+  TouchEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -6833,6 +6834,15 @@ function PhotoBrowser({
   );
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : null;
   const hasMultiple = photos.length > 1;
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [imageOrientation, setImageOrientation] = useState<{
+    photoId: string;
+    value: "landscape" | "portrait" | "square";
+  } | null>(null);
+  const selectedImageOrientation =
+    imageOrientation && imageOrientation.photoId === selectedPhoto?.id
+      ? imageOrientation.value
+      : null;
 
   const moveBy = useCallback(
     (delta: number) => {
@@ -6861,6 +6871,38 @@ function PhotoBrowser({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [moveBy, onClose, selectedPhoto]);
+
+  function rememberTouchStart(event: TouchEvent<HTMLDivElement>) {
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function forgetTouch() {
+    touchStartRef.current = null;
+  }
+
+  function handleTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    const start = touchStartRef.current;
+    const touch = event.changedTouches[0];
+    touchStartRef.current = null;
+    if (!start || !touch || !hasMultiple) {
+      return;
+    }
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const horizontalDistance = Math.abs(deltaX);
+    const verticalDistance = Math.abs(deltaY);
+    if (
+      horizontalDistance < 48 ||
+      horizontalDistance < verticalDistance * 1.25
+    ) {
+      return;
+    }
+    moveBy(deltaX > 0 ? -1 : 1);
+  }
 
   if (!selectedPhoto) {
     return null;
@@ -6897,7 +6939,12 @@ function PhotoBrowser({
             <TimelineActionIcon name="x" />
           </button>
         </div>
-        <div className="photo-browser-stage">
+        <div
+          className="photo-browser-stage"
+          onTouchStart={rememberTouchStart}
+          onTouchCancel={forgetTouch}
+          onTouchEnd={handleTouchEnd}
+        >
           {hasMultiple ? (
             <button
               className="photo-browser-nav previous"
@@ -6910,8 +6957,30 @@ function PhotoBrowser({
           ) : null}
           {selectedPhoto.imageUrl ? (
             <img
+              className={
+                selectedImageOrientation
+                  ? `photo-browser-image ${selectedImageOrientation}`
+                  : "photo-browser-image"
+              }
               src={selectedPhoto.imageUrl}
               alt={selectedPhoto.filename ?? "Trip photo"}
+              onLoad={(event) => {
+                const image = event.currentTarget;
+                if (image.naturalWidth === image.naturalHeight) {
+                  setImageOrientation({
+                    photoId: selectedPhoto.id,
+                    value: "square",
+                  });
+                } else {
+                  setImageOrientation({
+                    photoId: selectedPhoto.id,
+                    value:
+                      image.naturalWidth > image.naturalHeight
+                        ? "landscape"
+                        : "portrait",
+                  });
+                }
+              }}
             />
           ) : (
             <div className="photo-browser-missing">Preview unavailable</div>

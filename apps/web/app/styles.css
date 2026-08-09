@@ -3629,15 +3629,28 @@ button.thumb-frame:focus-visible {
   min-height: 0;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: #0a0f14;
+  touch-action: pan-y;
 }
 
-.photo-browser-stage img {
+.photo-browser-image {
   width: 100%;
   height: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.photo-browser-image.portrait {
+  width: auto;
+  height: 100%;
+  max-width: none;
+}
+
+.photo-browser-image.square {
+  width: auto;
+  height: 100%;
 }
 
 .photo-browser-missing {
@@ -4110,8 +4123,23 @@ button.thumb-frame:focus-visible {
     border-radius: 0;
   }
 
+  .photo-browser-toolbar {
+    padding: 10px 12px;
+  }
+
   .photo-browser-stage {
     min-height: 0;
+  }
+
+  .photo-browser-footer {
+    gap: 8px;
+    padding: 8px 12px 10px;
+  }
+
+  .photo-browser-strip button {
+    width: 56px;
+    min-height: 42px;
+    flex-basis: 56px;
   }
 
   .story-timeline {
