@@ -2977,6 +2977,111 @@ def test_split_stop_can_split_inside_single_moment_by_media(
     assert [item["id"] for item in split_stops[1]["moments"][0]["media"]] == media_ids[3:]
 
 
+def test_owner_can_remove_stop_without_deleting_its_media(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "delete-stop-owner@example.com")
+    trip = create_trip(client, csrf_token, "Delete Stop Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    "SELECT id FROM trip_members "
+                    "WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'"
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+    media_id = insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=trip_id,
+        member_id=member_id,
+        filename="keep-library-photo.jpg",
+        captured_at=datetime(2026, 6, 9, 10, 0, tzinfo=UTC),
+        latitude=35.0,
+        longitude=127.0,
+        sha256="a" * 64,
+    )
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    stop_id = reconstructed.json()["days"][0]["stops"][0]["id"]
+
+    deleted = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={"operationType": "delete_stop", "payload": {"stopId": stop_id}},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["afterValues"] == {
+        "deletedStopId": stop_id,
+        "mediaRemainInLibrary": True,
+    }
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
+    assert refreshed.status_code == 200
+    assert refreshed.json()["days"][0]["stops"] == []
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT deleted_at IS NULL FROM media_items WHERE id = CAST(:id AS uuid)"),
+            {"id": media_id},
+        ).scalar_one()
+
+
+def test_deleting_last_photo_removes_its_empty_stop(client: TestClient, engine: Engine) -> None:
+    csrf_token = register(client, "delete-last-photo-owner@example.com")
+    trip = create_trip(client, csrf_token, "Delete Last Photo Trip")
+    trip_id = str(trip["id"])
+    with engine.connect() as connection:
+        member_id = str(
+            connection.execute(
+                text(
+                    "SELECT id FROM trip_members "
+                    "WHERE trip_id = CAST(:trip_id AS uuid) AND role = 'owner'"
+                ),
+                {"trip_id": trip_id},
+            ).scalar_one()
+        )
+    media_id = insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=trip_id,
+        member_id=member_id,
+        filename="outlier-photo.jpg",
+        captured_at=datetime(2026, 6, 10, 10, 0, tzinfo=UTC),
+        latitude=35.0,
+        longitude=127.0,
+        sha256="b" * 64,
+    )
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    assert len(reconstructed.json()["days"][0]["stops"]) == 1
+
+    deleted = client.patch(
+        f"/media/{media_id}",
+        headers={"x-csrf-token": csrf_token},
+        json={"deleted": True},
+    )
+    assert deleted.status_code == 200, deleted.text
+    refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
+    assert refreshed.status_code == 200
+    assert refreshed.json()["days"][0]["stops"] == []
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT deleted_at IS NOT NULL FROM media_items WHERE id = CAST(:id AS uuid)"),
+            {"id": media_id},
+        ).scalar_one()
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM moment_media WHERE media_item_id = CAST(:id AS uuid)"),
+                {"id": media_id},
+            ).scalar_one()
+            == 0
+        )
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:

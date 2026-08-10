@@ -152,6 +152,7 @@ class ReviewItemStatus(StrEnum):
 class EditOperationType(StrEnum):
     MOVE_MEDIA = "move_media"
     MOVE_AFTER_MIDNIGHT_MEDIA = "move_after_midnight_media"
+    DELETE_STOP = "delete_stop"
     MERGE_STOPS = "merge_stops"
     SPLIT_STOP = "split_stop"
     MERGE_MOMENTS = "merge_moments"

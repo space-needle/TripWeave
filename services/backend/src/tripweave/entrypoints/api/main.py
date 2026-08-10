@@ -3044,6 +3044,75 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             stop.position = position
             lock_record(stop)
 
+    def remove_empty_stop_after_media_deletion(
+        db: DbSession,
+        *,
+        trip_id: UUID,
+        run: orm.ReconstructionRun | None,
+        trip_day_ids: set[UUID],
+    ) -> list[UUID]:
+        """Remove now-empty derived grouping records, while retaining the deleted media record."""
+        empty_moments = list(
+            db.scalars(
+                select(orm.Moment)
+                .outerjoin(orm.MomentMedia, orm.MomentMedia.moment_id == orm.Moment.id)
+                .where(orm.Moment.trip_id == trip_id)
+                .group_by(orm.Moment.id)
+                .having(func.count(orm.MomentMedia.id) == 0)
+            )
+        )
+        for moment in empty_moments:
+            trip_day_id = db.scalar(
+                select(orm.Stop.trip_day_id).where(orm.Stop.id == moment.stop_id)
+            )
+            if trip_day_id is not None:
+                trip_day_ids.add(trip_day_id)
+            db.delete(moment)
+        db.flush()
+
+        empty_stops = list(
+            db.scalars(
+                select(orm.Stop)
+                .outerjoin(orm.Moment, orm.Moment.stop_id == orm.Stop.id)
+                .where(orm.Stop.trip_id == trip_id)
+                .group_by(orm.Stop.id)
+                .having(func.count(orm.Moment.id) == 0)
+            )
+        )
+        removed_stop_ids: list[UUID] = []
+        for stop in empty_stops:
+            trip_day_ids.add(stop.trip_day_id)
+            removed_stop_ids.append(stop.id)
+            db.delete(stop)
+        db.flush()
+        retire_empty_area_visits(db, trip_id)
+
+        if run is not None:
+            for trip_day_id in trip_day_ids:
+                renumber_day_stops(db, trip_day_id)
+                rebuild_inferred_day_legs_for_edit(db, run, trip_day_id)
+        return removed_stop_ids
+
+    def retire_empty_area_visits(db: DbSession, trip_id: UUID) -> None:
+        empty_areas = list(
+            db.scalars(
+                select(orm.AreaVisit)
+                .outerjoin(
+                    orm.AreaVisitStop,
+                    orm.AreaVisitStop.area_visit_id == orm.AreaVisit.id,
+                )
+                .where(
+                    orm.AreaVisit.trip_id == trip_id,
+                    orm.AreaVisit.deleted_at.is_(None),
+                )
+                .group_by(orm.AreaVisit.id)
+                .having(func.count(orm.AreaVisitStop.id) == 0)
+            )
+        )
+        now = datetime.now(UTC)
+        for area in empty_areas:
+            area.deleted_at = now
+
     def normalized_title(value: str | None) -> str | None:
         title = " ".join(value.split()) if value is not None else ""
         return title or None
@@ -3285,6 +3354,31 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             media.updated_at = datetime.now(UTC)
             after = record_values(media, ["effective_captured_at_utc", "user_locked"])
             target_type, target_id = "media_item", media_id
+
+        elif operation_type == EditOperationType.DELETE_STOP.value:
+            stop = db.get(orm.Stop, payload_uuid(data, "stopId"))
+            if stop is None or stop.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
+            expected_fresh(stop, payload.expected_updated_at)
+            moment_ids = [moment.id for moment in ordered_stop_moments(db, stop.id)]
+            media_ids = [media.id for media in ordered_stop_media(db, stop.id)]
+            before = {
+                "stopId": str(stop.id),
+                "dayId": str(stop.trip_day_id),
+                "momentIds": [str(moment_id) for moment_id in moment_ids],
+                "mediaItemIds": [str(media_id) for media_id in media_ids],
+            }
+            trip_day_id = stop.trip_day_id
+            db.delete(stop)
+            db.flush()
+            retire_empty_area_visits(db, trip_id)
+            renumber_day_stops(db, trip_day_id)
+            rebuild_inferred_day_legs_for_edit(db, run, trip_day_id)
+            after = {
+                "deletedStopId": str(stop.id),
+                "mediaRemainInLibrary": True,
+            }
+            target_type, target_id = "stop", stop.id
 
         elif operation_type == EditOperationType.MERGE_STOPS.value:
             source = db.get(orm.Stop, payload_uuid(data, "sourceStopId"))
@@ -4748,16 +4842,37 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
         previous_include_in_story = media_item.include_in_story
         previous_deleted_at = media_item.deleted_at
-
-        if is_contributor_owner and not is_owner_editor:
+        if payload.deleted:
+            if not is_contributor_owner:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only the contributor can delete this media",
+                )
+            affected_day_ids = set(
+                db.scalars(
+                    select(orm.Stop.trip_day_id)
+                    .join(orm.Moment, orm.Moment.stop_id == orm.Stop.id)
+                    .join(orm.MomentMedia, orm.MomentMedia.moment_id == orm.Moment.id)
+                    .where(orm.MomentMedia.media_item_id == media_item.id)
+                )
+            )
+            media_item.deleted_at = datetime.now(UTC)
+            media_item.include_in_story = False
+            db.execute(
+                delete(orm.MomentMedia).where(orm.MomentMedia.media_item_id == media_item.id)
+            )
+            remove_empty_stop_after_media_deletion(
+                db,
+                trip_id=media_item.trip_id,
+                run=latest_run_for_trip_or_none(db, media_item.trip_id),
+                trip_day_ids=affected_day_ids,
+            )
+        elif is_contributor_owner and not is_owner_editor:
             if payload.visibility is not None:
                 media_item.visibility = payload.visibility
                 media_item.user_locked = True
             if payload.include_in_story is not None:
                 media_item.include_in_story = payload.include_in_story
-            if payload.deleted:
-                media_item.deleted_at = datetime.now(UTC)
-                media_item.include_in_story = False
         else:
             if payload.visibility is not None:
                 if media_item.contributor_member_id != member.id:

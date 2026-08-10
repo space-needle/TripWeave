@@ -1147,6 +1147,26 @@ function OwnerWorkspace() {
     }
   }
 
+  async function deleteOwnMedia(item: MediaItemResponse) {
+    if (
+      !selectedTrip ||
+      !window.confirm(`Delete ${item.filename ?? "this photo"}?`)
+    ) {
+      return;
+    }
+    setMediaError("");
+    try {
+      await api.updateMedia(item.id, { deleted: true });
+      await Promise.all([
+        loadMedia(selectedTrip.id),
+        loadReconstruction(selectedTrip.id),
+        loadStoryProjection(selectedTrip.id),
+      ]);
+    } catch (error) {
+      setMediaError(messageFrom(error));
+    }
+  }
+
   async function createInvite() {
     if (!selectedTrip) {
       return;
@@ -1430,6 +1450,23 @@ function OwnerWorkspace() {
       await api.createEditOperation(selectedTrip.id, {
         operationType: "split_stop",
         payload: { stopId, afterMediaItemId },
+      });
+      await loadReconstruction(selectedTrip.id);
+    } catch (error) {
+      setReconstructionError(messageFrom(error));
+      throw error;
+    }
+  }
+
+  async function deleteStop(stopId: string) {
+    if (!selectedTrip) {
+      return;
+    }
+    setReconstructionError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "delete_stop",
+        payload: { stopId },
       });
       await loadReconstruction(selectedTrip.id);
     } catch (error) {
@@ -2155,6 +2192,9 @@ function OwnerWorkspace() {
                   onRenameStop={
                     canOrganizeSelectedTrip ? renameStop : undefined
                   }
+                  onDeleteStop={
+                    canOrganizeSelectedTrip ? deleteStop : undefined
+                  }
                   onSetDayNote={
                     canOrganizeSelectedTrip ? setDayNote : undefined
                   }
@@ -2329,6 +2369,7 @@ function OwnerWorkspace() {
                     Boolean(item.canUpdateVisibility) ||
                     item.contributorMemberId === selectedTrip?.memberId
                   }
+                  onDelete={deleteOwnMedia}
                   timezoneId={selectedTrip?.timezoneId}
                 />
                 {canOrganizeSelectedTrip ? (
@@ -3985,6 +4026,7 @@ function TripStoryExplorer({
   onRemoveAreaVisitStop,
   onRenameAreaVisit,
   onRenameStop,
+  onDeleteStop,
   onSetDayNote,
   onSetStopNote,
   onSplitStop,
@@ -4013,6 +4055,7 @@ function TripStoryExplorer({
   ) => Promise<void>;
   onRenameAreaVisit?: (areaVisitId: string, title: string) => Promise<void>;
   onRenameStop?: (stopId: string, title: string) => Promise<void>;
+  onDeleteStop?: (stopId: string) => Promise<void>;
   onSetDayNote?: (dayId: string, note: string) => Promise<void>;
   onSetStopNote?: (stopId: string, note: string) => Promise<void>;
   onSplitStop?: (stopId: string, afterMediaItemId: string) => Promise<void>;
@@ -4048,6 +4091,9 @@ function TripStoryExplorer({
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [renameStopError, setRenameStopError] = useState("");
   const [savingStopId, setSavingStopId] = useState<string | null>(null);
+  const [pendingDeleteStopId, setPendingDeleteStopId] = useState<string | null>(
+    null,
+  );
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteError, setNoteError] = useState("");
@@ -5159,6 +5205,32 @@ function TripStoryExplorer({
     }
   }
 
+  async function deleteTimelineStop(
+    stop: ReconstructionStopResponse,
+    dayId: string,
+  ) {
+    if (!onDeleteStop) {
+      return;
+    }
+    if (pendingDeleteStopId !== stop.id) {
+      setPendingDeleteStopId(stop.id);
+      return;
+    }
+    setSavingStopId(stop.id);
+    setPendingTimelineAction("Removing stop from timeline...");
+    try {
+      await onDeleteStop(stop.id);
+      onStateChange(selectStoryDay(state, dayId));
+      setEditToolsStopId(null);
+      setPendingDeleteStopId(null);
+    } catch (error) {
+      setRenameStopError(messageFrom(error));
+    } finally {
+      setSavingStopId(null);
+      setPendingTimelineAction(null);
+    }
+  }
+
   async function saveTimelineNote(
     kind: "day" | "stop",
     id: string,
@@ -5863,7 +5935,8 @@ function TripStoryExplorer({
                       (onRenameStop ||
                         onSetStopNote ||
                         onMergeStops ||
-                        onSplitStop);
+                        onSplitStop ||
+                        onDeleteStop);
                     const mergeCandidates = mergeCandidateStops(
                       day,
                       stop,
@@ -6270,6 +6343,7 @@ function TripStoryExplorer({
                                       setSplitStopId(null);
                                       setSplitStopError("");
                                       setPendingSplitKey(null);
+                                      setPendingDeleteStopId(null);
                                       setEditingNoteKey(
                                         nextStopId ? `stop:${stop.id}` : null,
                                       );
@@ -6418,7 +6492,8 @@ function TripStoryExplorer({
                                   </form>
                                 ) : null}
                                 {(onMergeStops && mergeCandidates.length > 0) ||
-                                (onSplitStop && stopMedia.length > 1) ? (
+                                (onSplitStop && stopMedia.length > 1) ||
+                                onDeleteStop ? (
                                   <div className="timeline-structure-tools">
                                     {onMergeStops &&
                                     mergeCandidates.length > 0 ? (
@@ -6483,6 +6558,24 @@ function TripStoryExplorer({
                                         {splitStopId === stop.id
                                           ? "Cancel split"
                                           : "Split"}
+                                      </button>
+                                    ) : null}
+                                    {onDeleteStop ? (
+                                      <button
+                                        type="button"
+                                        className={
+                                          pendingDeleteStopId === stop.id
+                                            ? "timeline-tool-button danger pending"
+                                            : "timeline-tool-button danger"
+                                        }
+                                        disabled={savingStopId === stop.id}
+                                        onClick={() =>
+                                          void deleteTimelineStop(stop, day.id)
+                                        }
+                                      >
+                                        {pendingDeleteStopId === stop.id
+                                          ? "Confirm remove"
+                                          : "Remove stop"}
                                       </button>
                                     ) : null}
                                     {pendingMergeKey ? (
