@@ -3809,6 +3809,28 @@ button.thumb-frame:focus-visible {
   align-items: center;
 }
 
+.media-location-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.media-location-map {
+  height: min(56vh, 440px);
+  position: relative;
+}
+
+.media-location-pin {
+  color: #d94738;
+  font-size: 30px;
+  left: 50%;
+  line-height: 1;
+  pointer-events: none;
+  position: absolute;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
 .media-details strong,
 .media-details small {
   overflow-wrap: anywhere;

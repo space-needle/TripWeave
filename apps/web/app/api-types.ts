@@ -168,6 +168,8 @@ export type MediaItemResponse = {
   canUpdateVisibility: boolean;
   capturedAt?: string | null;
   gpsPresent: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
   width?: number | null;
   height?: number | null;
   contributor: string;

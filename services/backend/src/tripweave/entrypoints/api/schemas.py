@@ -387,6 +387,8 @@ class MediaItemResponse(BaseModel):
     can_update_visibility: bool = Field(alias="canUpdateVisibility")
     captured_at: datetime | None = Field(default=None, alias="capturedAt")
     gps_present: bool = Field(alias="gpsPresent")
+    latitude: float | None = None
+    longitude: float | None = None
     width: int | None = None
     height: int | None = None
     contributor: str

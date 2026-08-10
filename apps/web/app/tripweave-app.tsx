@@ -363,6 +363,9 @@ function OwnerWorkspace() {
     SimilarityGroupResponse[]
   >([]);
   const [mediaError, setMediaError] = useState("");
+  const [locationMedia, setLocationMedia] = useState<MediaItemResponse | null>(
+    null,
+  );
   const [reconstruction, setReconstruction] =
     useState<ReconstructionResponse | null>(null);
   const [storyProjection, setStoryProjection] =
@@ -1164,6 +1167,26 @@ function OwnerWorkspace() {
       ]);
     } catch (error) {
       setMediaError(messageFrom(error));
+    }
+  }
+
+  async function saveMediaLocation(latitude: number, longitude: number) {
+    if (!selectedTrip || !locationMedia) return;
+    setMediaError("");
+    try {
+      await api.createEditOperation(selectedTrip.id, {
+        operationType: "move_media_on_map",
+        payload: { mediaItemId: locationMedia.id, latitude, longitude },
+      });
+      setLocationMedia(null);
+      await Promise.all([
+        loadMedia(selectedTrip.id),
+        loadReconstruction(selectedTrip.id),
+        loadStoryProjection(selectedTrip.id),
+      ]);
+    } catch (error) {
+      setMediaError(messageFrom(error));
+      throw error;
     }
   }
 
@@ -2370,8 +2393,16 @@ function OwnerWorkspace() {
                     item.contributorMemberId === selectedTrip?.memberId
                   }
                   onDelete={deleteOwnMedia}
+                  onAdjustLocation={setLocationMedia}
                   timezoneId={selectedTrip?.timezoneId}
                 />
+                {locationMedia ? (
+                  <MediaLocationDialog
+                    media={locationMedia}
+                    onCancel={() => setLocationMedia(null)}
+                    onSave={saveMediaLocation}
+                  />
+                ) : null}
                 {canOrganizeSelectedTrip ? (
                   <SimilarityGroupsPanel
                     groups={similarityGroups}
@@ -10303,6 +10334,7 @@ function MediaList({
   onVisibilityChange,
   canChangeVisibility,
   onDelete,
+  onAdjustLocation,
   timezoneId,
 }: {
   media: MediaItemResponse[];
@@ -10310,6 +10342,7 @@ function MediaList({
   onVisibilityChange?: (item: MediaItemResponse, visibility: string) => void;
   canChangeVisibility?: (item: MediaItemResponse) => boolean;
   onDelete?: (item: MediaItemResponse) => void;
+  onAdjustLocation?: (item: MediaItemResponse) => void;
   timezoneId?: string;
 }) {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -10418,6 +10451,14 @@ function MediaList({
                       Delete
                     </button>
                   ) : null}
+                  {onAdjustLocation ? (
+                    <button
+                      type="button"
+                      onClick={() => onAdjustLocation(item)}
+                    >
+                      Adjust location
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -10432,6 +10473,91 @@ function MediaList({
         onSelect={setSelectedPhotoId}
       />
     </>
+  );
+}
+
+function MediaLocationDialog({
+  media,
+  onCancel,
+  onSave,
+}: {
+  media: MediaItemResponse;
+  onCancel: () => void;
+  onSave: (latitude: number, longitude: number) => Promise<void>;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const [center, setCenter] = useState<[number, number]>([
+    media.longitude ?? 127,
+    media.latitude ?? 35,
+  ]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: configuredMapStyle(),
+      center,
+      zoom: media.latitude == null || media.longitude == null ? 4 : 14,
+    });
+    map.on("move", () => {
+      const next = map.getCenter();
+      setCenter([next.lng, next.lat]);
+    });
+    mapRef.current = map;
+    return () => map.remove();
+  }, []); // The dialog is recreated for each photo.
+
+  async function submit() {
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(center[1], center[0]);
+    } catch (reason) {
+      setError(messageFrom(reason));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="panel stack media-location-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Adjust photo location"
+      >
+        <div>
+          <p className="eyebrow">Photo location</p>
+          <h2>{media.filename ?? "Photo"}</h2>
+          <p>Move the map until the desired place is under the center pin.</p>
+        </div>
+        <div className="media-location-map" ref={containerRef}>
+          <span className="media-location-pin" aria-hidden="true">
+            ●
+          </span>
+        </div>
+        <small>
+          {center[1].toFixed(6)}, {center[0].toFixed(6)}
+        </small>
+        {error ? <p className="error">{error}</p> : null}
+        <div className="button-row">
+          <button type="button" onClick={() => void submit()} disabled={saving}>
+            {saving ? "Saving…" : "Use this location"}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

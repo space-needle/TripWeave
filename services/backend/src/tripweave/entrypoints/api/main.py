@@ -58,6 +58,7 @@ from tripweave.domain.enums import (
     EditOperationStatus,
     EditOperationType,
     InvitationStatus,
+    LocationSource,
     MediaAssetType,
     MediaType,
     MediaVisibility,
@@ -2207,6 +2208,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         member_count = group_summary.get("member_count", 1) if group_summary else 1
         group_type = group_summary.get("group_type") if group_summary else None
+        location: Any = db.execute(
+            select(
+                literal_column("ST_Y(effective_location::geometry)"),
+                literal_column("ST_X(effective_location::geometry)"),
+            )
+            .select_from(orm.MediaItem)
+            .where(orm.MediaItem.id == media_item.id)
+        ).one()
         return MediaItemResponse(
             id=media_item.id,
             filename=media_item.original_filename,
@@ -2222,6 +2231,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             or media_item.original_captured_at_local,
             gpsPresent=media_item.effective_location is not None
             or media_item.original_location is not None,
+            latitude=float(location[0]) if location[0] is not None else None,
+            longitude=float(location[1]) if location[1] is not None else None,
             width=width if isinstance(width, int) else None,
             height=height if isinstance(height, int) else None,
             contributor=contributor.display_name,
@@ -3276,6 +3287,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         organizer = member.role in {TripMemberRole.OWNER.value, TripMemberRole.EDITOR.value}
         contributor_ops = {
             EditOperationType.MOVE_AFTER_MIDNIGHT_MEDIA.value,
+            EditOperationType.MOVE_MEDIA_ON_MAP.value,
             EditOperationType.EXCLUDE_MEDIA_FROM_STORY.value,
             EditOperationType.SET_SIMILARITY_REPRESENTATIVE.value,
         }
@@ -3353,6 +3365,34 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             media.user_locked = True
             media.updated_at = datetime.now(UTC)
             after = record_values(media, ["effective_captured_at_utc", "user_locked"])
+            target_type, target_id = "media_item", media_id
+
+        elif operation_type == EditOperationType.MOVE_MEDIA_ON_MAP.value:
+            media_id = payload_uuid(data, "mediaItemId")
+            media = db.get(orm.MediaItem, media_id)
+            if media is None or media.trip_id != trip_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            if not organizer and media.contributor_member_id != member.id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+            expected_fresh(media, payload.expected_updated_at)
+            lat_value = data.get("latitude")
+            lon_value = data.get("longitude")
+            if not isinstance(lat_value, str | int | float) or not isinstance(
+                lon_value, str | int | float
+            ):
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid location")
+            lat = float(lat_value)
+            lon = float(lon_value)
+            if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid location"
+                )
+            before = record_values(media, ["effective_location", "location_source", "user_locked"])
+            media.effective_location = f"SRID=4326;POINT({lon} {lat})"
+            media.location_source = LocationSource.USER_CORRECTION.value
+            media.user_locked = True
+            media.updated_at = datetime.now(UTC)
+            after = record_values(media, ["effective_location", "location_source", "user_locked"])
             target_type, target_id = "media_item", media_id
 
         elif operation_type == EditOperationType.DELETE_STOP.value:
