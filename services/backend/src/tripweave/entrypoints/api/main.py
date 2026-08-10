@@ -3360,6 +3360,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if stop is None or stop.trip_id != trip_id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stop not found")
             expected_fresh(stop, payload.expected_updated_at)
+            stop_id = stop.id
             moment_ids = [moment.id for moment in ordered_stop_moments(db, stop.id)]
             media_ids = [media.id for media in ordered_stop_media(db, stop.id)]
             before = {
@@ -3375,10 +3376,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             renumber_day_stops(db, trip_day_id)
             rebuild_inferred_day_legs_for_edit(db, run, trip_day_id)
             after = {
-                "deletedStopId": str(stop.id),
+                "deletedStopId": str(stop_id),
                 "mediaRemainInLibrary": True,
             }
-            target_type, target_id = "stop", stop.id
+            target_type, target_id = "stop", stop_id
 
         elif operation_type == EditOperationType.MERGE_STOPS.value:
             source = db.get(orm.Stop, payload_uuid(data, "sourceStopId"))
