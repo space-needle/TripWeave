@@ -4126,6 +4126,7 @@ function TripStoryExplorer({
     null,
   );
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+  const [openDayActionsId, setOpenDayActionsId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteError, setNoteError] = useState("");
   const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
@@ -5322,39 +5323,21 @@ function TripStoryExplorer({
 
   function timelineStopTimeLabel(stop: ReconstructionStopResponse): {
     dateTime: string;
-    label: string;
+    labels: string[];
   } {
-    const timedMedia = orderedStopMedia(stop).filter(
-      (media) => media.capturedAt || media.capturedAtLocal,
+    const startsAt = formatTimelineStopTime(
+      stop.startsAt,
+      stop.startsAtLocal ?? null,
+      timezoneId,
     );
-    if (timedMedia.length > 1) {
-      const firstMedia = timedMedia[0];
-      const lastMedia = timedMedia[timedMedia.length - 1];
-      const firstLabel = formatTimelineStopTime(
-        firstMedia.capturedAt ?? stop.startsAt,
-        firstMedia.capturedAtLocal ?? null,
-        timezoneId,
-      );
-      const lastLabel = formatTimelineStopTime(
-        lastMedia.capturedAt ?? stop.endsAt,
-        lastMedia.capturedAtLocal ?? null,
-        timezoneId,
-      );
-      return {
-        dateTime: firstMedia.capturedAt ?? stop.startsAt,
-        label:
-          firstLabel === lastLabel
-            ? firstLabel
-            : `${firstLabel} - ${lastLabel}`,
-      };
-    }
+    const endsAt = formatTimelineStopTime(
+      stop.endsAt,
+      stop.endsAtLocal ?? null,
+      timezoneId,
+    );
     return {
       dateTime: stop.startsAt,
-      label: formatTimelineStopTime(
-        stop.startsAt,
-        stop.startsAtLocal ?? null,
-        timezoneId,
-      ),
+      labels: startsAt === endsAt ? [startsAt] : [startsAt, endsAt],
     };
   }
 
@@ -5769,8 +5752,10 @@ function TripStoryExplorer({
                     key={day.id}
                     onClick={() => onStateChange(selectStoryDay(state, day.id))}
                   >
-                    <span>{dateParts.weekday}</span>
-                    <strong>{dateParts.day}</strong>
+                    <span>
+                      {dateParts.weekday}
+                      {dateParts.day ? ` ${dateParts.day}` : ""}
+                    </span>
                   </button>
                 );
               })}
@@ -5807,44 +5792,72 @@ function TripStoryExplorer({
                         onStateChange(selectStoryDay(state, day.id))
                       }
                     >
-                      <span>{storyDayLabel(day)}</span>
-                      <small>{day.date}</small>
+                      <span>{storyDayDateLabel(day)}</span>
                     </button>
-                    <div className="timeline-day-actions">
-                      {onCreateAreaVisit ? (
-                        areaSelectionDayId === day.id ? (
-                          <button
-                            type="button"
-                            className="timeline-note-button"
-                            onClick={cancelAreaSelection}
-                          >
-                            Cancel area
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="timeline-note-button"
-                            disabled={
-                              day.stops.length < 3 || !areaVisitsByDay[day.id]
-                            }
-                            onClick={() => startAreaSelection(day)}
-                          >
-                            Create area
-                          </button>
-                        )
-                      ) : null}
-                      {onSetDayNote ? (
+                    {(onCreateAreaVisit || onSetDayNote) && (
+                      <div className="timeline-day-actions">
                         <button
                           type="button"
-                          className="timeline-note-button"
+                          className="timeline-day-actions-trigger"
+                          aria-expanded={openDayActionsId === day.id}
+                          aria-haspopup="menu"
                           onClick={() =>
-                            startEditingNote(`day:${day.id}`, day.note)
+                            setOpenDayActionsId((current) =>
+                              current === day.id ? null : day.id,
+                            )
                           }
                         >
-                          {day.note ? "Edit note" : "Add note"}
+                          Day Actions
+                          <TimelineChevron
+                            direction={
+                              openDayActionsId === day.id ? "up" : "down"
+                            }
+                          />
                         </button>
-                      ) : null}
-                    </div>
+                        {openDayActionsId === day.id ? (
+                          <div
+                            className="timeline-day-actions-menu"
+                            role="menu"
+                          >
+                            {onCreateAreaVisit ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={
+                                  areaSelectionDayId !== day.id &&
+                                  (day.stops.length < 3 ||
+                                    !areaVisitsByDay[day.id])
+                                }
+                                onClick={() => {
+                                  setOpenDayActionsId(null);
+                                  if (areaSelectionDayId === day.id) {
+                                    cancelAreaSelection();
+                                  } else {
+                                    startAreaSelection(day);
+                                  }
+                                }}
+                              >
+                                {areaSelectionDayId === day.id
+                                  ? "Cancel area"
+                                  : "Create area"}
+                              </button>
+                            ) : null}
+                            {onSetDayNote ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenDayActionsId(null);
+                                  startEditingNote(`day:${day.id}`, day.note);
+                                }}
+                              >
+                                {day.note ? "Edit note" : "Add note"}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                   {editingNoteKey === `day:${day.id}` ? (
                     <form
@@ -6269,17 +6282,15 @@ function TripStoryExplorer({
                             handleTimelineKey(event, stop.id, day.id)
                           }
                         >
-                          <span
-                            className="timeline-branch-lane"
-                            aria-hidden="true"
-                          />
-                          <span
-                            className="timeline-stop-marker"
-                            aria-hidden="true"
-                          >
-                            {displayStopPosition(stop)}
-                          </span>
                           <div className="timeline-stop-card">
+                            <time
+                              className="timeline-stop-time"
+                              dateTime={stopTime.dateTime}
+                            >
+                              {stopTime.labels.map((label) => (
+                                <span key={label}>{label}</span>
+                              ))}
+                            </time>
                             <div
                               className="timeline-stop-photo"
                               aria-hidden="true"
@@ -6318,12 +6329,6 @@ function TripStoryExplorer({
                                     {displayStopTitle(stop)}
                                   </span>
                                 </span>
-                                <time
-                                  className="timeline-stop-time"
-                                  dateTime={stopTime.dateTime}
-                                >
-                                  {stopTime.label}
-                                </time>
                                 <small className="timeline-stop-metrics">
                                   <span>
                                     <TimelineMetricIcon name="camera" />
@@ -6384,8 +6389,10 @@ function TripStoryExplorer({
                                       setNoteError("");
                                     }}
                                   >
-                                    <TimelineActionIcon
-                                      name={isEditingTools ? "check" : "edit"}
+                                    <TimelineChevron
+                                      direction={
+                                        isEditingTools ? "up" : "right"
+                                      }
                                     />
                                   </button>
                                 ) : null}
@@ -7269,6 +7276,24 @@ function TimelineActionIcon({ name }: { name: "check" | "edit" | "x" }) {
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M6 6 18 18" />
       <path d="m18 6-12 12" />
+    </svg>
+  );
+}
+
+function TimelineChevron({
+  direction,
+}: {
+  direction: "down" | "right" | "up";
+}) {
+  const pathByDirection = {
+    down: "m6 9 6 6 6-6",
+    right: "m9 6 6 6-6 6",
+    up: "m6 15 6-6 6 6",
+  } as const;
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d={pathByDirection[direction]} />
     </svg>
   );
 }
@@ -10598,9 +10623,9 @@ function timelineDayDateParts(day: StoryDayLabelSource): {
   const [, year, month, dayOfMonth] = match;
   const date = new Date(Number(year), Number(month) - 1, Number(dayOfMonth));
   return {
-    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" })
-      .format(date)
-      .toUpperCase(),
+    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
+      date,
+    ),
     day: String(Number(dayOfMonth)),
   };
 }
