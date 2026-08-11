@@ -10504,6 +10504,46 @@ function SimilarityGroupsPanel({
   );
 }
 
+function MediaActionIcon({
+  action,
+}: {
+  action: "members" | "public" | "delete" | "location";
+}) {
+  if (action === "members") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+        <path d="M16 5.5a2.5 2.5 0 0 1 0 5M17.5 14a4.5 4.5 0 0 1 3 4.2" />
+      </svg>
+    );
+  }
+
+  if (action === "public") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M3.5 12h17M12 3.5a13.5 13.5 0 0 1 0 17M12 3.5a13.5 13.5 0 0 0 0 17" />
+      </svg>
+    );
+  }
+
+  if (action === "delete") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z" />
+      <circle cx="12" cy="10" r="2" />
+    </svg>
+  );
+}
+
 function MediaList({
   media,
   onRetry,
@@ -10601,38 +10641,53 @@ function MediaList({
                   >
                     <button
                       type="button"
-                      className={item.visibility === "trip" ? "active" : ""}
+                      className={`media-icon-button ${
+                        item.visibility === "trip" ? "active" : ""
+                      }`}
                       aria-pressed={item.visibility === "trip"}
                       onClick={() => onVisibilityChange(item, "trip")}
+                      aria-label="Member only"
+                      title="Member only"
                     >
-                      Member only
+                      <MediaActionIcon action="members" />
                     </button>
                     <button
                       type="button"
-                      className={
+                      className={`media-icon-button ${
                         item.visibility === "story" && item.includeInStory
                           ? "active"
                           : ""
-                      }
+                      }`}
                       aria-pressed={
                         item.visibility === "story" && item.includeInStory
                       }
                       onClick={() => onVisibilityChange(item, "story")}
+                      aria-label="Public"
+                      title="Public"
                     >
-                      Public
+                      <MediaActionIcon action="public" />
                     </button>
                   </div>
                   {onDelete ? (
-                    <button type="button" onClick={() => onDelete(item)}>
-                      Delete
+                    <button
+                      className="media-icon-button danger"
+                      type="button"
+                      onClick={() => onDelete(item)}
+                      aria-label="Delete photo"
+                      title="Delete photo"
+                    >
+                      <MediaActionIcon action="delete" />
                     </button>
                   ) : null}
                   {onAdjustLocation ? (
                     <button
+                      className="media-icon-button"
                       type="button"
                       onClick={() => onAdjustLocation(item)}
+                      aria-label="Adjust location"
+                      title="Adjust location"
                     >
-                      Adjust location
+                      <MediaActionIcon action="location" />
                     </button>
                   ) : null}
                 </div>

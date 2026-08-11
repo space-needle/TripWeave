@@ -1654,22 +1654,46 @@ button.is-updating {
 .visibility-toggle {
   width: fit-content;
   display: grid;
-  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  grid-template-columns: repeat(2, 36px);
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: #f6f8f9;
 }
 
+.media-icon-button {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-color: var(--border-strong);
+  background: #fff;
+  color: var(--muted);
+  padding: 0;
+}
+
+.media-icon-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .visibility-toggle button {
+  width: 36px;
+  min-width: 36px;
   min-height: 34px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 800;
-  padding: 7px 10px;
+  padding: 0;
 }
 
 .visibility-toggle button + button {
@@ -1679,6 +1703,10 @@ button.is-updating {
 .visibility-toggle button.active {
   background: var(--accent);
   color: #fff;
+}
+
+.media-icon-button.danger {
+  color: var(--danger);
 }
 
 .compact-field {
