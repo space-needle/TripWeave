@@ -251,25 +251,6 @@ p {
   border-radius: 18px;
 }
 
-.trip-brand {
-  display: grid;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 16px;
-}
-
-.trip-brand strong {
-  font-size: 1.38rem;
-  font-style: italic;
-  line-height: 1;
-}
-
-.trip-brand span {
-  color: var(--muted);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
 .mobile-account-card,
 .mobile-story-actions {
   display: none;

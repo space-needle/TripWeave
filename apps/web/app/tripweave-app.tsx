@@ -1967,10 +1967,6 @@ function OwnerWorkspace() {
           aria-label="Trip navigation"
           data-mobile-tab-panel="appSettings"
         >
-          <div className="trip-brand">
-            <strong>My Trip</strong>
-            <span>{user.display_name}</span>
-          </div>
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
               <button
