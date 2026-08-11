@@ -2979,14 +2979,16 @@ button.is-updating {
   color: var(--muted);
 }
 
-.timeline-stop-button .timeline-stop-metrics {
+.timeline-stop-button .timeline-stop-metrics,
+.timeline-area-metrics {
   display: flex;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.timeline-stop-button .timeline-stop-metrics span {
+.timeline-stop-button .timeline-stop-metrics span,
+.timeline-area-metrics span {
   display: inline-flex;
   gap: 4px;
   align-items: center;
@@ -2997,7 +2999,8 @@ button.is-updating {
   white-space: nowrap;
 }
 
-.timeline-stop-button .timeline-stop-metrics svg {
+.timeline-stop-button .timeline-stop-metrics svg,
+.timeline-area-metrics svg {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;

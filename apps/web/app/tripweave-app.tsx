@@ -120,7 +120,7 @@ type StoryHeaderIconAction =
   | "browse"
   | "settings"
   | "help";
-type TimelineMetricIconName = "camera" | "travelers";
+type TimelineMetricIconName = "stops" | "camera" | "travelers";
 
 type TripForm = {
   title: string;
@@ -4870,7 +4870,7 @@ function TripStoryExplorer({
     });
   }
 
-  function areaSummary(stops: ReconstructionStopResponse[]): string {
+  function areaMetrics(stops: ReconstructionStopResponse[]) {
     const photoCount = stops.reduce(
       (total, stop) => total + stop.mediaCount,
       0,
@@ -4882,7 +4882,12 @@ function TripStoryExplorer({
         ),
       ),
     ).size;
-    return `${stops.length} stops · ${photoCount} photos · ${travelerCount} travelers`;
+    return { stopCount: stops.length, photoCount, travelerCount };
+  }
+
+  function areaSummary(stops: ReconstructionStopResponse[]): string {
+    const { stopCount, photoCount, travelerCount } = areaMetrics(stops);
+    return `${stopCount} stops · ${photoCount} photos · ${travelerCount} travelers`;
   }
 
   function areaForStop(
@@ -6085,6 +6090,9 @@ function TripStoryExplorer({
                     const stopMedia = orderedStopMedia(stop);
                     const stopTime = timelineStopTimeLabel(stop);
                     const areaContext = areaForStop(day, stop.id);
+                    const areaMetricValues = areaContext
+                      ? areaMetrics(areaContext.stops)
+                      : null;
                     const canSelectForArea =
                       isAreaSelectionMode &&
                       stopIsStandaloneForAreaSelection(day, stop.id);
@@ -6136,7 +6144,28 @@ function TripStoryExplorer({
                               <strong>
                                 {displayAreaTitle(areaContext.area)}
                               </strong>
-                              <small>{areaSummary(areaContext.stops)}</small>
+                              {areaMetricValues ? (
+                                <div className="timeline-area-metrics">
+                                  <span
+                                    aria-label={`${areaMetricValues.stopCount} stops`}
+                                  >
+                                    <TimelineMetricIcon name="stops" />
+                                    {areaMetricValues.stopCount}
+                                  </span>
+                                  <span
+                                    aria-label={`${areaMetricValues.photoCount} photos`}
+                                  >
+                                    <TimelineMetricIcon name="camera" />
+                                    {areaMetricValues.photoCount}
+                                  </span>
+                                  <span
+                                    aria-label={`${areaMetricValues.travelerCount} travelers`}
+                                  >
+                                    <TimelineMetricIcon name="travelers" />
+                                    {areaMetricValues.travelerCount}
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
                             {canEditArea ? (
                               <button
@@ -10069,6 +10098,15 @@ function isAreaVisitsResponse(value: unknown): value is AreaVisitsResponse {
 }
 
 function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
+  if (name === "stops") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M12 21s6-5.1 6-11a6 6 0 1 0-12 0c0 5.9 6 11 6 11Z" />
+        <path d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+      </svg>
+    );
+  }
+
   if (name === "camera") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
