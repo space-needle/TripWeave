@@ -1971,15 +1971,6 @@ function OwnerWorkspace() {
             <strong>My Trip</strong>
             <span>{user.display_name}</span>
           </div>
-          <div className="mobile-account-card">
-            <div>
-              <span>Signed in</span>
-              <strong>{user.display_name}</strong>
-            </div>
-            <button type="button" onClick={logout} disabled={isBusy}>
-              Logout
-            </button>
-          </div>
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
               <button
@@ -2602,6 +2593,15 @@ function OwnerWorkspace() {
               <span>Trip info</span>
               {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
             </summary>
+            <div className="mobile-account-card">
+              <div>
+                <span>Signed in</span>
+                <strong>{user.display_name}</strong>
+              </div>
+              <button type="button" onClick={logout} disabled={isBusy}>
+                Logout
+              </button>
+            </div>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (
                 <>
