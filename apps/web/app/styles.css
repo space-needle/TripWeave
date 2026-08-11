@@ -2690,6 +2690,10 @@ button.is-updating {
   z-index: 1;
 }
 
+.timeline-stop-stack.in-area > .timeline-stop {
+  z-index: 3;
+}
+
 .timeline-stop-stack.in-area + .timeline-stop-stack.in-area {
   margin-top: -10px;
 }
