@@ -4118,6 +4118,9 @@ function TripStoryExplorer({
     GalleryPhoto[] | null
   >(null);
   const [editToolsStopId, setEditToolsStopId] = useState<string | null>(null);
+  const [openStopActionsId, setOpenStopActionsId] = useState<string | null>(
+    null,
+  );
   const [editingStopId, setEditingStopId] = useState<string | null>(null);
   const [stopTitleDraft, setStopTitleDraft] = useState("");
   const [renameStopError, setRenameStopError] = useState("");
@@ -5212,7 +5215,6 @@ function TripStoryExplorer({
   function startRenamingStop(
     stop: ReconstructionResponse["days"][number]["stops"][number],
   ) {
-    setEditToolsStopId(stop.id);
     setEditingStopId(stop.id);
     setStopTitleDraft(displayStopTitle(stop));
     setRenameStopError("");
@@ -5505,8 +5507,7 @@ function TripStoryExplorer({
   const activeTimelineDay = activeDay ?? story.days[0] ?? null;
   const visualTimelineDayId =
     pendingTimelineDaySelection &&
-    state.selectedDayId ===
-      pendingTimelineDaySelection.previousSelectedDayId
+    state.selectedDayId === pendingTimelineDaySelection.previousSelectedDayId
       ? pendingTimelineDaySelection.dayId
       : (activeTimelineDay?.id ?? null);
   const timelineDays = activeTimelineDay ? [activeTimelineDay] : [];
@@ -5986,7 +5987,7 @@ function TripStoryExplorer({
                     const stopIndexInDay = day.stops.findIndex(
                       (dayStop) => dayStop.id === stop.id,
                     );
-                    const isEditingTools = editToolsStopId === stop.id;
+                    const isManagingStop = editToolsStopId === stop.id;
                     const isAreaSelectionMode = areaSelectionDayId === day.id;
                     const isAreaStopSelected =
                       isAreaSelectionMode &&
@@ -5998,6 +5999,13 @@ function TripStoryExplorer({
                         onMergeStops ||
                         onSplitStop ||
                         onDeleteStop);
+                    const canManageStop = Boolean(
+                      onMergeStops || onSplitStop || onDeleteStop,
+                    );
+                    const isEditingPanel =
+                      isManagingStop ||
+                      editingStopId === stop.id ||
+                      editingNoteKey === `stop:${stop.id}`;
                     const mergeCandidates = mergeCandidateStops(
                       day,
                       stop,
@@ -6382,70 +6390,104 @@ function TripStoryExplorer({
                                   </button>
                                 ) : null}
                                 {canEditStop ? (
-                                  <button
-                                    type="button"
-                                    className="timeline-icon-button"
-                                    aria-expanded={isEditingTools}
-                                    aria-label={
-                                      isEditingTools
-                                        ? `Close editing tools for ${displayStopTitle(stop)}`
-                                        : `Edit ${displayStopTitle(stop)}`
-                                    }
-                                    title={isEditingTools ? "Done" : "Edit"}
-                                    onClick={() => {
-                                      const nextStopId = isEditingTools
-                                        ? null
-                                        : stop.id;
-                                      setEditToolsStopId(nextStopId);
-                                      setEditingStopId(null);
-                                      setStopTitleDraft("");
-                                      setRenameStopError("");
-                                      setMergeStopError("");
-                                      setMergePickerStopId(null);
-                                      setPendingMergeKey(null);
-                                      setSplitStopId(null);
-                                      setSplitStopError("");
-                                      setPendingSplitKey(null);
-                                      setPendingDeleteStopId(null);
-                                      setEditingNoteKey(
-                                        nextStopId ? `stop:${stop.id}` : null,
-                                      );
-                                      setNoteDraft(
-                                        nextStopId ? (stop.note ?? "") : "",
-                                      );
-                                      setNoteError("");
-                                    }}
-                                  >
-                                    <TimelineChevron
-                                      direction={
-                                        isEditingTools ? "up" : "right"
+                                  <div className="timeline-stop-actions-menu-wrap">
+                                    <button
+                                      type="button"
+                                      className="timeline-icon-button"
+                                      aria-expanded={
+                                        openStopActionsId === stop.id
                                       }
-                                    />
-                                  </button>
+                                      aria-haspopup="menu"
+                                      aria-label={`Actions for ${displayStopTitle(stop)}`}
+                                      title="Stop actions"
+                                      onClick={() =>
+                                        setOpenStopActionsId((current) =>
+                                          current === stop.id ? null : stop.id,
+                                        )
+                                      }
+                                    >
+                                      <TimelineMoreIcon />
+                                    </button>
+                                    {openStopActionsId === stop.id ? (
+                                      <div
+                                        className="timeline-stop-actions-menu"
+                                        role="menu"
+                                      >
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          disabled={!onRenameStop}
+                                          onClick={() => {
+                                            setOpenStopActionsId(null);
+                                            setEditToolsStopId(null);
+                                            setEditingNoteKey(null);
+                                            startRenamingStop(stop);
+                                          }}
+                                        >
+                                          Rename stop
+                                        </button>
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          disabled={!onSetStopNote}
+                                          onClick={() => {
+                                            setOpenStopActionsId(null);
+                                            setEditToolsStopId(null);
+                                            setEditingStopId(null);
+                                            setStopTitleDraft("");
+                                            setRenameStopError("");
+                                            startEditingNote(
+                                              `stop:${stop.id}`,
+                                              stop.note,
+                                            );
+                                          }}
+                                        >
+                                          Add note
+                                        </button>
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          disabled={!canManageStop}
+                                          onClick={() => {
+                                            setOpenStopActionsId(null);
+                                            setEditToolsStopId(stop.id);
+                                            setEditingStopId(null);
+                                            setStopTitleDraft("");
+                                            setRenameStopError("");
+                                            setEditingNoteKey(null);
+                                            setNoteDraft("");
+                                            setNoteError("");
+                                            setMergeStopError("");
+                                            setMergePickerStopId(null);
+                                            setPendingMergeKey(null);
+                                            setSplitStopId(null);
+                                            setSplitStopError("");
+                                            setPendingSplitKey(null);
+                                            setPendingDeleteStopId(null);
+                                          }}
+                                        >
+                                          Manage stop
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
                             </div>
-                            {stop.note && !isEditingTools ? (
+                            {stop.note && !isEditingPanel ? (
                               <p className="timeline-note-preview">
                                 {stop.note}
                               </p>
                             ) : null}
-                            {isEditingTools ? (
+                            {isEditingPanel ? (
                               <div className="timeline-stop-edit-panel">
-                                <div className="timeline-edit-context">
-                                  <strong>{displayStopTitle(stop)}</strong>
-                                  {onRenameStop && editingStopId !== stop.id ? (
-                                    <button
-                                      type="button"
-                                      className="timeline-tool-button"
-                                      aria-label={`Rename ${displayStopTitle(stop)}`}
-                                      title="Rename"
-                                      onClick={() => startRenamingStop(stop)}
-                                    >
-                                      <TimelineActionIcon name="edit" />
-                                    </button>
-                                  ) : null}
-                                </div>
+                                {isManagingStop ? (
+                                  <div className="timeline-edit-context">
+                                    <strong>
+                                      Manage {displayStopTitle(stop)}
+                                    </strong>
+                                  </div>
+                                ) : null}
                                 {editingStopId === stop.id ? (
                                   <form
                                     className="timeline-stop-rename"
@@ -6556,9 +6598,10 @@ function TripStoryExplorer({
                                     ) : null}
                                   </form>
                                 ) : null}
-                                {(onMergeStops && mergeCandidates.length > 0) ||
-                                (onSplitStop && stopMedia.length > 1) ||
-                                onDeleteStop ? (
+                                {isManagingStop &&
+                                ((onMergeStops && mergeCandidates.length > 0) ||
+                                  (onSplitStop && stopMedia.length > 1) ||
+                                  onDeleteStop) ? (
                                   <div className="timeline-structure-tools">
                                     {onMergeStops &&
                                     mergeCandidates.length > 0 ? (
@@ -6653,7 +6696,9 @@ function TripStoryExplorer({
                                     ) : null}
                                   </div>
                                 ) : null}
-                                {canMergeHere && mergeSourceStop ? (
+                                {isManagingStop &&
+                                canMergeHere &&
+                                mergeSourceStop ? (
                                   <div className="timeline-merge-target">
                                     <p>
                                       Merge{" "}
@@ -6698,7 +6743,8 @@ function TripStoryExplorer({
                                     </div>
                                   </div>
                                 ) : null}
-                                {onMergeStops &&
+                                {isManagingStop &&
+                                onMergeStops &&
                                 mergePickerStopId === stop.id &&
                                 mergeCandidates.length > 0 ? (
                                   <div className="timeline-stop-merge-picker">
@@ -6737,7 +6783,8 @@ function TripStoryExplorer({
                                     </div>
                                   </div>
                                 ) : null}
-                                {onSplitStop &&
+                                {isManagingStop &&
+                                onSplitStop &&
                                 stopMedia.length > 1 &&
                                 splitStopId === stop.id ? (
                                   <div className="timeline-stop-split">
@@ -7321,6 +7368,16 @@ function TimelineChevron({
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d={pathByDirection[direction]} />
+    </svg>
+  );
+}
+
+function TimelineMoreIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }

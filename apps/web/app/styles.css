@@ -3103,6 +3103,42 @@ button.is-updating {
   justify-content: flex-end;
 }
 
+.timeline-stop-actions-menu-wrap {
+  position: relative;
+}
+
+.timeline-stop-actions-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 8;
+  min-width: 148px;
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 10px 24px rgb(23 32 42 / 14%);
+}
+
+.timeline-stop-actions-menu button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.timeline-stop-actions-menu button:hover:not(:disabled),
+.timeline-stop-actions-menu button:focus-visible {
+  background: #f1f7f4;
+}
+
 .timeline-icon-button {
   width: 28px;
   min-height: 28px;
@@ -3718,20 +3754,12 @@ button.thumb-frame:focus-visible {
 
 .photo-browser-image.previous,
 .photo-browser-missing.previous {
-  transform: translate3d(
-    calc(-100% + var(--photo-browser-swipe-offset)),
-    0,
-    0
-  );
+  transform: translate3d(calc(-100% + var(--photo-browser-swipe-offset)), 0, 0);
 }
 
 .photo-browser-image.next,
 .photo-browser-missing.next {
-  transform: translate3d(
-    calc(100% + var(--photo-browser-swipe-offset)),
-    0,
-    0
-  );
+  transform: translate3d(calc(100% + var(--photo-browser-swipe-offset)), 0, 0);
 }
 
 .photo-browser-missing {
