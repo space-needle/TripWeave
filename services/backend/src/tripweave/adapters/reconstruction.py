@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from tripweave.adapters import orm
 from tripweave.adapters.area_visit_persistence import persist_area_visits_for_trip
 from tripweave.adapters.collaboration_intelligence import analyze_collaboration
+from tripweave.application.timezone_lookup import timezone_for_coordinates
 from tripweave.domain.enums import (
     ProcessingState,
     ReconstructionRunState,
@@ -1296,12 +1297,16 @@ def effective_day(trip: orm.Trip, point: MediaPoint) -> date:
             tzinfo=None
         )
     else:
-        try:
-            local_time = point.captured_at_utc.astimezone(ZoneInfo(trip.timezone_id)).replace(
-                tzinfo=None
-            )
-        except ZoneInfoNotFoundError:
+        timezone_id = timezone_for_coordinates(point.latitude, point.longitude)
+        if timezone_id is None:
             local_time = point.captured_at_utc.astimezone(UTC).replace(tzinfo=None)
+        else:
+            try:
+                local_time = point.captured_at_utc.astimezone(ZoneInfo(timezone_id)).replace(
+                    tzinfo=None
+                )
+            except ZoneInfoNotFoundError:
+                local_time = point.captured_at_utc.astimezone(UTC).replace(tzinfo=None)
     return (local_time - timedelta(hours=trip.day_cutoff_hour)).date()
 
 
@@ -1316,11 +1321,10 @@ def media_capture_utc(trip: orm.Trip, media: orm.MediaItem) -> datetime | None:
         return (
             media.original_captured_at_local - timedelta(minutes=media.original_utc_offset_minutes)
         ).replace(tzinfo=tz)
-    try:
-        localized = media.original_captured_at_local.replace(tzinfo=ZoneInfo(trip.timezone_id))
-    except ZoneInfoNotFoundError:
-        localized = media.original_captured_at_local.replace(tzinfo=UTC)
-    return localized.astimezone(UTC)
+    # A floating capture time without an EXIF offset must have been normalized
+    # during ingestion from its GPS location. Do not reinterpret it using a
+    # trip-wide timezone: that would corrupt a multi-country itinerary.
+    return None
 
 
 def cluster_stops(points: list[MediaPoint]) -> dict[date, list[StopCluster]]:

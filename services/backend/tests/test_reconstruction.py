@@ -43,7 +43,7 @@ def test_midnight_cutoff_uses_local_offset() -> None:
     assert effective_day(trip, after_cutoff).isoformat() == "2026-07-02"
 
 
-def test_local_capture_time_uses_trip_timezone_when_offset_is_missing() -> None:
+def test_local_capture_time_without_offset_is_not_interpreted_using_trip_timezone() -> None:
     trip = orm.Trip(title="Trip", timezone_id="America/Los_Angeles", day_cutoff_hour=4)
     media = orm.MediaItem(
         trip_id=uuid4(),
@@ -57,8 +57,7 @@ def test_local_capture_time_uses_trip_timezone_when_offset_is_missing() -> None:
 
     captured_at = media_capture_utc(trip, media)
 
-    assert captured_at is not None
-    assert captured_at.isoformat() == "2026-07-02T17:30:00+00:00"
+    assert captured_at is None
 
 
 def test_same_place_revisited_after_substantial_interval_is_new_stop() -> None:

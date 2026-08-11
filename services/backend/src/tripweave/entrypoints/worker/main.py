@@ -35,6 +35,7 @@ from tripweave.application.media_processing import (
     ProcessedMedia,
     process_image_bytes,
 )
+from tripweave.application.timezone_lookup import timezone_for_coordinates
 from tripweave.config import Settings, get_settings
 from tripweave.domain.enums import (
     LocationSource,
@@ -415,12 +416,21 @@ def apply_processed_media(
     media_item.original_captured_at_utc = processed.captured_at_utc
     media_item.original_utc_offset_minutes = processed.utc_offset_minutes
     media_item.effective_captured_at_utc = effective_capture_utc(db, media_item, processed)
-    media_item.time_source = (
-        TimeSource.ORIGINAL_METADATA.value
-        if processed.captured_at_utc or processed.captured_at_local
-        else TimeSource.UNKNOWN.value
+    timezone_from_gps = (
+        processed.captured_at_utc is None
+        and processed.captured_at_local is not None
+        and processed.utc_offset_minutes is None
+        and timezone_for_coordinates(processed.latitude, processed.longitude) is not None
     )
-    media_item.time_confidence = 1.0 if media_item.time_source != TimeSource.UNKNOWN.value else None
+    if media_item.effective_captured_at_utc is None:
+        media_item.time_source = TimeSource.UNKNOWN.value
+        media_item.time_confidence = None
+    elif timezone_from_gps:
+        media_item.time_source = TimeSource.AUTOMATION.value
+        media_item.time_confidence = 0.95
+    else:
+        media_item.time_source = TimeSource.ORIGINAL_METADATA.value
+        media_item.time_confidence = 1.0
     media_item.location_source = (
         LocationSource.ORIGINAL_METADATA.value
         if processed.latitude is not None and processed.longitude is not None
@@ -490,8 +500,9 @@ def effective_capture_utc(
         return processed.captured_at_utc
     if processed.captured_at_local is None:
         return None
-    trip = db.get(orm.Trip, media_item.trip_id)
-    timezone_id = trip.timezone_id if trip is not None else "UTC"
+    timezone_id = timezone_for_coordinates(processed.latitude, processed.longitude)
+    if timezone_id is None:
+        return None
     try:
         localized = processed.captured_at_local.replace(tzinfo=ZoneInfo(timezone_id))
     except ZoneInfoNotFoundError:

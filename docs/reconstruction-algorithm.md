@@ -27,11 +27,11 @@ It never overwrites original capture metadata. It uses `effective_captured_at_ut
 The algorithm resolves each usable media item into an effective trip day:
 
 1. If `original_utc_offset_minutes` exists, apply that offset to the UTC timestamp.
-2. Otherwise use the trip timezone.
-3. If the timezone is invalid, fall back to UTC.
+2. Otherwise, use the media GPS coordinates to resolve the local IANA timezone offline, then apply the offset in effect for the capture date (including daylight-saving rules).
+3. If neither an offset nor a GPS-resolved timezone is available, retain the UTC timestamp only when it was explicitly present in original metadata; do not reinterpret a floating local capture time using a trip-wide timezone.
 4. Subtract `trips.day_cutoff_hour`, default 4, before taking the local date.
 
-Media with unusable time creates an `unknown_time` review item instead of being guessed into a day.
+All chronology is ordered by UTC. Local time is used only to decide a trip calendar day and for display, so a photo taken after crossing an international date line remains chronologically later even if its local clock value is earlier. Media with unusable time creates an `unknown_time` review item instead of being guessed into a day.
 
 ## Stops And Places
 

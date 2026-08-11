@@ -3380,7 +3380,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             if not isinstance(lat_value, str | int | float) or not isinstance(
                 lon_value, str | int | float
             ):
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid location")
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid location"
+                )
             lat = float(lat_value)
             lon = float(lon_value)
             if not -90 <= lat <= 90 or not -180 <= lon <= 180:

@@ -127,7 +127,6 @@ type TripForm = {
   description: string;
   startDate: string;
   endDate: string;
-  timezoneId: string;
   dayCutoffHour: string;
 };
 
@@ -162,71 +161,11 @@ function renameStopInReconstruction(
   return renamed ? { ...reconstruction, days } : reconstruction;
 }
 
-type IntlWithTimeZones = typeof Intl & {
-  supportedValuesOf?: (key: "timeZone") => string[];
-};
-
-const fallbackTimeZones = [
-  "UTC",
-  "America/Los_Angeles",
-  "America/Denver",
-  "America/Chicago",
-  "America/New_York",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Rome",
-  "Asia/Seoul",
-  "Asia/Tokyo",
-  "Asia/Taipei",
-  "Asia/Hong_Kong",
-  "Asia/Singapore",
-  "Australia/Sydney",
-  "Pacific/Auckland",
-];
-
-function browserTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-function supportedTimeZones(): string[] {
-  try {
-    const zones = (Intl as IntlWithTimeZones).supportedValuesOf?.("timeZone");
-    return zones && zones.length > 0 ? zones : fallbackTimeZones;
-  } catch {
-    return fallbackTimeZones;
-  }
-}
-
-function timeZoneOptions(currentValue: string): string[] {
-  return Array.from(
-    new Set(["UTC", browserTimeZone(), currentValue, ...supportedTimeZones()]),
-  )
-    .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right));
-}
-
-function isSupportedTimeZone(value: string): boolean {
-  if (!value) {
-    return false;
-  }
-  try {
-    new Intl.DateTimeFormat(undefined, { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const emptyTripForm: TripForm = {
   title: "",
   description: "",
   startDate: "",
   endDate: "",
-  timezoneId: browserTimeZone(),
   dayCutoffHour: "4",
 };
 
@@ -246,7 +185,6 @@ function toPayload(form: TripForm) {
     description: form.description || null,
     startDate: form.startDate || null,
     endDate: form.endDate || null,
-    timezoneId: form.timezoneId,
     dayCutoffHour: Number(form.dayCutoffHour),
   };
 }
@@ -257,7 +195,6 @@ function fromTrip(trip: TripResponse): TripForm {
     description: trip.description ?? "",
     startDate: trip.startDate ?? "",
     endDate: trip.endDate ?? "",
-    timezoneId: trip.timezoneId,
     dayCutoffHour: String(trip.dayCutoffHour),
   };
 }
@@ -2588,7 +2525,7 @@ function OwnerWorkspace() {
           >
             <summary>
               <span>Trip info</span>
-              {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
+              <small>Photo times use metadata and GPS</small>
             </summary>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (
@@ -9091,12 +9028,6 @@ function TripFields({
   form: TripForm;
   onChange: (form: TripForm) => void;
 }) {
-  const timeZones = useMemo(
-    () => timeZoneOptions(form.timezoneId),
-    [form.timezoneId],
-  );
-  const validTimeZone = isSupportedTimeZone(form.timezoneId);
-
   function setField(field: keyof TripForm, value: string) {
     onChange({ ...form, [field]: value });
   }
@@ -9138,28 +9069,6 @@ function TripFields({
         </label>
       </div>
       <div className="field-grid">
-        <label>
-          Time zone
-          <select
-            value={form.timezoneId}
-            onChange={(event) => setField("timezoneId", event.target.value)}
-            required
-          >
-            {timeZones.map((timeZone) => (
-              <option key={timeZone} value={timeZone}>
-                {timeZone}
-                {timeZone === form.timezoneId && !validTimeZone
-                  ? " (invalid, choose another)"
-                  : ""}
-              </option>
-            ))}
-          </select>
-          {!validTimeZone ? (
-            <span className="field-hint warning">
-              Choose an IANA time zone such as Asia/Seoul.
-            </span>
-          ) : null}
-        </label>
         <label>
           Day cutoff hour
           <input
