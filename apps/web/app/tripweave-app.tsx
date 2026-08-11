@@ -5226,6 +5226,24 @@ function TripStoryExplorer({
     setNoteError("");
   }
 
+  function closeStopEditing() {
+    setEditToolsStopId(null);
+    setOpenStopActionsId(null);
+    setEditingStopId(null);
+    setStopTitleDraft("");
+    setRenameStopError("");
+    setEditingNoteKey(null);
+    setNoteDraft("");
+    setNoteError("");
+    setMergeStopError("");
+    setMergePickerStopId(null);
+    setPendingMergeKey(null);
+    setSplitStopId(null);
+    setSplitStopError("");
+    setPendingSplitKey(null);
+    setPendingDeleteStopId(null);
+  }
+
   async function saveStopTitle(stopId: string) {
     const nextTitle = stopTitleDraft.trim();
     if (!onRenameStop || !nextTitle) {
@@ -5235,8 +5253,7 @@ function TripStoryExplorer({
     setRenameStopError("");
     try {
       await onRenameStop(stopId, nextTitle);
-      setEditingStopId(null);
-      setStopTitleDraft("");
+      closeStopEditing();
     } catch (error) {
       setRenameStopError(messageFrom(error));
     } finally {
@@ -5283,8 +5300,12 @@ function TripStoryExplorer({
     setNoteError("");
     try {
       await save(id, noteDraft);
-      setEditingNoteKey(null);
-      setNoteDraft("");
+      if (kind === "stop") {
+        closeStopEditing();
+      } else {
+        setEditingNoteKey(null);
+        setNoteDraft("");
+      }
     } catch (error) {
       setNoteError(messageFrom(error));
     } finally {
@@ -6400,11 +6421,15 @@ function TripStoryExplorer({
                                       aria-haspopup="menu"
                                       aria-label={`Actions for ${displayStopTitle(stop)}`}
                                       title="Stop actions"
-                                      onClick={() =>
-                                        setOpenStopActionsId((current) =>
-                                          current === stop.id ? null : stop.id,
-                                        )
-                                      }
+                                      onClick={() => {
+                                        if (openStopActionsId === stop.id) {
+                                          setOpenStopActionsId(null);
+                                        } else if (isEditingPanel) {
+                                          closeStopEditing();
+                                        } else {
+                                          setOpenStopActionsId(stop.id);
+                                        }
+                                      }}
                                     >
                                       <TimelineMoreIcon />
                                     </button>
