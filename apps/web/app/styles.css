@@ -3018,7 +3018,7 @@ button.is-updating {
 
 .timeline-stop-card {
   display: grid;
-  grid-template-columns: 52px 44px minmax(0, 1fr) auto;
+  grid-template-columns: 52px 48px minmax(0, 1fr) auto;
   grid-column: 2;
   gap: 10px;
   align-items: center;
@@ -3027,13 +3027,13 @@ button.is-updating {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
-  padding: 10px 0;
+  padding: 8px 0;
   box-shadow: none;
 }
 
 .timeline-stop-photo {
   grid-column: 2;
-  width: 42px;
+  width: 46px;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
