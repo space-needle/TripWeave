@@ -2707,6 +2707,10 @@ button.is-updating {
   z-index: 3;
 }
 
+.timeline-stop-stack.in-area.stop-actions-open {
+  z-index: 10;
+}
+
 .timeline-stop-stack.in-area + .timeline-stop-stack.in-area {
   margin-top: -10px;
 }

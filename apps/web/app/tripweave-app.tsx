@@ -6080,6 +6080,7 @@ function TripStoryExplorer({
                       isManagingStop ||
                       editingStopId === stop.id ||
                       editingNoteKey === `stop:${stop.id}`;
+                    const isStopActionsOpen = openStopActionsId === stop.id;
                     const mergeCandidates = mergeCandidateStops(
                       day,
                       stop,
@@ -6138,7 +6139,7 @@ function TripStoryExplorer({
                       null;
                     return (
                       <div
-                        className={
+                        className={`${
                           areaContext
                             ? `timeline-stop-stack in-area ${
                                 isFirstAreaStop ? "area-start" : ""
@@ -6148,7 +6149,7 @@ function TripStoryExplorer({
                                   : ""
                               }`
                             : "timeline-stop-stack"
-                        }
+                        } ${isStopActionsOpen ? "stop-actions-open" : ""}`}
                         key={stop.id}
                       >
                         {areaContext && isFirstAreaStop ? (
@@ -6536,9 +6537,7 @@ function TripStoryExplorer({
                                     <button
                                       type="button"
                                       className="timeline-icon-button"
-                                      aria-expanded={
-                                        openStopActionsId === stop.id
-                                      }
+                                      aria-expanded={isStopActionsOpen}
                                       aria-haspopup="menu"
                                       aria-label={`Actions for ${displayStopTitle(stop)}`}
                                       title="Stop actions"
@@ -6554,7 +6553,7 @@ function TripStoryExplorer({
                                     >
                                       <TimelineMoreIcon />
                                     </button>
-                                    {openStopActionsId === stop.id ? (
+                                    {isStopActionsOpen ? (
                                       <div
                                         className="timeline-stop-actions-menu"
                                         role="menu"
