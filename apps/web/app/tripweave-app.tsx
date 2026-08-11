@@ -103,6 +103,7 @@ type MobileWorkspaceTab =
   | "share"
   | "tripSettings"
   | "appSettings"
+  | "trips"
   | "tripBrowse"
   | "help";
 type StoryMobilePane = "map" | "timeline" | "photos";
@@ -1818,12 +1819,12 @@ function OwnerWorkspace() {
           <button
             type="button"
             aria-label="Trips"
-            aria-pressed={mobileTab === "appSettings"}
-            className={mobileTab === "appSettings" ? "active" : ""}
+            aria-pressed={mobileTab === "trips"}
+            className={mobileTab === "trips" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
               closeMobileMenus();
-              setMobileTab("appSettings");
+              setMobileTab("trips");
             }}
             title="Trips"
           >
@@ -1848,12 +1849,12 @@ function OwnerWorkspace() {
           <button
             type="button"
             aria-label="Settings"
-            aria-pressed={mobileTab === "tripSettings"}
-            className={mobileTab === "tripSettings" ? "active" : ""}
+            aria-pressed={mobileTab === "appSettings"}
+            className={mobileTab === "appSettings" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
               closeMobileMenus();
-              setMobileTab("tripSettings");
+              setMobileTab("appSettings");
             }}
             title="Settings"
           >
@@ -1962,10 +1963,10 @@ function OwnerWorkspace() {
       <section className="workspace trip-workspace">
         <aside
           className={`trip-nav panel ${
-            mobileTab === "appSettings" ? "mobile-tab-active" : ""
+            mobileTab === "trips" ? "mobile-tab-active" : ""
           }`}
           aria-label="Trip navigation"
-          data-mobile-tab-panel="appSettings"
+          data-mobile-tab-panel="trips"
         >
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
@@ -2589,15 +2590,6 @@ function OwnerWorkspace() {
               <span>Trip info</span>
               {selectedTrip ? <small>{selectedTrip.timezoneId}</small> : null}
             </summary>
-            <div className="mobile-account-card">
-              <div>
-                <span>Signed in</span>
-                <strong>{user.display_name}</strong>
-              </div>
-              <button type="button" onClick={logout} disabled={isBusy}>
-                Logout
-              </button>
-            </div>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (
                 <>
@@ -2622,6 +2614,24 @@ function OwnerWorkspace() {
             </form>
           </details>
         </aside>
+        <section
+          className={`panel mobile-app-settings ${
+            mobileTab === "appSettings" ? "mobile-tab-active" : ""
+          }`}
+          aria-labelledby="app-settings-title"
+          data-mobile-tab-panel="appSettings"
+        >
+          <h2 id="app-settings-title">Settings</h2>
+          <div className="mobile-account-card">
+            <div>
+              <span>Signed in</span>
+              <strong>{user.display_name}</strong>
+            </div>
+            <button type="button" onClick={logout} disabled={isBusy}>
+              Logout
+            </button>
+          </div>
+        </section>
       </section>
     </main>
   );
