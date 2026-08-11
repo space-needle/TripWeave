@@ -151,7 +151,10 @@ p {
   padding: 40px 0;
 }
 
-.app-shell.owner-workspace-shell,
+.app-shell.owner-workspace-shell {
+  width: 100%;
+}
+
 .public-story-shell {
   width: min(430px, calc(100% - 24px));
 }
@@ -4565,7 +4568,10 @@ button.thumb-frame:focus-visible {
 }
 
 @media (min-width: 921px) {
-  .app-shell.owner-workspace-shell,
+  .app-shell.owner-workspace-shell {
+    width: 100%;
+  }
+
   .public-story-shell {
     width: min(430px, calc(100% - 24px));
   }
