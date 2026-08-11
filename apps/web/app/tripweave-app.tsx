@@ -4192,6 +4192,12 @@ function TripStoryExplorer({
     Record<string, AreaVisitsResponse>
   >({});
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [areaEditingMode, setAreaEditingMode] = useState<
+    "rename" | "manage" | null
+  >(null);
+  const [openAreaActionsId, setOpenAreaActionsId] = useState<string | null>(
+    null,
+  );
   const [areaTitleDraft, setAreaTitleDraft] = useState("");
   const [areaEditError, setAreaEditError] = useState("");
   const [savingAreaActionKey, setSavingAreaActionKey] = useState<string | null>(
@@ -4966,6 +4972,8 @@ function TripStoryExplorer({
     setCreateAreaError("");
     setEditToolsStopId(null);
     setEditingAreaId(null);
+    setAreaEditingMode(null);
+    setOpenAreaActionsId(null);
   }
 
   function toggleAreaSelectionStop(
@@ -5147,8 +5155,12 @@ function TripStoryExplorer({
     return day.stops.filter((candidate) => candidateIds.has(candidate.id));
   }
 
-  function startEditingArea(area: AreaVisitResponse) {
+  function startEditingArea(
+    area: AreaVisitResponse,
+    mode: "rename" | "manage",
+  ) {
     setEditingAreaId(area.id);
+    setAreaEditingMode(mode);
     setAreaTitleDraft(displayAreaTitle(area));
     setAreaEditError("");
   }
@@ -5166,6 +5178,7 @@ function TripStoryExplorer({
     try {
       await onRenameAreaVisit(area.id, nextTitle);
       setEditingAreaId(null);
+      setAreaEditingMode(null);
       setAreaTitleDraft("");
     } catch (error) {
       setAreaVisitsByDay(previousAreaVisitsByDay);
@@ -5239,9 +5252,12 @@ function TripStoryExplorer({
     try {
       await onDeleteAreaVisit(area.id);
       setEditingAreaId(null);
+      setAreaEditingMode(null);
       setAreaTitleDraft("");
     } catch (error) {
       setAreaVisitsByDay(previousAreaVisitsByDay);
+      setEditingAreaId(area.id);
+      setAreaEditingMode("manage");
       setAreaEditError(messageFrom(error));
     } finally {
       setSavingAreaActionKey(null);
@@ -6168,44 +6184,94 @@ function TripStoryExplorer({
                               ) : null}
                             </div>
                             {canEditArea ? (
-                              <button
-                                type="button"
-                                className="timeline-icon-button"
-                                aria-expanded={
-                                  editingAreaId === areaContext.area.id
-                                }
-                                aria-label={
-                                  editingAreaId === areaContext.area.id
-                                    ? `Close editing tools for ${displayAreaTitle(areaContext.area)}`
-                                    : `Edit ${displayAreaTitle(areaContext.area)}`
-                                }
-                                title={
-                                  editingAreaId === areaContext.area.id
-                                    ? "Done"
-                                    : "Edit area"
-                                }
-                                onClick={() => {
-                                  if (editingAreaId === areaContext.area.id) {
-                                    setEditingAreaId(null);
-                                    setAreaTitleDraft("");
-                                    setAreaEditError("");
-                                  } else {
-                                    startEditingArea(areaContext.area);
+                              <div className="timeline-stop-actions-menu-wrap">
+                                <button
+                                  type="button"
+                                  className="timeline-icon-button"
+                                  aria-expanded={
+                                    openAreaActionsId === areaContext.area.id
                                   }
-                                }}
-                              >
-                                <TimelineActionIcon
-                                  name={
-                                    editingAreaId === areaContext.area.id
-                                      ? "check"
-                                      : "edit"
-                                  }
-                                />
-                              </button>
+                                  aria-haspopup="menu"
+                                  aria-label={`Actions for ${displayAreaTitle(areaContext.area)}`}
+                                  title="Area actions"
+                                  onClick={() => {
+                                    if (
+                                      openAreaActionsId === areaContext.area.id
+                                    ) {
+                                      setOpenAreaActionsId(null);
+                                    } else {
+                                      setOpenAreaActionsId(areaContext.area.id);
+                                    }
+                                  }}
+                                >
+                                  <TimelineMoreIcon />
+                                </button>
+                                {openAreaActionsId === areaContext.area.id ? (
+                                  <div
+                                    className="timeline-stop-actions-menu"
+                                    role="menu"
+                                  >
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      disabled={!onRenameAreaVisit}
+                                      onClick={() => {
+                                        setOpenAreaActionsId(null);
+                                        startEditingArea(
+                                          areaContext.area,
+                                          "rename",
+                                        );
+                                      }}
+                                    >
+                                      Rename area
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      disabled={
+                                        !onAddAreaVisitStop &&
+                                        !onRemoveAreaVisitStop
+                                      }
+                                      onClick={() => {
+                                        setOpenAreaActionsId(null);
+                                        if (
+                                          editingAreaId ===
+                                            areaContext.area.id &&
+                                          areaEditingMode === "manage"
+                                        ) {
+                                          setEditingAreaId(null);
+                                          setAreaEditingMode(null);
+                                          setAreaEditError("");
+                                        } else {
+                                          startEditingArea(
+                                            areaContext.area,
+                                            "manage",
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      Manage area
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      className="danger"
+                                      disabled={!onDeleteAreaVisit}
+                                      onClick={() => {
+                                        setOpenAreaActionsId(null);
+                                        void deleteArea(areaContext.area);
+                                      }}
+                                    >
+                                      Delete area
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
                             ) : null}
                             {editingAreaId === areaContext.area.id ? (
                               <div className="timeline-area-edit-panel">
-                                {onRenameAreaVisit ? (
+                                {areaEditingMode === "rename" &&
+                                onRenameAreaVisit ? (
                                   <form
                                     className="timeline-stop-rename"
                                     onSubmit={(event) => {
@@ -6249,6 +6315,7 @@ function TripStoryExplorer({
                                         title="Cancel"
                                         onClick={() => {
                                           setEditingAreaId(null);
+                                          setAreaEditingMode(null);
                                           setAreaTitleDraft("");
                                           setAreaEditError("");
                                         }}
@@ -6258,7 +6325,16 @@ function TripStoryExplorer({
                                     </div>
                                   </form>
                                 ) : null}
-                                {onAddAreaVisitStop &&
+                                {areaEditingMode === "manage" ? (
+                                  <div className="timeline-edit-context">
+                                    <strong>
+                                      Manage{" "}
+                                      {displayAreaTitle(areaContext.area)}
+                                    </strong>
+                                  </div>
+                                ) : null}
+                                {areaEditingMode === "manage" &&
+                                onAddAreaVisitStop &&
                                 (previousAreaStop || nextAreaStop) ? (
                                   <div className="timeline-area-edge-tools">
                                     {previousAreaStop ? (
@@ -6303,7 +6379,8 @@ function TripStoryExplorer({
                                     ) : null}
                                   </div>
                                 ) : null}
-                                {onRemoveAreaVisitStop ? (
+                                {areaEditingMode === "manage" &&
+                                onRemoveAreaVisitStop ? (
                                   <div className="timeline-area-member-tools">
                                     {areaContext.stops
                                       .filter(
@@ -6333,23 +6410,6 @@ function TripStoryExplorer({
                                           Remove {displayStopPosition(areaStop)}
                                         </button>
                                       ))}
-                                  </div>
-                                ) : null}
-                                {onDeleteAreaVisit ? (
-                                  <div className="timeline-area-delete-tools">
-                                    <button
-                                      type="button"
-                                      className="timeline-tool-button danger"
-                                      disabled={
-                                        savingAreaActionKey ===
-                                        `delete:${areaContext.area.id}`
-                                      }
-                                      onClick={() =>
-                                        void deleteArea(areaContext.area)
-                                      }
-                                    >
-                                      Delete area
-                                    </button>
                                   </div>
                                 ) : null}
                                 {areaEditError ? (

@@ -3155,6 +3155,10 @@ button.is-updating {
   background: #f1f7f4;
 }
 
+.timeline-stop-actions-menu button.danger {
+  color: var(--danger);
+}
+
 .timeline-icon-button {
   width: 28px;
   min-height: 28px;
