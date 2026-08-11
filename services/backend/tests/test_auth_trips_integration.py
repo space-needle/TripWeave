@@ -23,6 +23,7 @@ from tripweave.adapters.manual_geocoder import ManualGeocoder
 from tripweave.adapters.trip_map_projection import rebuild_trip_map_point_projection
 from tripweave.config import Settings, get_settings
 from tripweave.domain.storage import BlobRef
+from tripweave.entrypoints.api import main as api_main
 from tripweave.entrypoints.api.main import create_app
 from tripweave.entrypoints.worker.main import ClaimedJob, claim_job, handle_job
 
@@ -1380,6 +1381,7 @@ def test_hiding_media_prunes_empty_story_stop_and_repairs_legs(
 def test_organizer_can_rename_area_visit_and_adjust_membership(
     client: TestClient,
     engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     csrf_token = register(client, "area-edit-owner@example.com")
@@ -1507,6 +1509,28 @@ def test_organizer_can_rename_area_visit_and_adjust_membership(
     assert rerun.status_code == 200, rerun.text
     after_rerun = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
     assert [area["title"] for area in after_rerun["areas"]] == ["Recreated area"]
+
+    def fail_trip_map_projection(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("projection failure")
+
+    with monkeypatch.context() as projection_failure:
+        projection_failure.setattr(
+            api_main,
+            "rebuild_trip_map_point_projection",
+            fail_trip_map_projection,
+        )
+        with pytest.raises(RuntimeError, match="projection failure"):
+            client.post(
+                f"/trips/{trip_id}/edit-operations",
+                headers={"x-csrf-token": csrf_token},
+                json={
+                    "operationType": "delete_area_visit",
+                    "payload": {"areaVisitId": after_rerun["areas"][0]["id"]},
+                },
+            )
+    after_failed_delete = client.get(f"/trips/{trip_id}/days/{day_id}/area-visits").json()
+    assert [area["title"] for area in after_failed_delete["areas"]] == ["Recreated area"]
+
     with engine.connect() as connection:
         deleted_at = connection.execute(
             text(

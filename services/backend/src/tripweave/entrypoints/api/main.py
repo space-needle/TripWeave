@@ -4191,7 +4191,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             review_item_id=review_item.id if review_item is not None else payload.review_item_id,
         )
         invalidate_story_draft_projection(db, trip_id)
-        db.commit()
         rebuild_story_projections(db, trip_id)
         rebuild_trip_map_point_projection(db, trip_id)
         db.commit()
@@ -4313,7 +4312,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             undo_of_operation_id=operation.id,
         )
         invalidate_story_draft_projection(db, trip_id)
-        db.commit()
         rebuild_story_projections(db, trip_id)
         rebuild_trip_map_point_projection(db, trip_id)
         db.commit()
@@ -4942,7 +4940,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         ):
             prune_media_from_story(db, media_item)
         invalidate_story_draft_projection(db, media_item.trip_id)
-        db.commit()
         rebuild_story_projections(db, media_item.trip_id)
         rebuild_trip_map_point_projection(db, media_item.trip_id)
         db.commit()
@@ -5703,7 +5700,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 updated_at=now,
             )
         )
-        db.commit()
 
     def photo_from_reconstruction_media(
         media: ReconstructionMediaResponse,
@@ -5816,7 +5812,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     updated_at=now,
                 )
             )
-        db.commit()
 
     def rebuild_story_projections(db: DbSession, trip_id: UUID) -> None:
         response = reconstruction_response(db, trip_id)
