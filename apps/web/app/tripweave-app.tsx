@@ -115,6 +115,7 @@ type StoryHeaderIconAction =
   | "update"
   | "upload"
   | "manage"
+  | "trips"
   | "browse"
   | "settings"
   | "help";
@@ -1816,7 +1817,22 @@ function OwnerWorkspace() {
         <nav className="mobile-tool-menu" aria-label="Tools">
           <button
             type="button"
-            aria-label="Browse trips"
+            aria-label="Trips"
+            aria-pressed={mobileTab === "appSettings"}
+            className={mobileTab === "appSettings" ? "active" : ""}
+            onClick={() => {
+              setOwnerStoryPhotosOpen(false);
+              closeMobileMenus();
+              setMobileTab("appSettings");
+            }}
+            title="Trips"
+          >
+            <StoryHeaderIcon action="trips" />
+            <span className="mobile-menu-label">Trips</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Trip Map"
             aria-pressed={mobileTab === "tripBrowse"}
             className={mobileTab === "tripBrowse" ? "active" : ""}
             onClick={() => {
@@ -1824,20 +1840,20 @@ function OwnerWorkspace() {
               closeMobileMenus();
               setMobileTab("tripBrowse");
             }}
-            title="Browse trips"
+            title="Trip Map"
           >
             <StoryHeaderIcon action="browse" />
-            <span className="mobile-menu-label">Browse trips</span>
+            <span className="mobile-menu-label">Trip Map</span>
           </button>
           <button
             type="button"
             aria-label="Settings"
-            aria-pressed={mobileTab === "appSettings"}
-            className={mobileTab === "appSettings" ? "active" : ""}
+            aria-pressed={mobileTab === "tripSettings"}
+            className={mobileTab === "tripSettings" ? "active" : ""}
             onClick={() => {
               setOwnerStoryPhotosOpen(false);
               closeMobileMenus();
-              setMobileTab("appSettings");
+              setMobileTab("tripSettings");
             }}
             title="Settings"
           >
@@ -2009,7 +2025,7 @@ function OwnerWorkspace() {
                 setMobileTab("tripBrowse");
               }}
             >
-              Browse trips
+              Trip Map
             </button>
             <a href="#photos-panel">Photos</a>
             {selectedTrip?.role === "owner" ? (
@@ -3774,7 +3790,7 @@ function TripBrowserPanel({
     <>
       <div className="trip-stage-header">
         <div>
-          <h2 id="trip-stage-title">Browse trips</h2>
+          <h2 id="trip-stage-title">Trip Map</h2>
           <p>
             {data
               ? `${data.trips.length} trip${
@@ -10068,6 +10084,16 @@ function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
 }
 
 function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
+  if (action === "trips") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <rect x="4" y="4" width="16" height="5" rx="1" />
+        <rect x="4" y="11" width="16" height="5" rx="1" />
+        <path d="M7 6.5h.01M7 13.5h.01M10 6.5h6M10 13.5h6" />
+      </svg>
+    );
+  }
+
   if (action === "map" || action === "story") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
