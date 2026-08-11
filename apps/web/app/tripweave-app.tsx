@@ -1764,6 +1764,7 @@ function OwnerWorkspace() {
         >
           <StoryHeaderIcon action="slideshow" />
         </button>
+        <span className="mobile-trip-action-divider" aria-hidden="true" />
         {canManageSelectedTrip ? (
           <button
             type="button"
@@ -1826,6 +1827,7 @@ function OwnerWorkspace() {
             title="Browse trips"
           >
             <StoryHeaderIcon action="browse" />
+            <span className="mobile-menu-label">Browse trips</span>
           </button>
           <button
             type="button"
@@ -1840,6 +1842,7 @@ function OwnerWorkspace() {
             title="Settings"
           >
             <StoryHeaderIcon action="settings" />
+            <span className="mobile-menu-label">Settings</span>
           </button>
           <button
             type="button"
@@ -1854,6 +1857,7 @@ function OwnerWorkspace() {
             title="Help"
           >
             <StoryHeaderIcon action="help" />
+            <span className="mobile-menu-label">Help</span>
           </button>
         </nav>
       ) : null}
@@ -1885,6 +1889,9 @@ function OwnerWorkspace() {
             ) : (
               <StoryHeaderIcon action="update" />
             )}
+            <span className="mobile-menu-label">
+              {isReconstructingStory ? "Updating story" : "Update story"}
+            </span>
           </button>
           <button
             type="button"
@@ -1899,6 +1906,7 @@ function OwnerWorkspace() {
             title="Upload photos"
           >
             <StoryHeaderIcon action="upload" />
+            <span className="mobile-menu-label">Upload photos</span>
           </button>
           <button
             type="button"
@@ -1914,6 +1922,7 @@ function OwnerWorkspace() {
             title="Share trip"
           >
             <StoryHeaderIcon action="share" />
+            <span className="mobile-menu-label">Share trip</span>
           </button>
           <button
             type="button"
@@ -1929,6 +1938,7 @@ function OwnerWorkspace() {
             title="Trip settings"
           >
             <StoryHeaderIcon action="manage" />
+            <span className="mobile-menu-label">Trip settings</span>
           </button>
         </nav>
       ) : null}
