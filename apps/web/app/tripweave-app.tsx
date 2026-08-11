@@ -4127,6 +4127,11 @@ function TripStoryExplorer({
   );
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
   const [openDayActionsId, setOpenDayActionsId] = useState<string | null>(null);
+  const [pendingTimelineDaySelection, setPendingTimelineDaySelection] =
+    useState<{
+      dayId: string;
+      previousSelectedDayId: string | null;
+    } | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteError, setNoteError] = useState("");
   const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
@@ -5498,6 +5503,12 @@ function TripStoryExplorer({
     activeDay?.note?.trim() ||
     "";
   const activeTimelineDay = activeDay ?? story.days[0] ?? null;
+  const visualTimelineDayId =
+    pendingTimelineDaySelection &&
+    state.selectedDayId ===
+      pendingTimelineDaySelection.previousSelectedDayId
+      ? pendingTimelineDaySelection.dayId
+      : (activeTimelineDay?.id ?? null);
   const timelineDays = activeTimelineDay ? [activeTimelineDay] : [];
 
   return (
@@ -5743,14 +5754,20 @@ function TripStoryExplorer({
             >
               {story.days.map((day) => {
                 const dateParts = timelineDayDateParts(day);
-                const isActive = activeTimelineDay?.id === day.id;
+                const isActive = visualTimelineDayId === day.id;
                 return (
                   <button
                     type="button"
                     className={isActive ? "active" : ""}
                     aria-pressed={isActive}
                     key={day.id}
-                    onClick={() => onStateChange(selectStoryDay(state, day.id))}
+                    onClick={() => {
+                      setPendingTimelineDaySelection({
+                        dayId: day.id,
+                        previousSelectedDayId: state.selectedDayId,
+                      });
+                      onStateChange(selectStoryDay(state, day.id));
+                    }}
                   >
                     <span>
                       {dateParts.weekday}
@@ -6282,6 +6299,16 @@ function TripStoryExplorer({
                             handleTimelineKey(event, stop.id, day.id)
                           }
                         >
+                          <span
+                            className="timeline-branch-lane"
+                            aria-hidden="true"
+                          />
+                          <span
+                            className="timeline-stop-marker"
+                            aria-hidden="true"
+                          >
+                            {displayStopPosition(stop)}
+                          </span>
                           <div className="timeline-stop-card">
                             <time
                               className="timeline-stop-time"
