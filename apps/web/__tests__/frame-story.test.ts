@@ -143,7 +143,7 @@ describe("frame story", () => {
     ]);
     expect(frame.scenes[0]).toMatchObject({
       title: "Trip overview",
-      routes: [{ id: "leg-1", points: "10,15 90,85" }],
+      routes: [],
     });
     expect(frame.scenes[1]).toMatchObject({
       title: "Arrival",

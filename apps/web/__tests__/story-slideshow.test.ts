@@ -158,12 +158,7 @@ describe("story slideshow", () => {
         },
       ],
     });
-    expect(
-      scenes[0].type === "trip" ? scenes[0].routes[0].coordinates : [],
-    ).toEqual([
-      [126.97, 37.56],
-      [126.99, 37.55],
-    ]);
+    expect(scenes[0].type === "trip" ? scenes[0].routes : []).toEqual([]);
     expect(scenes[1]).toMatchObject({
       type: "day",
       title: "Arrival",

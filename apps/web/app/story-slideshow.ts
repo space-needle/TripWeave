@@ -153,9 +153,6 @@ export function buildReconstructionSlideshowScenes(
   const tripStops = days.flatMap((day) =>
     day.stops.map((stop) => slideshowStop(stop)),
   );
-  const tripRoutes = days.flatMap((day) =>
-    (day.legs ?? []).flatMap((leg) => slideshowRoute(leg)),
-  );
   const tripDayMarkers = days.flatMap((day) => {
     const marker = slideshowDayMarker(day);
     return marker ? [marker] : [];
@@ -172,7 +169,7 @@ export function buildReconstructionSlideshowScenes(
       title: "Trip overview",
       subtitle: `${days.length} day${days.length === 1 ? "" : "s"} · ${tripStops.length} stop${tripStops.length === 1 ? "" : "s"} · ${photoCount} photo${photoCount === 1 ? "" : "s"}`,
       stops: tripStops,
-      routes: tripRoutes,
+      routes: [],
       dayMarkers: tripDayMarkers,
       photoCount,
     },
