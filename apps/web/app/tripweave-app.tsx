@@ -1905,6 +1905,14 @@ function OwnerWorkspace() {
           aria-label="Trip navigation"
           data-mobile-tab-panel="trips"
         >
+          <div className="mobile-page-header">
+            <div>
+              <h2>Trips</h2>
+              <p>
+                {trips.length} trip{trips.length === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
               <button
@@ -1964,7 +1972,10 @@ function OwnerWorkspace() {
             ) : null}
             <a href="#settings-panel">Settings</a>
           </nav>
-          <section aria-labelledby="trip-list-title">
+          <section
+            className="trip-list-section"
+            aria-labelledby="trip-list-title"
+          >
             <div className="nav-section-heading">
               <h2 id="trip-list-title">Trips</h2>
               <span>
@@ -2277,6 +2288,60 @@ function OwnerWorkspace() {
         </section>
 
         <aside className="trip-management" aria-label="Trip management">
+          <div
+            className={`mobile-page-header mobile-trip-context-header ${
+              mobileTab === "photos" ? "mobile-tab-active" : ""
+            }`}
+            data-mobile-tab-panel="photos"
+          >
+            <div>
+              <h2>Upload photos</h2>
+              {selectedTrip ? (
+                <p>
+                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
+                  {selectedTrip.endDate}
+                </p>
+              ) : (
+                <p>Select a trip before uploading photos.</p>
+              )}
+            </div>
+          </div>
+          <div
+            className={`mobile-page-header mobile-trip-context-header ${
+              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
+            }`}
+            data-mobile-tab-panel="tripSettings"
+          >
+            <div>
+              <h2>Trip settings</h2>
+              {selectedTrip ? (
+                <p>
+                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
+                  {selectedTrip.endDate}
+                </p>
+              ) : (
+                <p>Select a trip to manage its details.</p>
+              )}
+            </div>
+          </div>
+          <div
+            className={`mobile-page-header mobile-trip-context-header ${
+              mobileTab === "share" ? "mobile-tab-active" : ""
+            }`}
+            data-mobile-tab-panel="share"
+          >
+            <div>
+              <h2>Share trip</h2>
+              {selectedTrip ? (
+                <p>
+                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
+                  {selectedTrip.endDate}
+                </p>
+              ) : (
+                <p>Select a trip before sharing.</p>
+              )}
+            </div>
+          </div>
           <details
             className={`management-panel ${
               mobileTab === "photos" ? "mobile-tab-active" : ""
@@ -2558,7 +2623,12 @@ function OwnerWorkspace() {
           aria-labelledby="app-settings-title"
           data-mobile-tab-panel="appSettings"
         >
-          <h2 id="app-settings-title">Settings</h2>
+          <div className="mobile-page-header">
+            <div>
+              <h2 id="app-settings-title">Settings</h2>
+              <p>Account and workspace preferences</p>
+            </div>
+          </div>
           <div className="mobile-account-card">
             <div>
               <span>Signed in</span>

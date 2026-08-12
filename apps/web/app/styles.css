@@ -256,7 +256,8 @@ p {
 
 .mobile-account-card,
 .mobile-story-actions,
-.mobile-app-settings {
+.mobile-app-settings,
+.mobile-page-header {
   display: none;
 }
 
@@ -2381,6 +2382,40 @@ button.is-updating {
 }
 
 @media (max-width: 920px) {
+  .mobile-page-header {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    margin-bottom: 10px;
+    padding: 0 168px 4px 12px;
+  }
+
+  .mobile-page-header > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .mobile-page-header h2 {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 1rem;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-page-header p {
+    overflow: hidden;
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trip-list-section > .nav-section-heading {
+    display: none;
+  }
+
   .trip-browser-filters input[type="date"] {
     min-inline-size: 0 !important;
     padding-inline: 8px;
