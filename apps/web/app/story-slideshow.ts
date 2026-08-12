@@ -34,6 +34,16 @@ export type SlideshowRoute = {
 export type SlideshowScene =
   | {
       id: string;
+      type: "trip";
+      durationMs: number;
+      title: string;
+      subtitle: string;
+      stops: SlideshowStop[];
+      routes: SlideshowRoute[];
+      photoCount: number;
+    }
+  | {
+      id: string;
       type: "day";
       durationMs: number;
       title: string;
@@ -78,7 +88,8 @@ export function buildPublicStorySlideshowScenes(
 export function buildReconstructionSlideshowScenes(
   reconstruction: ReconstructionResponse | null,
 ): SlideshowScene[] {
-  return (reconstruction?.days ?? []).flatMap((day) => {
+  const days = reconstruction?.days ?? [];
+  const dayScenes = days.flatMap((day) => {
     const dayStops = day.stops.map((stop) => slideshowStop(stop));
     const dayRoutes = (day.legs ?? []).flatMap((leg) => slideshowRoute(leg));
     const stopSections = day.stops
@@ -127,6 +138,33 @@ export function buildReconstructionSlideshowScenes(
       ]),
     ];
   });
+  if (dayScenes.length === 0) {
+    return [];
+  }
+
+  const tripStops = days.flatMap((day) =>
+    day.stops.map((stop) => slideshowStop(stop)),
+  );
+  const tripRoutes = days.flatMap((day) =>
+    (day.legs ?? []).flatMap((leg) => slideshowRoute(leg)),
+  );
+  const photoCount = dayScenes.reduce(
+    (total, scene) => total + (scene.type === "photo" ? 1 : 0),
+    0,
+  );
+  return [
+    {
+      id: "trip:overview",
+      type: "trip",
+      durationMs: 6200,
+      title: "Trip overview",
+      subtitle: `${days.length} day${days.length === 1 ? "" : "s"} · ${tripStops.length} stop${tripStops.length === 1 ? "" : "s"} · ${photoCount} photo${photoCount === 1 ? "" : "s"}`,
+      stops: tripStops,
+      routes: tripRoutes,
+      photoCount,
+    },
+    ...dayScenes,
+  ];
 }
 
 function slideshowStopPhotos(

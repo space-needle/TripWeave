@@ -999,11 +999,32 @@ button.is-updating {
 .slideshow-map-marker.active {
   width: 54px;
   height: 54px;
+  overflow: visible;
   background: #d75d3f;
   font-size: 1.2rem;
   box-shadow:
     0 0 0 10px rgb(215 93 63 / 24%),
     0 16px 38px rgb(0 0 0 / 34%);
+}
+
+.slideshow-map-marker-label {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 40px));
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(5 7 10 / 82%);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding: 6px 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .slideshow-map-empty {
@@ -1102,6 +1123,24 @@ button.is-updating {
   pointer-events: none;
 }
 
+.slideshow-trip-overview-title {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  width: min(660px, calc(100vw - 260px));
+  overflow: hidden;
+  color: #fff;
+  font-size: clamp(1.35rem, 3vw, 2.5rem);
+  font-weight: 950;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 3px 18px rgb(0 0 0 / 72%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .slideshow-caption strong,
 .slideshow-caption span {
   margin: 0;
@@ -1160,6 +1199,20 @@ button.is-updating {
 
 .slideshow-caption-kicker {
   text-transform: uppercase;
+}
+
+.slideshow-day-overview-caption .slideshow-caption-kicker {
+  color: #fff;
+  font-size: clamp(1.1rem, 2vw, 1.55rem);
+  font-weight: 950;
+  letter-spacing: 0.04em;
+}
+
+.slideshow-trip-overview-caption .slideshow-caption-kicker {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
 }
 
 .slideshow-trip-title {

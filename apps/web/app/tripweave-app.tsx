@@ -9575,18 +9575,16 @@ function PublicStorySlideshow({
   const activePhoto = activeScene?.type === "photo" ? activeScene.photo : null;
   const [lastMapScene, setLastMapScene] = useState<Extract<
     SlideshowScene,
-    { type: "day" | "stop" }
+    { type: "trip" | "day" | "stop" }
   > | null>(() => {
-    const firstMapScene = scenes.find(
-      (scene) => scene.type === "day" || scene.type === "stop",
-    );
-    return firstMapScene?.type === "day" || firstMapScene?.type === "stop"
-      ? firstMapScene
-      : null;
+    const firstMapScene = scenes.find((scene) => scene.type !== "photo");
+    return firstMapScene ?? null;
   });
   const hasMultipleScenes = scenes.length > 1;
   const activeMapScene =
-    activeScene?.type === "day" || activeScene?.type === "stop"
+    activeScene?.type === "trip" ||
+    activeScene?.type === "day" ||
+    activeScene?.type === "stop"
       ? activeScene
       : null;
   const visibleMapScene = activeMapScene ?? lastMapScene;
@@ -9675,6 +9673,9 @@ function PublicStorySlideshow({
         </div>
       ) : null}
       <header className="slideshow-topbar">
+        {activeScene?.type === "trip" ? (
+          <span className="slideshow-trip-overview-title">{title}</span>
+        ) : null}
         <div className="slideshow-controls" aria-label="Slideshow controls">
           <button
             type="button"
@@ -9705,14 +9706,26 @@ function PublicStorySlideshow({
           </button>
         </div>
       </header>
-      {activeScene?.type === "day" || activeScene?.type === "stop" ? (
-        <footer className="slideshow-caption map-caption">
+      {activeScene?.type === "trip" ||
+      activeScene?.type === "day" ||
+      activeScene?.type === "stop" ? (
+        <footer
+          className={`slideshow-caption map-caption ${
+            activeScene.type === "trip"
+              ? "slideshow-trip-overview-caption"
+              : activeScene.type === "day"
+                ? "slideshow-day-overview-caption"
+                : "slideshow-stop-caption"
+          }`}
+        >
           <div className="slideshow-caption-copy">
             <span className="slideshow-trip-title">{title}</span>
             <span className="slideshow-caption-kicker">
-              {activeScene.type === "day"
-                ? "Day overview"
-                : activeScene.dayLabel}
+              {activeScene.type === "trip"
+                ? "Trip overview"
+                : activeScene.type === "day"
+                  ? "Day overview"
+                  : activeScene.dayLabel}
             </span>
             <strong>{activeScene.title}</strong>
             <div className="slideshow-caption-meta">
@@ -9884,7 +9897,7 @@ function SlideshowControlIcon({
 function SlideshowMapScene({
   scene,
 }: {
-  scene: Extract<SlideshowScene, { type: "day" | "stop" }>;
+  scene: Extract<SlideshowScene, { type: "trip" | "day" | "stop" }>;
 }) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -9948,6 +9961,10 @@ function SlideshowMapScene({
             ...scene.stops.filter((stop) => stop.id === scene.activeStopId),
           ]
         : scene.stops;
+    const activeStop =
+      scene.type === "stop"
+        ? scene.stops.find((stop) => stop.id === scene.activeStopId)
+        : null;
 
     // MapLibre stacks DOM markers in insertion order, so add the current stop last.
     for (const stop of stopsByMarkerDepth) {
@@ -9960,6 +9977,12 @@ function SlideshowMapScene({
           ? "slideshow-map-marker active"
           : "slideshow-map-marker";
       element.textContent = String(stop.position);
+      if (scene.type === "stop" && stop.id === activeStop?.id) {
+        const label = document.createElement("span");
+        label.className = "slideshow-map-marker-label";
+        label.textContent = stop.label;
+        element.append(label);
+      }
       markersRef.current.push(
         new maplibregl.Marker({ element, anchor: "center" })
           .setLngLat(stop.coordinates)
@@ -9978,10 +10001,6 @@ function SlideshowMapScene({
       map.once("load", syncRoute);
     }
 
-    const activeStop =
-      scene.type === "stop"
-        ? scene.stops.find((stop) => stop.id === scene.activeStopId)
-        : null;
     const focusCoordinates =
       scene.type === "stop" && activeStop?.coordinates
         ? [activeStop.coordinates]

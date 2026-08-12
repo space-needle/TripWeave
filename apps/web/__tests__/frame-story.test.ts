@@ -136,15 +136,20 @@ describe("frame story", () => {
     expect(frame.scenes.map((scene) => scene.type)).toEqual([
       "map",
       "map",
+      "map",
       "photo",
       "map",
       "photo",
     ]);
     expect(frame.scenes[0]).toMatchObject({
+      title: "Trip overview",
+      routes: [{ id: "leg-1", points: "10,15 90,85" }],
+    });
+    expect(frame.scenes[1]).toMatchObject({
       title: "Arrival",
       routes: [{ id: "leg-1", points: "10,15 90,85" }],
     });
-    expect(frame.scenes[2]).toMatchObject({
+    expect(frame.scenes[3]).toMatchObject({
       type: "photo",
       imageUrl: "/public/shares/token/assets/preview",
     });

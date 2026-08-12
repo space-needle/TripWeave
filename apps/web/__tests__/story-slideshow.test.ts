@@ -135,10 +135,11 @@ const publicStory: PublicStoryResponse = {
 };
 
 describe("story slideshow", () => {
-  it("builds day, stop, and photo scenes in story order", () => {
+  it("starts with a trip overview before day, stop, and photo scenes", () => {
     const scenes = buildPublicStorySlideshowScenes(publicStory);
 
     expect(scenes.map((scene) => scene.id)).toEqual([
+      "trip:overview",
       "day:day-1",
       "stop:stop-1",
       "photo:media-1",
@@ -146,17 +147,28 @@ describe("story slideshow", () => {
       "photo:media-3",
     ]);
     expect(scenes[0]).toMatchObject({
-      type: "day",
-      title: "Arrival",
+      type: "trip",
+      title: "Trip overview",
       photoCount: 2,
     });
     expect(
-      scenes[0].type === "day" ? scenes[0].routes[0].coordinates : [],
+      scenes[0].type === "trip" ? scenes[0].routes[0].coordinates : [],
     ).toEqual([
       [126.97, 37.56],
       [126.99, 37.55],
     ]);
     expect(scenes[1]).toMatchObject({
+      type: "day",
+      title: "Arrival",
+      photoCount: 2,
+    });
+    expect(
+      scenes[1].type === "day" ? scenes[1].routes[0].coordinates : [],
+    ).toEqual([
+      [126.97, 37.56],
+      [126.99, 37.55],
+    ]);
+    expect(scenes[2]).toMatchObject({
       type: "stop",
       title: "Cafe stop",
       activeStopId: "stop-1",
@@ -205,7 +217,7 @@ describe("story slideshow", () => {
 
     const scenes = buildPublicStorySlideshowScenes(untitledStory);
 
-    expect(scenes[0]).toMatchObject({ type: "day", title: "6/1" });
-    expect(scenes[1]).toMatchObject({ type: "stop", dayLabel: "6/1" });
+    expect(scenes[1]).toMatchObject({ type: "day", title: "6/1" });
+    expect(scenes[2]).toMatchObject({ type: "stop", dayLabel: "6/1" });
   });
 });
