@@ -31,6 +31,13 @@ export type SlideshowRoute = {
   coordinates: [number, number][];
 };
 
+export type SlideshowDayMarker = {
+  id: string;
+  label: string;
+  coordinates: [number, number];
+  imageUrl: string;
+};
+
 export type SlideshowScene =
   | {
       id: string;
@@ -40,6 +47,7 @@ export type SlideshowScene =
       subtitle: string;
       stops: SlideshowStop[];
       routes: SlideshowRoute[];
+      dayMarkers: SlideshowDayMarker[];
       photoCount: number;
     }
   | {
@@ -148,6 +156,10 @@ export function buildReconstructionSlideshowScenes(
   const tripRoutes = days.flatMap((day) =>
     (day.legs ?? []).flatMap((leg) => slideshowRoute(leg)),
   );
+  const tripDayMarkers = days.flatMap((day) => {
+    const marker = slideshowDayMarker(day);
+    return marker ? [marker] : [];
+  });
   const photoCount = dayScenes.reduce(
     (total, scene) => total + (scene.type === "photo" ? 1 : 0),
     0,
@@ -161,6 +173,7 @@ export function buildReconstructionSlideshowScenes(
       subtitle: `${days.length} day${days.length === 1 ? "" : "s"} · ${tripStops.length} stop${tripStops.length === 1 ? "" : "s"} · ${photoCount} photo${photoCount === 1 ? "" : "s"}`,
       stops: tripStops,
       routes: tripRoutes,
+      dayMarkers: tripDayMarkers,
       photoCount,
     },
     ...dayScenes,
@@ -177,6 +190,28 @@ function slideshowStopPhotos(
       return photo ? [photo] : [];
     }),
   );
+}
+
+function slideshowDayMarker(
+  day: ReconstructionDayResponse,
+): SlideshowDayMarker | null {
+  const coordinates = centerOfCoordinates(
+    day.stops
+      .map((stop) => slideshowStop(stop).coordinates)
+      .filter((coordinate) => coordinate !== null),
+  );
+  const photo = day.stops
+    .flatMap((stop) => slideshowStopPhotos(day, stop))
+    .at(0);
+  if (!coordinates || !photo) {
+    return null;
+  }
+  return {
+    id: day.id,
+    label: slideshowDayLabel(day),
+    coordinates,
+    imageUrl: photo.imageUrl,
+  };
 }
 
 function slideshowPhoto(
@@ -237,6 +272,22 @@ function lineStringCoordinates(
         : null,
     )
     .filter((coordinate) => coordinate !== null);
+}
+
+function centerOfCoordinates(
+  coordinates: [number, number][],
+): [number, number] | null {
+  if (coordinates.length === 0) {
+    return null;
+  }
+  const [longitude, latitude] = coordinates.reduce(
+    ([longitudeTotal, latitudeTotal], [longitude, latitude]) => [
+      longitudeTotal + longitude,
+      latitudeTotal + latitude,
+    ],
+    [0, 0],
+  );
+  return [longitude / coordinates.length, latitude / coordinates.length];
 }
 
 function slideshowDayLabel(day: ReconstructionDayResponse): string {

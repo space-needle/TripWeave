@@ -9967,7 +9967,27 @@ function SlideshowMapScene({
         : null;
 
     // MapLibre stacks DOM markers in insertion order, so add the current stop last.
+    if (scene.type === "trip") {
+      for (const dayMarker of scene.dayMarkers) {
+        const element = document.createElement("div");
+        element.className = "slideshow-day-map-marker";
+        const image = document.createElement("img");
+        image.src = dayMarker.imageUrl;
+        image.alt = "";
+        const label = document.createElement("span");
+        label.textContent = dayMarker.label;
+        element.append(image, label);
+        markersRef.current.push(
+          new maplibregl.Marker({ element, anchor: "center" })
+            .setLngLat(dayMarker.coordinates)
+            .addTo(map),
+        );
+      }
+    }
     for (const stop of stopsByMarkerDepth) {
+      if (scene.type === "trip") {
+        continue;
+      }
       if (!stop.coordinates) {
         continue;
       }

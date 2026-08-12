@@ -150,6 +150,13 @@ describe("story slideshow", () => {
       type: "trip",
       title: "Trip overview",
       photoCount: 2,
+      dayMarkers: [
+        {
+          id: "day-1",
+          label: "Arrival",
+          imageUrl: "/previews/arrival.jpg",
+        },
+      ],
     });
     expect(
       scenes[0].type === "trip" ? scenes[0].routes[0].coordinates : [],
