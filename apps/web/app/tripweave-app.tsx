@@ -2627,6 +2627,17 @@ function OwnerWorkspace() {
             </form>
           </details>
         </aside>
+        <div
+          className={`mobile-page-header ${
+            mobileTab === "appSettings" ? "mobile-tab-active" : ""
+          }`}
+          data-mobile-tab-panel="appSettings"
+        >
+          <div>
+            <h2 id="app-settings-title">Settings</h2>
+            <p>Account and workspace preferences</p>
+          </div>
+        </div>
         <section
           className={`panel mobile-app-settings ${
             mobileTab === "appSettings" ? "mobile-tab-active" : ""
@@ -2634,12 +2645,6 @@ function OwnerWorkspace() {
           aria-labelledby="app-settings-title"
           data-mobile-tab-panel="appSettings"
         >
-          <div className="mobile-page-header">
-            <div>
-              <h2 id="app-settings-title">Settings</h2>
-              <p>Account and workspace preferences</p>
-            </div>
-          </div>
           <div className="mobile-account-card">
             <div>
               <span>Signed in</span>
