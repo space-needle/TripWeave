@@ -8213,6 +8213,19 @@ function StoryMapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map?.isStyleLoaded()) {
+      return;
+    }
+    const routeVisibility = state.viewMode === "DAY" ? "none" : "visible";
+    for (const layerId of ["routes-confirmed", "routes-inferred"]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", routeVisibility);
+      }
+    }
+  }, [state.viewMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) {
       return;
     }
@@ -8234,7 +8247,10 @@ function StoryMapCanvas({
         markerAnchor.dataset.dayId = dayId;
         const element = document.createElement("button");
         element.type = "button";
-        element.className = "photo-day-marker";
+        element.className =
+          state.viewMode === "DAY" && state.selectedDayId !== dayId
+            ? "photo-day-marker muted"
+            : "photo-day-marker";
         element.setAttribute("aria-label", `Explore stops for ${label}`);
         element.style.setProperty("--stop-color", color);
         if (featuredMedia?.thumbnailUrl) {
