@@ -1898,6 +1898,19 @@ function OwnerWorkspace() {
       ) : null}
 
       <section className="workspace trip-workspace">
+        <div
+          className={`mobile-page-header ${
+            mobileTab === "trips" ? "mobile-tab-active" : ""
+          }`}
+          data-mobile-tab-panel="trips"
+        >
+          <div>
+            <h2>Trips</h2>
+            <p>
+              {trips.length} trip{trips.length === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
         <aside
           className={`trip-nav panel ${
             mobileTab === "trips" ? "mobile-tab-active" : ""
@@ -1905,14 +1918,6 @@ function OwnerWorkspace() {
           aria-label="Trip navigation"
           data-mobile-tab-panel="trips"
         >
-          <div className="mobile-page-header">
-            <div>
-              <h2>Trips</h2>
-              <p>
-                {trips.length} trip{trips.length === 1 ? "" : "s"}
-              </p>
-            </div>
-          </div>
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <div className="mobile-story-actions">
               <button
