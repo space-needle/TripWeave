@@ -8047,6 +8047,9 @@ function StoryMapCanvas({
         type: "line",
         source: "trip-routes",
         filter: ["!=", ["get", "routeSource"], "photo_inferred"],
+        layout: {
+          visibility: stateRef.current.viewMode === "DAY" ? "none" : "visible",
+        },
         paint: {
           "line-color": ["get", "dayColor"],
           "line-width": ["case", ["==", ["get", "isForked"], true], 2.4, 4],
@@ -8058,6 +8061,9 @@ function StoryMapCanvas({
         type: "line",
         source: "trip-routes",
         filter: ["==", ["get", "routeSource"], "photo_inferred"],
+        layout: {
+          visibility: stateRef.current.viewMode === "DAY" ? "none" : "visible",
+        },
         paint: {
           "line-color": ["get", "dayColor"],
           "line-width": ["case", ["==", ["get", "isForked"], true], 2, 3.4],

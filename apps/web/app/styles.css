@@ -2327,10 +2327,6 @@ button.is-updating {
     0 0 0 10px rgb(255 255 255 / 72%);
 }
 
-.photo-day-marker.muted {
-  opacity: 0.48;
-}
-
 .photo-day-marker.muted img,
 .photo-day-marker.muted > span {
   filter: saturate(0.32);
