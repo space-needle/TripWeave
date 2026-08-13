@@ -2295,15 +2295,17 @@ function OwnerWorkspace() {
             data-mobile-tab-panel="photos"
           >
             <div>
-              <h2>Upload photos</h2>
               {selectedTrip ? (
-                <p>
-                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
-                  {selectedTrip.endDate}
-                </p>
+                <>
+                  <h2>{selectedTrip.title}</h2>
+                  <p>
+                    {selectedTrip.startDate} - {selectedTrip.endDate}
+                  </p>
+                </>
               ) : (
                 <p>Select a trip before uploading photos.</p>
               )}
+              <h2>Upload photos</h2>
             </div>
           </div>
           <div
@@ -2313,15 +2315,17 @@ function OwnerWorkspace() {
             data-mobile-tab-panel="tripSettings"
           >
             <div>
-              <h2>Trip settings</h2>
               {selectedTrip ? (
-                <p>
-                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
-                  {selectedTrip.endDate}
-                </p>
+                <>
+                  <h2>{selectedTrip.title}</h2>
+                  <p>
+                    {selectedTrip.startDate} - {selectedTrip.endDate}
+                  </p>
+                </>
               ) : (
                 <p>Select a trip to manage its details.</p>
               )}
+              <h2>Trip settings</h2>
             </div>
           </div>
           <div
@@ -2331,15 +2335,17 @@ function OwnerWorkspace() {
             data-mobile-tab-panel="share"
           >
             <div>
-              <h2>Share trip</h2>
               {selectedTrip ? (
-                <p>
-                  {selectedTrip.title} · {selectedTrip.startDate} -{" "}
-                  {selectedTrip.endDate}
-                </p>
+                <>
+                  <h2>{selectedTrip.title}</h2>
+                  <p>
+                    {selectedTrip.startDate} - {selectedTrip.endDate}
+                  </p>
+                </>
               ) : (
                 <p>Select a trip before sharing.</p>
               )}
+              <h2>Share trip</h2>
             </div>
           </div>
           <details
