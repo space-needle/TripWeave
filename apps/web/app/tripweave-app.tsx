@@ -8254,8 +8254,8 @@ function StoryMapCanvas({
         const element = document.createElement("button");
         element.type = "button";
         element.className =
-          state.viewMode === "DAY" && state.selectedDayId !== dayId
-            ? "photo-day-marker muted"
+          state.viewMode === "DAY" && state.selectedDayId === dayId
+            ? "photo-day-marker day-focused"
             : "photo-day-marker";
         element.setAttribute("aria-label", `Explore stops for ${label}`);
         element.style.setProperty("--stop-color", color);
@@ -8437,6 +8437,7 @@ function StoryMapCanvas({
     showDayMarkers,
     state.selectedDayId,
     state.selectedStopId,
+    state.viewMode,
   ]);
 
   useEffect(() => {
