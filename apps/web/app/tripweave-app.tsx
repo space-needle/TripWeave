@@ -7702,6 +7702,13 @@ function StoryMapCanvas({
       stopDisplayCoordinates,
     ],
   );
+  const mapRouteCollection = useMemo(
+    () =>
+      state.viewMode === "DAY"
+        ? { type: "FeatureCollection" as const, features: [] }
+        : routeCollection,
+    [routeCollection, state.viewMode],
+  );
   const stopCollection = useMemo(
     () => ({
       type: "FeatureCollection" as const,
@@ -7776,7 +7783,7 @@ function StoryMapCanvas({
   const mapDataRef = useRef({
     areaCollection,
     mediaCollection,
-    routeCollection,
+    routeCollection: mapRouteCollection,
     stopCollection,
   });
 
@@ -7784,10 +7791,10 @@ function StoryMapCanvas({
     mapDataRef.current = {
       areaCollection,
       mediaCollection,
-      routeCollection,
+      routeCollection: mapRouteCollection,
       stopCollection,
     };
-  }, [areaCollection, mediaCollection, routeCollection, stopCollection]);
+  }, [areaCollection, mapRouteCollection, mediaCollection, stopCollection]);
   const canReturnToDayMode =
     Boolean(state.selectedDayId) &&
     !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
@@ -8047,9 +8054,6 @@ function StoryMapCanvas({
         type: "line",
         source: "trip-routes",
         filter: ["!=", ["get", "routeSource"], "photo_inferred"],
-        layout: {
-          visibility: stateRef.current.viewMode === "DAY" ? "none" : "visible",
-        },
         paint: {
           "line-color": ["get", "dayColor"],
           "line-width": ["case", ["==", ["get", "isForked"], true], 2.4, 4],
@@ -8061,9 +8065,6 @@ function StoryMapCanvas({
         type: "line",
         source: "trip-routes",
         filter: ["==", ["get", "routeSource"], "photo_inferred"],
-        layout: {
-          visibility: stateRef.current.viewMode === "DAY" ? "none" : "visible",
-        },
         paint: {
           "line-color": ["get", "dayColor"],
           "line-width": ["case", ["==", ["get", "isForked"], true], 2, 3.4],
@@ -8191,7 +8192,7 @@ function StoryMapCanvas({
       return;
     }
     (map.getSource("trip-routes") as GeoJSONSource | undefined)?.setData(
-      routeCollection,
+      mapRouteCollection,
     );
     (map.getSource("trip-stops") as GeoJSONSource | undefined)?.setData(
       stopCollection,
@@ -8202,7 +8203,7 @@ function StoryMapCanvas({
     (map.getSource("trip-areas") as GeoJSONSource | undefined)?.setData(
       areaCollection,
     );
-  }, [areaCollection, mediaCollection, routeCollection, stopCollection]);
+  }, [areaCollection, mapRouteCollection, mediaCollection, stopCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -8216,19 +8217,6 @@ function StoryMapCanvas({
       }
     }
   }, [showDayMarkers]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map?.isStyleLoaded()) {
-      return;
-    }
-    const routeVisibility = state.viewMode === "DAY" ? "none" : "visible";
-    for (const layerId of ["routes-confirmed", "routes-inferred"]) {
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, "visibility", routeVisibility);
-      }
-    }
-  }, [state.viewMode]);
 
   useEffect(() => {
     const map = mapRef.current;

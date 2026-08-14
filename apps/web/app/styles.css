@@ -2331,6 +2331,11 @@ button.is-updating {
 .photo-day-marker.day-focused > span {
   width: 86px;
   height: 86px;
+  box-shadow:
+    0 0 0 6px var(--stop-color, var(--accent)),
+    0 0 0 11px rgb(255 255 255 / 82%),
+    0 0 0 15px
+      color-mix(in srgb, var(--stop-color, var(--accent)) 42%, transparent);
 }
 
 .trip-browser-shell {
