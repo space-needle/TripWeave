@@ -6176,7 +6176,13 @@ function TripStoryExplorer({
                         key={stop.id}
                       >
                         {areaContext && isFirstAreaStop ? (
-                          <div className="timeline-area-heading">
+                          <div
+                            className={`timeline-area-heading ${
+                              openAreaActionsId === areaContext.area.id
+                                ? "area-actions-open"
+                                : ""
+                            }`}
+                          >
                             <div className="timeline-area-heading-main">
                               <span className="timeline-area-kicker">
                                 Area {areaContext.area.sortOrder}

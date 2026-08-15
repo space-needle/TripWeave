@@ -2847,6 +2847,7 @@ button.is-updating {
 }
 
 .timeline-area-heading {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -2856,6 +2857,10 @@ button.is-updating {
   border-bottom: 1px solid #d8e7e1;
   color: var(--text);
   padding: 12px 12px 10px;
+}
+
+.timeline-area-heading.area-actions-open {
+  z-index: 10;
 }
 
 .timeline-day.has-branches .timeline-area-heading {
