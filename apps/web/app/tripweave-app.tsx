@@ -6172,7 +6172,11 @@ function TripStoryExplorer({
                                   : ""
                               }`
                             : "timeline-stop-stack"
-                        } ${isStopActionsOpen ? "stop-actions-open" : ""}`}
+                        } ${isStopActionsOpen ? "stop-actions-open" : ""} ${
+                          openAreaActionsId === areaContext?.area.id
+                            ? "area-actions-open"
+                            : ""
+                        }`}
                         key={stop.id}
                       >
                         {areaContext && isFirstAreaStop ? (
