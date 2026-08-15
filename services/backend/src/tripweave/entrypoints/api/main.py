@@ -5978,6 +5978,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             source_reconstruction_run_id=latest_run.id,
             payload=payload,
         )
+        db.commit()
         hydrated = hydrate_story_draft_projection(db, trip_id, payload)
         app.state.metrics.duration(
             "story_projection.response.duration_ms",
@@ -6020,6 +6021,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 source_reconstruction_run_id=response.latest_run.id,
                 response=response,
             )
+        # reconstruct_trip commits its generated records before the projection payloads
+        # are assembled. Commit the payloads separately so they survive request teardown.
+        db.commit()
         return response
 
     @app.get("/trips/{trip_id}/reconstruction", response_model=ReconstructionResponse)
@@ -6080,6 +6084,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 source_reconstruction_run_id=latest_run.id,
                 response=response,
             )
+            db.commit()
             projection = db.execute(
                 select(orm.StoryDayPhotoProjection).where(
                     orm.StoryDayPhotoProjection.trip_id == trip_id,
@@ -6124,6 +6129,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 source_reconstruction_run_id=latest_run.id,
                 response=response,
             )
+            db.commit()
             projection = db.execute(
                 select(orm.StoryStopPhotoProjection).where(
                     orm.StoryStopPhotoProjection.trip_id == trip_id,

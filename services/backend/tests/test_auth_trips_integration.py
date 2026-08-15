@@ -909,6 +909,30 @@ def test_account_contributor_can_view_shared_story_without_editing(
         headers={"x-csrf-token": csrf_owner},
     )
     assert reconstructed.status_code == 200
+    reconstructed_run_id = reconstructed.json()["latestRun"]["id"]
+    with engine.connect() as connection:
+        projection_after_reconstruction = connection.execute(
+            text(
+                """
+                SELECT source_reconstruction_run_id
+                FROM story_draft_projections
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+        day_projection_count_after_reconstruction = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM story_day_photo_projections
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip["id"]},
+        ).scalar_one()
+    assert str(projection_after_reconstruction) == reconstructed_run_id
+    assert day_projection_count_after_reconstruction > 0
 
     shared_media = contributor_client.get(f"/trips/{trip['id']}/media")
     assert shared_media.status_code == 200
