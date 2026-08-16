@@ -2867,6 +2867,11 @@ button.is-updating {
   z-index: 10;
 }
 
+.timeline-stop-stack.in-area.area-start.has-previous-stop
+  > .timeline-area-heading.area-actions-open {
+  z-index: 11;
+}
+
 .timeline-day.has-branches .timeline-area-heading {
   margin-left: 64px;
 }
