@@ -3270,6 +3270,7 @@ def test_similarity_groups_and_clock_offset_suggestion_workflow(
     media_by_id = {item["id"]: item for item in media_response.json()["media"]}
     assert media_by_id[duplicate_one]["similarityGroupCount"] == 2
     assert media_by_id[duplicate_two]["similarityGroupCount"] == 2
+    assert media_by_id[duplicate_one]["capturedAtLocal"] == "2026-06-08T10:00:00"
 
     groups_response = client.get(f"/trips/{trip_id}/similarity-groups")
     assert groups_response.status_code == 200

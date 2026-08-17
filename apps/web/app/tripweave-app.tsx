@@ -91,6 +91,7 @@ type GalleryPhoto = {
   filename: string | null;
   contributor: string;
   capturedAt: string | null;
+  capturedAtLocal?: string | null;
   contextLabel?: string | null;
 };
 
@@ -7186,6 +7187,7 @@ function galleryPhotoFromStoryMedia(
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt,
+    capturedAtLocal: item.capturedAtLocal,
     contextLabel,
   };
 }
@@ -7201,6 +7203,7 @@ function galleryPhotoFromStoryPhoto(
     filename: item.filename ?? null,
     contributor: item.contributor,
     capturedAt: item.capturedAt ?? null,
+    capturedAtLocal: item.capturedAtLocal ?? null,
     contextLabel,
   };
 }
@@ -7213,6 +7216,7 @@ function galleryPhotoFromMediaItem(item: MediaItemResponse): GalleryPhoto {
     filename: item.filename,
     contributor: item.contributor,
     capturedAt: item.capturedAt ?? null,
+    capturedAtLocal: item.capturedAtLocal ?? null,
   };
 }
 
@@ -7380,7 +7384,11 @@ function PhotoBrowser({
           <div>
             <strong>
               {selectedPhoto.contributor} ·{" "}
-              {formatDate(selectedPhoto.capturedAt, timezoneId)}
+              {formatReconstructionTime(
+                selectedPhoto.capturedAt,
+                selectedPhoto.capturedAtLocal ?? null,
+                timezoneId,
+              )}
             </strong>
           </div>
           <button
@@ -9849,7 +9857,13 @@ function PublicStorySlideshow({
             <span className="slideshow-trip-title">{title}</span>
             <strong>{activePhoto.stopLabel}</strong>
             <div className="slideshow-caption-meta">
-              <span>{formatDate(activePhoto.capturedAt, timezoneId)}</span>
+              <span>
+                {formatReconstructionTime(
+                  activePhoto.capturedAt,
+                  activePhoto.capturedAtLocal,
+                  timezoneId,
+                )}
+              </span>
               <span>{activePhoto.contributor}</span>
             </div>
           </div>
@@ -10760,7 +10774,13 @@ function MediaList({
               <dl>
                 <div>
                   <dt>Captured</dt>
-                  <dd>{formatDate(item.capturedAt ?? null, timezoneId)}</dd>
+                  <dd>
+                    {formatReconstructionTime(
+                      item.capturedAt ?? null,
+                      item.capturedAtLocal ?? null,
+                      timezoneId,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>GPS</dt>
@@ -11029,18 +11049,20 @@ function formatDate(value: string | null, timezoneId?: string): string {
 function formatReconstructionTime(
   utcValue: string | null,
   localValue: string | null,
-  timezoneId?: string,
+  _timezoneId?: string,
 ): string {
   if (localValue) {
     return formatFloatingDate(localValue);
   }
-  return formatDate(utcValue, timezoneId);
+  // A time without a GPS-derived local representation is deliberately shown
+  // in UTC. A trip-wide timezone would be wrong for a multi-country trip.
+  return formatDate(utcValue, "UTC");
 }
 
 function formatTimelineStopTime(
   utcValue: string | null,
   localValue: string | null,
-  timezoneId?: string,
+  _timezoneId?: string,
 ): string {
   if (localValue) {
     return formatFloatingTime(localValue);
@@ -11052,7 +11074,7 @@ function formatTimelineStopTime(
     return new Intl.DateTimeFormat(undefined, {
       hour: "numeric",
       minute: "2-digit",
-      timeZone: timezoneId,
+      timeZone: "UTC",
     }).format(new Date(utcValue));
   } catch {
     return new Intl.DateTimeFormat(undefined, {

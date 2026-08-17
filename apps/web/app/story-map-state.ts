@@ -29,6 +29,7 @@ export type StoryMediaPoint = {
   contributorMemberId: string;
   contributor: string;
   capturedAt: string | null;
+  capturedAtLocal: string | null;
   filename: string | null;
   thumbnailUrl: string | null;
   previewUrl: string | null;
@@ -311,6 +312,7 @@ export function buildStoryModel(
             contributorMemberId: item.contributorMemberId,
             contributor: item.contributor,
             capturedAt: item.capturedAt ?? null,
+            capturedAtLocal: item.capturedAtLocal ?? null,
             filename: item.filename ?? null,
             thumbnailUrl: item.thumbnailUrl ?? null,
             previewUrl: item.previewUrl ?? null,

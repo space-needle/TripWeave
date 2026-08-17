@@ -14,6 +14,7 @@ export type SlideshowPhoto = {
   filename: string | null;
   contributor: string;
   capturedAt: string | null;
+  capturedAtLocal: string | null;
   dayLabel: string;
   stopLabel: string;
 };
@@ -226,7 +227,8 @@ function slideshowPhoto(
     thumbnailUrl: media.thumbnailUrl ?? null,
     filename: media.filename ?? null,
     contributor: media.contributor,
-    capturedAt: media.capturedAt ?? media.capturedAtLocal ?? null,
+    capturedAt: media.capturedAt ?? null,
+    capturedAtLocal: media.capturedAtLocal ?? null,
     dayLabel: slideshowDayLabel(day),
     stopLabel: slideshowStopLabel(stop),
   };

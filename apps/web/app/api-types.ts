@@ -167,6 +167,7 @@ export type MediaItemResponse = {
   includeInStory: boolean;
   canUpdateVisibility: boolean;
   capturedAt?: string | null;
+  capturedAtLocal?: string | null;
   gpsPresent: boolean;
   latitude?: number | null;
   longitude?: number | null;

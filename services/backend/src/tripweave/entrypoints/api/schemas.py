@@ -386,6 +386,7 @@ class MediaItemResponse(BaseModel):
     include_in_story: bool = Field(alias="includeInStory")
     can_update_visibility: bool = Field(alias="canUpdateVisibility")
     captured_at: datetime | None = Field(default=None, alias="capturedAt")
+    captured_at_local: datetime | None = Field(default=None, alias="capturedAtLocal")
     gps_present: bool = Field(alias="gpsPresent")
     latitude: float | None = None
     longitude: float | None = None

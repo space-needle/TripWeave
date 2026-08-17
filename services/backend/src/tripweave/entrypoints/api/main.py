@@ -2216,6 +2216,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .select_from(orm.MediaItem)
             .where(orm.MediaItem.id == media_item.id)
         ).one()
+        local_capture = media_local_capture(media_item)
         return MediaItemResponse(
             id=media_item.id,
             filename=media_item.original_filename,
@@ -2229,6 +2230,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             capturedAt=media_item.effective_captured_at_utc
             or media_item.original_captured_at_utc
             or media_item.original_captured_at_local,
+            capturedAtLocal=local_capture,
             gpsPresent=media_item.effective_location is not None
             or media_item.original_location is not None,
             latitude=float(location[0]) if location[0] is not None else None,
