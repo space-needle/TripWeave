@@ -149,6 +149,7 @@ describe("story slideshow", () => {
     expect(scenes[0]).toMatchObject({
       type: "trip",
       title: "Trip overview",
+      durationMs: 3000,
       photoCount: 2,
       dayMarkers: [
         {
@@ -162,6 +163,7 @@ describe("story slideshow", () => {
     expect(scenes[1]).toMatchObject({
       type: "day",
       title: "Arrival",
+      durationMs: 3000,
       photoCount: 2,
     });
     expect(
@@ -174,8 +176,10 @@ describe("story slideshow", () => {
       type: "stop",
       title: "Cafe stop",
       activeStopId: "stop-1",
+      durationMs: 3000,
       photoCount: 1,
     });
+    expect(scenes[3]).toMatchObject({ type: "photo", durationMs: 5000 });
   });
 
   it("uses published derivatives and preserves story order", () => {

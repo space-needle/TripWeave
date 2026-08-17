@@ -118,7 +118,7 @@ export function buildReconstructionSlideshowScenes(
       {
         id: `day:${day.id}`,
         type: "day" as const,
-        durationMs: 5600,
+        durationMs: 3000,
         title: slideshowDayLabel(day),
         subtitle: `${dayStops.length} stop${dayStops.length === 1 ? "" : "s"} · ${photoCount} photo${photoCount === 1 ? "" : "s"}`,
         stops: dayStops,
@@ -129,7 +129,7 @@ export function buildReconstructionSlideshowScenes(
         {
           id: `stop:${stop.id}`,
           type: "stop" as const,
-          durationMs: 4600,
+          durationMs: 3000,
           title: slideshowStopLabel(stop),
           subtitle: `${photos.length} photo${photos.length === 1 ? "" : "s"}`,
           dayLabel: slideshowDayLabel(day),
@@ -141,7 +141,7 @@ export function buildReconstructionSlideshowScenes(
         ...photos.map((photo) => ({
           id: `photo:${photo.id}`,
           type: "photo" as const,
-          durationMs: 6500,
+          durationMs: 5000,
           photo,
         })),
       ]),
@@ -166,7 +166,7 @@ export function buildReconstructionSlideshowScenes(
     {
       id: "trip:overview",
       type: "trip",
-      durationMs: 6200,
+      durationMs: 3000,
       title: "Trip overview",
       subtitle: `${days.length} day${days.length === 1 ? "" : "s"} · ${tripStops.length} stop${tripStops.length === 1 ? "" : "s"} · ${photoCount} photo${photoCount === 1 ? "" : "s"}`,
       stops: tripStops,
