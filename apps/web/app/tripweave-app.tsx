@@ -9949,7 +9949,9 @@ function SlideshowPhotoStage({
       {previousPhoto ? (
         <div
           aria-hidden="true"
-          className="slideshow-photo-layer slideshow-photo-layer-previous"
+          className={`slideshow-photo-layer slideshow-photo-layer-previous ${slideshowPhotoMotion(
+            previousPhoto.id,
+          )}`}
           role="img"
           style={{ backgroundImage: `url("${previousPhoto.imageUrl}")` }}
         />

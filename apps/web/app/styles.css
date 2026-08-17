@@ -1087,6 +1087,26 @@ button.is-updating {
   background-size: contain;
 }
 
+.slideshow-photo-layer-previous.slideshow-photo-motion-zoom-in {
+  animation: none;
+  transform: scale(1.055);
+}
+
+.slideshow-photo-layer-previous.slideshow-photo-motion-pan-right {
+  animation: none;
+  transform: scale(1.07) translateX(1.2%);
+}
+
+.slideshow-photo-layer-previous.slideshow-photo-motion-pan-left {
+  animation: none;
+  transform: scale(1.07) translateX(-1.2%);
+}
+
+.slideshow-photo-layer-previous.slideshow-photo-motion-pan-up {
+  animation: none;
+  transform: scale(1.07) translateY(-1.1%);
+}
+
 .slideshow-photo-layer-current {
   z-index: 1;
 }
