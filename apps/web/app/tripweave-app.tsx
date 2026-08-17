@@ -9969,12 +9969,32 @@ function SlideshowPhotoStage({
               previousPhoto ? "slideshow-photo-frame-current" : ""
             }`}
             role="img"
-            style={{ backgroundImage: `url("${displayedPhoto.imageUrl}")` }}
-          />
+          >
+            <div
+              aria-hidden="true"
+              className={`slideshow-photo-motion ${
+                reducedMotion ? "" : slideshowPhotoMotion(displayedPhoto.id)
+              }`}
+              style={{ backgroundImage: `url("${displayedPhoto.imageUrl}")` }}
+            />
+          </div>
         </div>
       ) : null}
     </div>
   );
+}
+
+function slideshowPhotoMotion(photoId: string): string {
+  let hash = 0;
+  for (const character of photoId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return [
+    "slideshow-photo-motion-zoom-in",
+    "slideshow-photo-motion-pan-right",
+    "slideshow-photo-motion-pan-left",
+    "slideshow-photo-motion-pan-up",
+  ][hash % 4];
 }
 
 function SlideshowControlIcon({
