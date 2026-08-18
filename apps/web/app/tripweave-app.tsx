@@ -328,8 +328,7 @@ function OwnerWorkspace() {
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
-  const [mobileTripMenuOpen, setMobileTripMenuOpen] = useState(false);
-  const [mobileToolMenuOpen, setMobileToolMenuOpen] = useState(false);
+  const [mobileOverflowMenuOpen, setMobileOverflowMenuOpen] = useState(false);
   const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
   const [ownerSlideshowOpen, setOwnerSlideshowOpen] = useState(false);
   const [tripMapPoints, setTripMapPoints] =
@@ -562,8 +561,7 @@ function OwnerWorkspace() {
   }, []);
 
   function closeMobileMenus() {
-    setMobileTripMenuOpen(false);
-    setMobileToolMenuOpen(false);
+    setMobileOverflowMenuOpen(false);
   }
 
   function selectTrip(trip: TripResponse) {
@@ -1704,197 +1702,185 @@ function OwnerWorkspace() {
         >
           <StoryHeaderIcon action="slideshow" />
         </button>
-        <span className="mobile-trip-action-divider" aria-hidden="true" />
-        {canManageSelectedTrip ? (
-          <button
-            type="button"
-            aria-label="Trip actions"
-            aria-expanded={mobileTripMenuOpen}
-            className={mobileTripMenuOpen ? "active" : ""}
-            disabled={!selectedTrip}
-            onClick={() => {
-              setMobileToolMenuOpen(false);
-              setMobileTripMenuOpen((current) => !current);
-            }}
-            title="Trip actions"
-          >
-            <StoryHeaderIcon action="more" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label="Upload photos"
-            aria-pressed={mobileTab === "photos"}
-            className={mobileTab === "photos" ? "active" : ""}
-            disabled={!selectedTrip}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("photos");
-            }}
-            title="Upload photos"
-          >
-            <StoryHeaderIcon action="upload" />
-          </button>
-        )}
         <button
           type="button"
-          aria-label="Tools"
-          aria-expanded={mobileToolMenuOpen}
-          className={mobileToolMenuOpen ? "active" : ""}
+          aria-label="More options"
+          aria-expanded={mobileOverflowMenuOpen}
+          className={mobileOverflowMenuOpen ? "active" : ""}
           onClick={() => {
             setOwnerStoryPhotosOpen(false);
-            setMobileTripMenuOpen(false);
-            setMobileToolMenuOpen((current) => !current);
+            setMobileOverflowMenuOpen((current) => !current);
           }}
-          title="Tools"
+          title="More options"
         >
-          <StoryHeaderIcon action="settings" />
+          <StoryHeaderIcon action="more" />
         </button>
       </nav>
-      {mobileToolMenuOpen ? (
-        <nav className="mobile-tool-menu" aria-label="Tools">
-          <button
-            type="button"
-            aria-label="Trips"
-            aria-pressed={mobileTab === "trips"}
-            className={mobileTab === "trips" ? "active" : ""}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("trips");
-            }}
-            title="Trips"
-          >
-            <StoryHeaderIcon action="trips" />
-            <span className="mobile-menu-label">Trips</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Trip Map"
-            aria-pressed={mobileTab === "tripBrowse"}
-            className={mobileTab === "tripBrowse" ? "active" : ""}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("tripBrowse");
-            }}
-            title="Trip Map"
-          >
-            <StoryHeaderIcon action="browse" />
-            <span className="mobile-menu-label">Trip Map</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Settings"
-            aria-pressed={mobileTab === "appSettings"}
-            className={mobileTab === "appSettings" ? "active" : ""}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("appSettings");
-            }}
-            title="Settings"
-          >
-            <StoryHeaderIcon action="settings" />
-            <span className="mobile-menu-label">Settings</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Help"
-            aria-pressed={mobileTab === "help"}
-            className={mobileTab === "help" ? "active" : ""}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("help");
-            }}
-            title="Help"
-          >
-            <StoryHeaderIcon action="help" />
-            <span className="mobile-menu-label">Help</span>
-          </button>
-        </nav>
-      ) : null}
-      {mobileTripMenuOpen && canManageSelectedTrip ? (
-        <nav className="mobile-trip-action-menu" aria-label="Trip actions">
-          <button
-            type="button"
-            aria-label={
-              isReconstructingStory ? "Updating story" : "Update story"
-            }
-            className={
-              isReconstructingStory
-                ? "is-updating"
-                : storyUpdateNeeded
-                  ? "needs-update"
-                  : ""
-            }
-            disabled={isStoryActionDisabled}
-            aria-busy={isReconstructingStory}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              void runReconstruction();
-            }}
-            title={storyActionTitle}
-          >
-            {isReconstructingStory ? (
-              <span className="button-spinner" aria-hidden="true" />
-            ) : (
-              <StoryHeaderIcon action="update" />
-            )}
-            <span className="mobile-menu-label">
-              {isReconstructingStory ? "Updating story" : "Update story"}
+      {mobileOverflowMenuOpen ? (
+        <nav className="mobile-overflow-menu" aria-label="More options">
+          <div className="mobile-overflow-trip">
+            <span className="mobile-overflow-trip-title">
+              {selectedTrip?.title ?? "Current trip"}
             </span>
-          </button>
-          <button
-            type="button"
-            aria-label="Upload photos"
-            aria-pressed={mobileTab === "photos"}
-            className={mobileTab === "photos" ? "active" : ""}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("photos");
-            }}
-            title="Upload photos"
+          </div>
+          <div
+            className="mobile-overflow-trip-actions"
+            aria-label="Current trip actions"
           >
-            <StoryHeaderIcon action="upload" />
-            <span className="mobile-menu-label">Upload photos</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Share trip"
-            aria-pressed={mobileTab === "share"}
-            className={mobileTab === "share" ? "active" : ""}
-            disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("share");
-            }}
-            title="Share trip"
+            {canManageSelectedTrip ? (
+              <button
+                type="button"
+                aria-label={
+                  isReconstructingStory ? "Updating story" : "Update story"
+                }
+                className={
+                  isReconstructingStory
+                    ? "is-updating"
+                    : storyUpdateNeeded
+                      ? "needs-update"
+                      : ""
+                }
+                disabled={isStoryActionDisabled}
+                aria-busy={isReconstructingStory}
+                onClick={() => {
+                  setOwnerStoryPhotosOpen(false);
+                  closeMobileMenus();
+                  void runReconstruction();
+                }}
+                title={storyActionTitle}
+              >
+                {isReconstructingStory ? (
+                  <span className="button-spinner" aria-hidden="true" />
+                ) : (
+                  <StoryHeaderIcon action="update" />
+                )}
+                <span className="mobile-menu-label">
+                  {isReconstructingStory ? "Updating story" : "Update story"}
+                </span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Upload photos"
+              aria-pressed={mobileTab === "photos"}
+              className={mobileTab === "photos" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setMobileTab("photos");
+              }}
+              title="Upload photos"
+            >
+              <StoryHeaderIcon action="upload" />
+              <span className="mobile-menu-label">Upload photos</span>
+            </button>
+            {canManageSelectedTrip ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Share trip"
+                  aria-pressed={mobileTab === "share"}
+                  className={mobileTab === "share" ? "active" : ""}
+                  disabled={
+                    !["owner", "editor"].includes(selectedTrip?.role ?? "")
+                  }
+                  onClick={() => {
+                    setOwnerStoryPhotosOpen(false);
+                    closeMobileMenus();
+                    setMobileTab("share");
+                  }}
+                  title="Share trip"
+                >
+                  <StoryHeaderIcon action="share" />
+                  <span className="mobile-menu-label">Share trip</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Trip settings"
+                  aria-pressed={mobileTab === "tripSettings"}
+                  className={mobileTab === "tripSettings" ? "active" : ""}
+                  disabled={
+                    !["owner", "editor"].includes(selectedTrip?.role ?? "")
+                  }
+                  onClick={() => {
+                    setOwnerStoryPhotosOpen(false);
+                    closeMobileMenus();
+                    setMobileTab("tripSettings");
+                  }}
+                  title="Trip settings"
+                >
+                  <StoryHeaderIcon action="manage" />
+                  <span className="mobile-menu-label">Trip settings</span>
+                </button>
+              </>
+            ) : null}
+          </div>
+          <div className="mobile-overflow-divider" aria-hidden="true" />
+          <div
+            className="mobile-overflow-global-actions"
+            aria-label="App-wide actions"
           >
-            <StoryHeaderIcon action="share" />
-            <span className="mobile-menu-label">Share trip</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Trip settings"
-            aria-pressed={mobileTab === "tripSettings"}
-            className={mobileTab === "tripSettings" ? "active" : ""}
-            disabled={!["owner", "editor"].includes(selectedTrip?.role ?? "")}
-            onClick={() => {
-              setOwnerStoryPhotosOpen(false);
-              closeMobileMenus();
-              setMobileTab("tripSettings");
-            }}
-            title="Trip settings"
-          >
-            <StoryHeaderIcon action="manage" />
-            <span className="mobile-menu-label">Trip settings</span>
-          </button>
+            <button
+              type="button"
+              aria-label="Trips"
+              aria-pressed={mobileTab === "trips"}
+              className={mobileTab === "trips" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setMobileTab("trips");
+              }}
+              title="Trips"
+            >
+              <StoryHeaderIcon action="trips" />
+              <span className="mobile-menu-label">Trips</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Trip Map"
+              aria-pressed={mobileTab === "tripBrowse"}
+              className={mobileTab === "tripBrowse" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setMobileTab("tripBrowse");
+              }}
+              title="Trip Map"
+            >
+              <StoryHeaderIcon action="browse" />
+              <span className="mobile-menu-label">Trip Map</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Settings"
+              aria-pressed={mobileTab === "appSettings"}
+              className={mobileTab === "appSettings" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setMobileTab("appSettings");
+              }}
+              title="Settings"
+            >
+              <StoryHeaderIcon action="settings" />
+              <span className="mobile-menu-label">Settings</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Help"
+              aria-pressed={mobileTab === "help"}
+              className={mobileTab === "help" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setMobileTab("help");
+              }}
+              title="Help"
+            >
+              <StoryHeaderIcon action="help" />
+              <span className="mobile-menu-label">Help</span>
+            </button>
+          </div>
         </nav>
       ) : null}
 

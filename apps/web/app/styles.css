@@ -338,8 +338,7 @@ p {
 
 .mobile-workspace-tabs,
 .mobile-trip-actions,
-.mobile-trip-action-menu,
-.mobile-tool-menu {
+.mobile-overflow-menu {
   display: none;
 }
 
@@ -4215,8 +4214,7 @@ button.thumb-frame:focus-visible {
     backdrop-filter: blur(12px);
   }
 
-  .mobile-trip-action-menu,
-  .mobile-tool-menu {
+  .mobile-overflow-menu {
     position: fixed;
     top: 64px;
     right: 12px;
@@ -4232,6 +4230,37 @@ button.thumb-frame:focus-visible {
     backdrop-filter: blur(12px);
   }
 
+  .mobile-overflow-trip {
+    padding: 7px 10px 5px;
+  }
+
+  .mobile-overflow-trip-title {
+    display: block;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.86rem;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-overflow-trip-actions {
+    display: grid;
+    gap: 2px;
+    padding-left: 10px;
+  }
+
+  .mobile-overflow-divider {
+    height: 1px;
+    margin: 6px 5px;
+    background: var(--border);
+  }
+
+  .mobile-overflow-global-actions {
+    display: grid;
+    gap: 2px;
+  }
+
   .mobile-trip-actions button {
     width: 32px;
     height: 32px;
@@ -4244,15 +4273,7 @@ button.thumb-frame:focus-visible {
     padding: 0;
   }
 
-  .mobile-trip-action-divider {
-    width: 1px;
-    height: 20px;
-    align-self: center;
-    background: var(--border-strong);
-  }
-
-  .mobile-trip-action-menu button,
-  .mobile-tool-menu button {
+  .mobile-overflow-menu button {
     width: 100%;
     min-height: 40px;
     display: flex;
@@ -4268,10 +4289,8 @@ button.thumb-frame:focus-visible {
     text-align: left;
   }
 
-  .mobile-trip-action-menu button:hover:not(:disabled),
-  .mobile-trip-action-menu button:focus-visible,
-  .mobile-tool-menu button:hover:not(:disabled),
-  .mobile-tool-menu button:focus-visible {
+  .mobile-overflow-menu button:hover:not(:disabled),
+  .mobile-overflow-menu button:focus-visible {
     background: #f1f7f4;
   }
 
@@ -4283,36 +4302,33 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions button.active,
-  .mobile-trip-action-menu button.active,
-  .mobile-tool-menu button.active {
+  .mobile-overflow-menu button.active {
     background: var(--accent);
     color: #fff;
   }
 
-  .mobile-trip-action-menu button.needs-update {
+  .mobile-overflow-menu button.needs-update {
     background: color-mix(in srgb, var(--warning) 18%, #fff);
     color: #8a4b00;
   }
 
-  .mobile-trip-action-menu button.is-updating {
+  .mobile-overflow-menu button.is-updating {
     background: color-mix(in srgb, var(--accent) 12%, #fff);
     color: var(--accent-strong);
   }
 
   .mobile-trip-actions button:disabled,
-  .mobile-trip-action-menu button:disabled,
-  .mobile-tool-menu button:disabled {
+  .mobile-overflow-menu button:disabled {
     opacity: 0.38;
     cursor: not-allowed;
   }
 
-  .mobile-trip-action-menu .button-spinner {
+  .mobile-overflow-menu .button-spinner {
     margin-right: 0;
   }
 
   .mobile-trip-actions svg,
-  .mobile-trip-action-menu svg,
-  .mobile-tool-menu svg {
+  .mobile-overflow-menu svg {
     width: 17px;
     height: 17px;
     flex: 0 0 auto;
@@ -4821,8 +4837,7 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-trip-actions,
-  .mobile-trip-action-menu,
-  .mobile-tool-menu {
+  .mobile-overflow-menu {
     position: absolute;
   }
 
