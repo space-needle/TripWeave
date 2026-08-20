@@ -3104,6 +3104,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             for trip_day_id in trip_day_ids:
                 renumber_day_stops(db, trip_day_id)
                 rebuild_inferred_day_legs_for_edit(db, run, trip_day_id)
+        for trip_day_id in trip_day_ids:
+            cleanup_empty_generated_day(db, trip_day_id)
         return removed_stop_ids
 
     def retire_empty_area_visits(db: DbSession, trip_id: UUID) -> None:
@@ -3419,6 +3421,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             retire_empty_area_visits(db, trip_id)
             renumber_day_stops(db, trip_day_id)
             rebuild_inferred_day_legs_for_edit(db, run, trip_day_id)
+            cleanup_empty_generated_day(db, trip_day_id)
             after = {
                 "deletedStopId": str(stop_id),
                 "mediaRemainInLibrary": True,

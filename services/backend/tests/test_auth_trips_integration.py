@@ -3070,7 +3070,7 @@ def test_owner_can_remove_stop_without_deleting_its_media(
     }
     refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
     assert refreshed.status_code == 200
-    assert refreshed.json()["days"][0]["stops"] == []
+    assert refreshed.json()["days"] == []
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT deleted_at IS NULL FROM media_items WHERE id = CAST(:id AS uuid)"),
@@ -3116,7 +3116,7 @@ def test_deleting_last_photo_removes_its_empty_stop(client: TestClient, engine: 
     assert deleted.status_code == 200, deleted.text
     refreshed = client.get(f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token})
     assert refreshed.status_code == 200
-    assert refreshed.json()["days"][0]["stops"] == []
+    assert refreshed.json()["days"] == []
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT deleted_at IS NOT NULL FROM media_items WHERE id = CAST(:id AS uuid)"),
