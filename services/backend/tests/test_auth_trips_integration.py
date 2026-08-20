@@ -367,6 +367,7 @@ def test_authentication_lifecycle_and_trip_management(client: TestClient) -> Non
     trip = create_trip(client, csrf_token)
     trip_id = str(trip["id"])
     assert trip["role"] == "owner"
+    assert trip["dayCutoffHour"] == 4
 
     updated = client.patch(
         f"/trips/{trip_id}",

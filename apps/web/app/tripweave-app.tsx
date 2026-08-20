@@ -190,6 +190,15 @@ function toPayload(form: TripForm) {
   };
 }
 
+function toCreatePayload(form: TripForm) {
+  return {
+    title: form.title,
+    description: form.description || null,
+    startDate: form.startDate || null,
+    endDate: form.endDate || null,
+  };
+}
+
 function fromTrip(trip: TripResponse): TripForm {
   return {
     title: trip.title,
@@ -837,7 +846,7 @@ function OwnerWorkspace() {
     setTripError("");
     setIsBusy(true);
     try {
-      const trip = await api.createTrip(toPayload(createForm));
+      const trip = await api.createTrip(toCreatePayload(createForm));
       await loadTrips(trip.id);
       setCreateForm(emptyTripForm);
     } catch (error) {
@@ -2010,7 +2019,11 @@ function OwnerWorkspace() {
           <details className="management-panel">
             <summary>Create trip</summary>
             <form className="stack" onSubmit={createTrip}>
-              <TripFields form={createForm} onChange={setCreateForm} />
+              <TripFields
+                form={createForm}
+                onChange={setCreateForm}
+                showDayCutoffHour={false}
+              />
               {tripQuota ? (
                 <p
                   className={
@@ -9125,9 +9138,11 @@ function useMediaQuery(queryText: string): boolean {
 function TripFields({
   form,
   onChange,
+  showDayCutoffHour = true,
 }: {
   form: TripForm;
   onChange: (form: TripForm) => void;
+  showDayCutoffHour?: boolean;
 }) {
   function setField(field: keyof TripForm, value: string) {
     onChange({ ...form, [field]: value });
@@ -9169,9 +9184,9 @@ function TripFields({
           />
         </label>
       </div>
-      <div className="field-grid">
+      {showDayCutoffHour ? (
         <label>
-          Day cutoff hour
+          New day starts at
           <input
             max={23}
             min={0}
@@ -9180,8 +9195,11 @@ function TripFields({
             onChange={(event) => setField("dayCutoffHour", event.target.value)}
             required
           />
+          <small>
+            Photos before this hour are grouped with the previous day.
+          </small>
         </label>
-      </div>
+      ) : null}
     </>
   );
 }
