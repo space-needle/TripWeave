@@ -300,6 +300,7 @@ function OwnerWorkspace() {
   const [settingsForm, setSettingsForm] = useState<TripForm>(emptyTripForm);
   const [isBusy, setIsBusy] = useState(false);
   const [isReconstructingStory, setIsReconstructingStory] = useState(false);
+  const [autoStoryRefreshUntil, setAutoStoryRefreshUntil] = useState(0);
   const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
     [],
   );
@@ -742,6 +743,7 @@ function OwnerWorkspace() {
           timeout = setTimeout(poll, delay);
           delay = Math.min(delay * 1.6, 10000);
         } else if (hasProcessingMedia) {
+          setAutoStoryRefreshUntil(Date.now() + 120_000);
           await loadStoryProjection(tripId);
         }
       } catch (error) {
@@ -762,7 +764,12 @@ function OwnerWorkspace() {
   }, [hasProcessingMedia, loadStoryProjection, selectedTrip?.id]);
 
   useEffect(() => {
-    if (!selectedTrip?.id || !storyUpdateNeeded || isReconstructingStory) {
+    const awaitingAutoStoryUpdate = Date.now() < autoStoryRefreshUntil;
+    if (
+      !selectedTrip?.id ||
+      (!storyUpdateNeeded && !awaitingAutoStoryUpdate) ||
+      isReconstructingStory
+    ) {
       return;
     }
     const tripId = selectedTrip.id;
@@ -792,6 +799,7 @@ function OwnerWorkspace() {
     loadStoryProjection,
     selectedTrip?.id,
     storyUpdateNeeded,
+    autoStoryRefreshUntil,
   ]);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
