@@ -5555,7 +5555,20 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     STORY_PHOTO_PROJECTION_SCHEMA_VERSION = 1
     DOWNLOAD_GRANT_REFRESH_WINDOW = timedelta(seconds=60)
 
+    def lock_story_projection_updates(db: DbSession, trip_id: UUID) -> None:
+        """Serialize projection refreshes for one trip within the database transaction.
+
+        Several request paths can lazily replace the same projection rows.  A
+        transaction-scoped advisory lock keeps those delete-and-recreate cycles
+        from deadlocking while allowing different trips to proceed independently.
+        """
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(CAST(:trip_id AS text)))"),
+            {"trip_id": str(trip_id)},
+        )
+
     def invalidate_story_draft_projection(db: DbSession, trip_id: UUID) -> None:
+        lock_story_projection_updates(db, trip_id)
         db.execute(
             delete(orm.StoryDraftProjection).where(orm.StoryDraftProjection.trip_id == trip_id)
         )
@@ -5690,6 +5703,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         source_reconstruction_run_id: UUID,
         payload: dict[str, object],
     ) -> None:
+        lock_story_projection_updates(db, trip_id)
         now = datetime.now(UTC)
         db.execute(
             delete(orm.StoryDraftProjection).where(orm.StoryDraftProjection.trip_id == trip_id)
@@ -5776,6 +5790,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         source_reconstruction_run_id: UUID,
         response: ReconstructionResponse,
     ) -> None:
+        lock_story_projection_updates(db, trip_id)
         now = datetime.now(UTC)
         db.execute(
             delete(orm.StoryDayPhotoProjection).where(
@@ -5942,6 +5957,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     def story_draft_projection_response(db: DbSession, trip_id: UUID) -> ReconstructionResponse:
         started_at = time.perf_counter()
+        lock_story_projection_updates(db, trip_id)
         latest_run = db.execute(
             select(orm.ReconstructionRun)
             .where(orm.ReconstructionRun.trip_id == trip_id)
@@ -6067,6 +6083,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> StoryPhotoProjectionResponse:
         require_member_for_actor(db, trip_id, actor)
+        lock_story_projection_updates(db, trip_id)
         latest_run = latest_run_for_trip_or_none(db, trip_id)
         if latest_run is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
@@ -6111,6 +6128,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db: DbSession = Depends(db_session),
     ) -> StoryPhotoProjectionResponse:
         require_member_for_actor(db, trip_id, actor)
+        lock_story_projection_updates(db, trip_id)
         latest_run = latest_run_for_trip_or_none(db, trip_id)
         if latest_run is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story not found")
