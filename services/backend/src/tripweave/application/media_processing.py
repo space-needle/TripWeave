@@ -151,12 +151,7 @@ class ExtractedMetadata:
 def extract_metadata(
     payload: bytes, exif: Image.Exif, width: int, height: int
 ) -> ExtractedMetadata:
-    named_exif: dict[str, object] = {}
-    for key, value in exif.items():
-        name = ExifTags.TAGS.get(key, str(key))
-        if name == "GPSInfo":
-            continue
-        named_exif[name] = safe_value(value)
+    named_exif = named_exif_values(exif)
 
     gps_info = exif.get_ifd(ExifTags.IFD.GPSInfo) if exif else {}
     latitude, longitude = gps_to_decimal(gps_info)
@@ -191,6 +186,17 @@ def extract_metadata(
             "xmp": xmp,
         },
     )
+
+
+def named_exif_values(exif: Image.Exif) -> dict[str, object]:
+    named_exif: dict[str, object] = {}
+    for ifd in (dict(exif.items()), exif.get_ifd(ExifTags.IFD.Exif) if exif else {}):
+        for key, value in ifd.items():
+            name = ExifTags.TAGS.get(key, str(key))
+            if name == "GPSInfo":
+                continue
+            named_exif[name] = safe_value(value)
+    return named_exif
 
 
 def capture_time(

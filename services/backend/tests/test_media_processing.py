@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from PIL import ExifTags
 from PIL import Image as PilImage
 from PIL.TiffImagePlugin import IFDRational
 
@@ -8,6 +9,7 @@ from tripweave.application.media_processing import (
     MediaProcessingError,
     ProcessedMedia,
     coordinate,
+    extract_metadata,
     gps_time_utc,
     process_image_bytes,
     sanitize_text,
@@ -49,6 +51,26 @@ def test_jpeg_with_exif_extracts_capture_time_and_camera() -> None:
     assert result.utc_offset_minutes == 540
     assert result.camera_hints["Make"] == "TripWeave Camera"
     assert result.derivatives[0].asset_type == "thumbnail"
+
+
+def test_nested_exif_capture_time_outranks_ifd0_modify_time() -> None:
+    class NestedExif:
+        def items(self) -> list[tuple[int, object]]:
+            return [(306, "2013:07:09 07:51:17")]
+
+        def get_ifd(self, ifd: ExifTags.IFD) -> dict[int, object]:
+            if ifd == ExifTags.IFD.Exif:
+                return {36867: "2005:06:22 22:17:54"}
+            return {}
+
+    metadata = extract_metadata(b"", NestedExif(), 32, 24)  # type: ignore[arg-type]
+
+    assert metadata.captured_at_local is not None
+    assert metadata.captured_at_local.isoformat() == "2005-06-22T22:17:54"
+    assert metadata.raw_metadata["exif"] == {
+        "DateTime": "2013:07:09 07:51:17",
+        "DateTimeOriginal": "2005:06:22 22:17:54",
+    }
 
 
 def test_local_capture_time_is_not_offset_from_gps_timestamp() -> None:
