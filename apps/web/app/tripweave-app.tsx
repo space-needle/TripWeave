@@ -290,6 +290,7 @@ function OwnerWorkspace() {
   const [tripQuota, setTripQuota] = useState<TripQuotaResponse | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const selectedTripIdRef = useRef<string | null>(null);
+  const deletedMediaIdsRef = useRef(new Set<string>());
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -493,7 +494,9 @@ function OwnerWorkspace() {
       api.media(tripId),
       api.similarityGroups(tripId),
     ]);
-    setMedia(result.media);
+    setMedia(
+      result.media.filter((item) => !deletedMediaIdsRef.current.has(item.id)),
+    );
     setSimilarityGroups(groupResult.groups);
   }, []);
 
@@ -575,6 +578,7 @@ function OwnerWorkspace() {
   }
 
   function selectTrip(trip: TripResponse) {
+    deletedMediaIdsRef.current.clear();
     setOwnerSlideshowOpen(false);
     closeMobileMenus();
     setSelectedTripSelection(trip.id);
@@ -734,7 +738,11 @@ function OwnerWorkspace() {
         if (cancelled) {
           return;
         }
-        setMedia(result.media);
+        setMedia(
+          result.media.filter(
+            (item) => !deletedMediaIdsRef.current.has(item.id),
+          ),
+        );
         setMediaError("");
         const keepPolling = result.media.some((item) =>
           ["pending", "processing"].includes(item.processingState),
@@ -1115,6 +1123,10 @@ function OwnerWorkspace() {
     setMediaError("");
     try {
       await api.updateMedia(item.id, { deleted: true });
+      deletedMediaIdsRef.current.add(item.id);
+      setMedia((current) =>
+        current.filter((mediaItem) => mediaItem.id !== item.id),
+      );
       await Promise.all([
         loadMedia(selectedTrip.id),
         loadReconstruction(selectedTrip.id),
