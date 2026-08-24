@@ -2573,6 +2573,42 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     assert moved_stop_one["latitude"] == 35.01
     assert moved_stop_one["longitude"] == 127.01
 
+    # A grouping edit locks the stop, but must not prevent later photo GPS edits
+    # from refreshing its inferred location.
+    locked_stop = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "rename_stop",
+            "payload": {"stopId": stop_one["id"], "title": "Locked grouping stop"},
+        },
+    )
+    assert locked_stop.status_code == 200, locked_stop.text
+    move_second_photo_location = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "move_media_on_map",
+            "payload": {
+                "mediaItemId": moment_two["media"][0]["id"],
+                "latitude": 35.04,
+                "longitude": 127.04,
+            },
+        },
+    )
+    assert move_second_photo_location.status_code == 200, move_second_photo_location.text
+    locked_stop_reconstruction = client.get(
+        f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token}
+    )
+    assert locked_stop_reconstruction.status_code == 200
+    locked_stop_one = next(
+        stop
+        for stop in locked_stop_reconstruction.json()["days"][0]["stops"]
+        if stop["id"] == stop_one["id"]
+    )
+    assert locked_stop_one["latitude"] == 35.03
+    assert locked_stop_one["longitude"] == 127.03
+
     with engine.connect() as connection:
         route_id = str(connection.execute(text("SELECT id FROM trip_legs LIMIT 1")).scalar_one())
         stale_updated_at = connection.execute(

@@ -2820,6 +2820,26 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 lock_record(stop)
                 lock_reconstruction_parents(db, stop)
 
+    def stop_has_active_manual_location_edit(
+        db: DbSession, *, trip_id: UUID, stop_id: UUID
+    ) -> bool:
+        """Keep an explicit stop-map placement from being replaced by a media centroid."""
+        return (
+            db.execute(
+                select(orm.EditOperation.id)
+                .where(
+                    orm.EditOperation.trip_id == trip_id,
+                    orm.EditOperation.target_type == "stop",
+                    orm.EditOperation.target_id == stop_id,
+                    orm.EditOperation.operation_type == EditOperationType.MOVE_STOP_ON_MAP.value,
+                    orm.EditOperation.status == EditOperationStatus.APPLIED.value,
+                    orm.EditOperation.undo_of_operation_id.is_(None),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            is not None
+        )
+
     def route_line_wkt(db: DbSession, from_stop_id: UUID, to_stop_id: UUID) -> str | None:
         return db.execute(
             text(
@@ -3411,7 +3431,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             affected_day_ids: set[UUID] = set()
             for stop in affected_stops:
-                if stop.user_locked:
+                if stop_has_active_manual_location_edit(db, trip_id=trip_id, stop_id=stop.id):
                     continue
                 centroid = stop_centroid_for_media(
                     db, [item.id for item in ordered_stop_media(db, stop.id)]
