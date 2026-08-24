@@ -2548,6 +2548,31 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     stop_two_moment_one, stop_two_moment_two = stop_two["moments"][:2]
     review_item_id = body["reviewItems"][0]["id"]
 
+    move_photo_location = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "move_media_on_map",
+            "payload": {
+                "mediaItemId": moment_one["media"][0]["id"],
+                "latitude": 35.02,
+                "longitude": 127.02,
+            },
+        },
+    )
+    assert move_photo_location.status_code == 200, move_photo_location.text
+    moved_photo_reconstruction = client.get(
+        f"/trips/{trip_id}/reconstruction", headers={"x-csrf-token": csrf_token}
+    )
+    assert moved_photo_reconstruction.status_code == 200
+    moved_stop_one = next(
+        stop
+        for stop in moved_photo_reconstruction.json()["days"][0]["stops"]
+        if stop["id"] == stop_one["id"]
+    )
+    assert moved_stop_one["latitude"] == 35.01
+    assert moved_stop_one["longitude"] == 127.01
+
     with engine.connect() as connection:
         route_id = str(connection.execute(text("SELECT id FROM trip_legs LIMIT 1")).scalar_one())
         stale_updated_at = connection.execute(

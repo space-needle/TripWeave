@@ -3400,6 +3400,30 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             media.location_source = LocationSource.USER_CORRECTION.value
             media.user_locked = True
             media.updated_at = datetime.now(UTC)
+            affected_stops = list(
+                db.scalars(
+                    select(orm.Stop)
+                    .join(orm.Moment, orm.Moment.stop_id == orm.Stop.id)
+                    .join(orm.MomentMedia, orm.MomentMedia.moment_id == orm.Moment.id)
+                    .where(orm.MomentMedia.media_item_id == media.id)
+                    .distinct()
+                )
+            )
+            affected_day_ids: set[UUID] = set()
+            for stop in affected_stops:
+                if stop.user_locked:
+                    continue
+                centroid = stop_centroid_for_media(
+                    db, [item.id for item in ordered_stop_media(db, stop.id)]
+                )
+                if centroid is None:
+                    continue
+                stop.centroid = centroid
+                stop.updated_at = datetime.now(UTC)
+                affected_day_ids.add(stop.trip_day_id)
+            if run is not None:
+                for day_id in affected_day_ids:
+                    rebuild_inferred_day_legs_for_edit(db, run, day_id)
             after = record_values(media, ["effective_location", "location_source", "user_locked"])
             target_type, target_id = "media_item", media_id
 
