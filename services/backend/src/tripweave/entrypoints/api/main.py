@@ -3050,7 +3050,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             db.scalars(
                 select(orm.Stop)
                 .where(orm.Stop.trip_day_id == trip_day_id)
-                .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+                .order_by(
+                    orm.Stop.starts_at_utc, orm.Stop.ends_at_utc, orm.Stop.position, orm.Stop.id
+                )
             )
         )
         for position, stop in enumerate(stops, start=1):

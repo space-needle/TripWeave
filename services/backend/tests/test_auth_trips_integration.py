@@ -2922,6 +2922,24 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
     )
     assert rename.status_code == 200, rename.text
 
+    # Model an intervening stop that starts between the retained and moved
+    # portions of the source stop. A split must restore chronological order.
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE stops
+                SET starts_at_utc = :starts_at_utc, ends_at_utc = :ends_at_utc
+                WHERE id = CAST(:stop_id AS uuid)
+                """
+            ),
+            {
+                "stop_id": next_stop["id"],
+                "starts_at_utc": datetime(2026, 6, 8, 1, 10, tzinfo=UTC),
+                "ends_at_utc": datetime(2026, 6, 8, 1, 15, tzinfo=UTC),
+            },
+        )
+
     split = client.post(
         f"/trips/{trip_id}/edit-operations",
         headers={"x-csrf-token": csrf_token},
@@ -2937,13 +2955,13 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
     assert refreshed.status_code == 200
     split_stops = refreshed.json()["days"][0]["stops"]
     assert [stop["position"] for stop in split_stops] == [1, 2, 3]
-    assert [stop["id"] for stop in split_stops] == [source_stop["id"], new_stop_id, next_stop["id"]]
-    assert [stop["title"] for stop in split_stops[:2]] == [
+    assert [stop["id"] for stop in split_stops] == [source_stop["id"], next_stop["id"], new_stop_id]
+    assert [stop["title"] for stop in split_stops[::2]] == [
         "Named split stop 1",
         "Named split stop 2",
     ]
     assert split_stops[0]["mediaCount"] == 1
-    assert split_stops[1]["mediaCount"] == 1
+    assert split_stops[2]["mediaCount"] == 1
 
     with engine.connect() as connection:
         legs = connection.execute(
@@ -2957,10 +2975,10 @@ def test_split_stop_reorders_stops_and_rewires_trip_legs(
             {"trip_id": trip_id},
         ).all()
 
-    assert (source_stop["id"], new_stop_id) in legs
-    assert (new_stop_id, next_stop["id"]) in legs
+    assert (source_stop["id"], next_stop["id"]) in legs
+    assert (next_stop["id"], new_stop_id) in legs
     assert len(legs) == 2
-    assert (source_stop["id"], next_stop["id"]) not in legs
+    assert (source_stop["id"], new_stop_id) not in legs
 
 
 def test_split_stop_can_split_inside_single_moment_by_media(
