@@ -2287,16 +2287,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         }
 
     def media_local_capture(media_item: orm.MediaItem) -> datetime | None:
-        if media_item.original_captured_at_local is not None:
-            return media_item.original_captured_at_local
         captured_at_utc = (
             media_item.effective_captured_at_utc or media_item.original_captured_at_utc
         )
-        if captured_at_utc is None or media_item.original_utc_offset_minutes is None:
-            return None
-        return (
-            captured_at_utc + timedelta(minutes=media_item.original_utc_offset_minutes)
-        ).replace(tzinfo=None)
+        if captured_at_utc is not None and media_item.original_utc_offset_minutes is not None:
+            return (
+                captured_at_utc + timedelta(minutes=media_item.original_utc_offset_minutes)
+            ).replace(tzinfo=None)
+        return media_item.original_captured_at_local
 
     def payload_uuid(payload: dict[str, object], key: str) -> UUID:
         value = payload.get(key)
@@ -2896,7 +2894,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             db.scalars(
                 select(orm.Stop)
                 .where(orm.Stop.trip_day_id == trip_day_id)
-                .order_by(orm.Stop.position, orm.Stop.starts_at_utc, orm.Stop.id)
+                .order_by(
+                    orm.Stop.starts_at_utc, orm.Stop.ends_at_utc, orm.Stop.position, orm.Stop.id
+                )
             )
         )
         for previous, current in zip(stops, stops[1:], strict=False):
@@ -5045,6 +5045,18 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             stop_ids = {stop.id for stop in ordered_stops}
             if not raw_legs_by_day.get(trip_day_id):
+                for index, stop in enumerate(ordered_stops, start=1):
+                    display_positions[stop.id] = str(index)
+                continue
+            outgoing_counts: dict[UUID, int] = defaultdict(int)
+            incoming_counts: dict[UUID, int] = defaultdict(int)
+            for leg, _ in raw_legs_by_day[trip_day_id]:
+                if leg.from_stop_id in stop_ids and leg.to_stop_id in stop_ids:
+                    outgoing_counts[leg.from_stop_id] += 1
+                    incoming_counts[leg.to_stop_id] += 1
+            if all(count <= 1 for count in outgoing_counts.values()) and all(
+                count <= 1 for count in incoming_counts.values()
+            ):
                 for index, stop in enumerate(ordered_stops, start=1):
                     display_positions[stop.id] = str(index)
                 continue

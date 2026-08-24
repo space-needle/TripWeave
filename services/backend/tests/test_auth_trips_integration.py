@@ -3291,6 +3291,27 @@ def test_similarity_groups_and_clock_offset_suggestion_workflow(
     assert media_by_id[duplicate_two]["similarityGroupCount"] == 2
     assert media_by_id[duplicate_one]["capturedAtLocal"] == "2026-06-08T10:00:00"
 
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE media_items
+                SET original_captured_at_local = :original_captured_at_local,
+                    effective_captured_at_utc = :effective_captured_at_utc
+                WHERE id = CAST(:media_id AS uuid)
+                """
+            ),
+            {
+                "media_id": duplicate_one,
+                "original_captured_at_local": datetime(2026, 6, 8, 10, 0),
+                "effective_captured_at_utc": datetime(2026, 6, 8, 2, 0, tzinfo=UTC),
+            },
+        )
+    corrected_media = client.get(f"/trips/{trip_id}/media")
+    assert corrected_media.status_code == 200
+    corrected_media_by_id = {item["id"]: item for item in corrected_media.json()["media"]}
+    assert corrected_media_by_id[duplicate_one]["capturedAtLocal"] == "2026-06-08T11:00:00"
+
     groups_response = client.get(f"/trips/{trip_id}/similarity-groups")
     assert groups_response.status_code == 200
     group = next(
