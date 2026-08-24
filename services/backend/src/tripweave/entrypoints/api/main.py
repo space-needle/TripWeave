@@ -2940,6 +2940,32 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 )
             )
 
+    def refresh_stop_leg_geometries(db: DbSession, stop_ids: set[UUID]) -> None:
+        """Snap every connected edge to its stops' current centroids.
+
+        Rebuilding inferred edges already creates fresh geometry, but a manually
+        selected route source keeps its existing edge record and needs its
+        endpoints refreshed separately.
+        """
+        if not stop_ids:
+            return
+        legs = list(
+            db.scalars(
+                select(orm.TripLeg).where(
+                    or_(
+                        orm.TripLeg.from_stop_id.in_(stop_ids),
+                        orm.TripLeg.to_stop_id.in_(stop_ids),
+                    )
+                )
+            )
+        )
+        for leg in legs:
+            geometry = route_line_wkt(db, leg.from_stop_id, leg.to_stop_id)
+            if geometry is None:
+                continue
+            leg.geometry = geometry
+            leg.updated_at = datetime.now(UTC)
+
     def stop_centroid_for_moments(db: DbSession, moment_ids: list[UUID]) -> str | None:
         if not moment_ids:
             return None
@@ -3430,6 +3456,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 )
             )
             affected_day_ids: set[UUID] = set()
+            affected_stop_ids: set[UUID] = set()
             for stop in affected_stops:
                 if stop_has_active_manual_location_edit(db, trip_id=trip_id, stop_id=stop.id):
                     continue
@@ -3441,9 +3468,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 stop.centroid = centroid
                 stop.updated_at = datetime.now(UTC)
                 affected_day_ids.add(stop.trip_day_id)
+                affected_stop_ids.add(stop.id)
             if run is not None:
                 for day_id in affected_day_ids:
                     rebuild_inferred_day_legs_for_edit(db, run, day_id)
+            refresh_stop_leg_geometries(db, affected_stop_ids)
             after = record_values(media, ["effective_location", "location_source", "user_locked"])
             target_type, target_id = "media_item", media_id
 

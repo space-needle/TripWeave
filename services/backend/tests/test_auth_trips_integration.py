@@ -2547,6 +2547,18 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     assert moment_one["media"][0]["contributor"] == "Owner"
     stop_two_moment_one, stop_two_moment_two = stop_two["moments"][:2]
     review_item_id = body["reviewItems"][0]["id"]
+    route_id = next(
+        leg["id"] for leg in body["days"][0]["legs"] if leg["fromStopId"] == stop_one["id"]
+    )
+    manual_route = client.post(
+        f"/trips/{trip_id}/edit-operations",
+        headers={"x-csrf-token": csrf_token},
+        json={
+            "operationType": "change_route_mode",
+            "payload": {"tripLegId": route_id, "routeSource": "manual"},
+        },
+    )
+    assert manual_route.status_code == 200, manual_route.text
 
     move_photo_location = client.post(
         f"/trips/{trip_id}/edit-operations",
@@ -2572,6 +2584,10 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     )
     assert moved_stop_one["latitude"] == 35.01
     assert moved_stop_one["longitude"] == 127.01
+    moved_manual_leg = next(
+        leg for leg in moved_photo_reconstruction.json()["days"][0]["legs"] if leg["id"] == route_id
+    )
+    assert moved_manual_leg["geometry"]["coordinates"][0] == [127.01, 35.01]
 
     # A grouping edit locks the stop, but must not prevent later photo GPS edits
     # from refreshing its inferred location.
@@ -2608,9 +2624,12 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     )
     assert locked_stop_one["latitude"] == 35.03
     assert locked_stop_one["longitude"] == 127.03
+    refreshed_manual_leg = next(
+        leg for leg in locked_stop_reconstruction.json()["days"][0]["legs"] if leg["id"] == route_id
+    )
+    assert refreshed_manual_leg["geometry"]["coordinates"][0] == [127.03, 35.03]
 
     with engine.connect() as connection:
-        route_id = str(connection.execute(text("SELECT id FROM trip_legs LIMIT 1")).scalar_one())
         stale_updated_at = connection.execute(
             text("SELECT updated_at FROM stops WHERE id = CAST(:id AS uuid)"),
             {"id": stop_three["id"]},
