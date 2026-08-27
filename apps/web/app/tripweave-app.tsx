@@ -11293,84 +11293,86 @@ function MediaList({
               {onVisibilityChange &&
               (canChangeVisibility ? canChangeVisibility(item) : true) ? (
                 <div className="media-actions">
-                  <div
-                    className="visibility-toggle"
-                    role="group"
-                    aria-label="Photo visibility"
-                  >
-                    <button
-                      type="button"
-                      className={`media-icon-button ${
-                        item.visibility === "trip" ? "active" : ""
-                      }`}
-                      aria-pressed={item.visibility === "trip"}
-                      onClick={() => onVisibilityChange(item, "trip")}
-                      aria-label="Member only"
-                      title="Member only"
+                  <div className="visibility-control">
+                    <div
+                      className="visibility-toggle"
+                      role="group"
+                      aria-label="Photo visibility"
                     >
-                      <MediaActionIcon action="members" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`media-icon-button ${
-                        item.visibility === "story" && item.includeInStory
-                          ? "active"
-                          : ""
-                      }`}
-                      aria-pressed={
-                        item.visibility === "story" && item.includeInStory
-                      }
-                      onClick={() => onVisibilityChange(item, "story")}
-                      aria-label="Public"
-                      title="Public"
-                    >
-                      <MediaActionIcon action="public" />
-                    </button>
-                  </div>
-                  <div className="visibility-help">
-                    <button
-                      className="media-icon-button"
-                      type="button"
-                      aria-label="Photo visibility help"
-                      aria-expanded={visibilityHelpItemId === item.id}
-                      aria-controls={`visibility-help-${item.id}`}
-                      onClick={() =>
-                        setVisibilityHelpItemId((current) =>
-                          current === item.id ? null : item.id,
-                        )
-                      }
-                      title="Photo visibility help"
-                    >
-                      <MediaActionIcon action="help" />
-                    </button>
-                    {visibilityHelpItemId === item.id ? (
-                      <div
-                        className="visibility-help-popover"
-                        id={`visibility-help-${item.id}`}
-                        role="dialog"
-                        aria-label="Photo visibility help"
+                      <button
+                        type="button"
+                        className={`media-icon-button ${
+                          item.visibility === "trip" ? "active" : ""
+                        }`}
+                        aria-pressed={item.visibility === "trip"}
+                        onClick={() => onVisibilityChange(item, "trip")}
+                        aria-label="Member only"
+                        title="Member only"
                       >
-                        <div>
-                          <strong>Who can see this photo?</strong>
-                          <p>
-                            Member only keeps it inside this trip. Public lets
-                            it appear in a published story.
-                          </p>
-                          <p>
-                            Published stories use a sanitized derivative, never
-                            the original photo.
-                          </p>
-                        </div>
-                        <button
-                          className="visibility-help-close"
-                          type="button"
-                          onClick={() => setVisibilityHelpItemId(null)}
-                          aria-label="Close photo visibility help"
+                        <MediaActionIcon action="members" />
+                      </button>
+                      <button
+                        type="button"
+                        className={`media-icon-button ${
+                          item.visibility === "story" && item.includeInStory
+                            ? "active"
+                            : ""
+                        }`}
+                        aria-pressed={
+                          item.visibility === "story" && item.includeInStory
+                        }
+                        onClick={() => onVisibilityChange(item, "story")}
+                        aria-label="Public"
+                        title="Public"
+                      >
+                        <MediaActionIcon action="public" />
+                      </button>
+                    </div>
+                    <div className="visibility-help">
+                      <button
+                        className="media-icon-button"
+                        type="button"
+                        aria-label="Photo visibility help"
+                        aria-expanded={visibilityHelpItemId === item.id}
+                        aria-controls={`visibility-help-${item.id}`}
+                        onClick={() =>
+                          setVisibilityHelpItemId((current) =>
+                            current === item.id ? null : item.id,
+                          )
+                        }
+                        title="Photo visibility help"
+                      >
+                        <MediaActionIcon action="help" />
+                      </button>
+                      {visibilityHelpItemId === item.id ? (
+                        <div
+                          className="visibility-help-popover"
+                          id={`visibility-help-${item.id}`}
+                          role="dialog"
+                          aria-label="Photo visibility help"
                         >
-                          ×
-                        </button>
-                      </div>
-                    ) : null}
+                          <div>
+                            <strong>Who can see this photo?</strong>
+                            <p>
+                              Member only keeps it inside this trip. Public lets
+                              it appear in a published story.
+                            </p>
+                            <p>
+                              Published stories use a sanitized derivative,
+                              never the original photo.
+                            </p>
+                          </div>
+                          <button
+                            className="visibility-help-close"
+                            type="button"
+                            onClick={() => setVisibilityHelpItemId(null)}
+                            aria-label="Close photo visibility help"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   {onDelete ? (
                     <button

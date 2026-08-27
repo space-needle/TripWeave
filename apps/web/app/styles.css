@@ -2367,6 +2367,16 @@ button.is-updating {
   background: #f6f8f9;
 }
 
+.visibility-control {
+  display: flex;
+  align-items: stretch;
+}
+
+.visibility-control .visibility-toggle {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .media-icon-button {
   width: 36px;
   min-width: 36px;
@@ -2412,7 +2422,14 @@ button.is-updating {
 }
 
 .visibility-help {
+  margin-left: -1px;
   position: relative;
+}
+
+.visibility-help > .media-icon-button {
+  height: 100%;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .visibility-help-popover {
