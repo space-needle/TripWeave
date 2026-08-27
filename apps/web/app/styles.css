@@ -1708,7 +1708,7 @@ button.is-updating {
   position: relative;
   z-index: 1;
   width: min(920px, 100%);
-  max-height: min(86vh, 820px);
+  height: min(86vh, 820px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -1763,9 +1763,12 @@ button.is-updating {
 .story-photo-roll {
   display: grid;
   gap: 16px;
-  overflow: auto;
-  overscroll-behavior: contain;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 18px;
+  touch-action: pan-y;
 }
 
 .story-photo-roll-day {
@@ -4589,7 +4592,8 @@ button.thumb-frame:focus-visible {
   }
 
   .photo-roll-panel {
-    max-height: 88vh;
+    height: 88vh;
+    height: 88dvh;
     border-radius: 14px;
   }
 
