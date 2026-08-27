@@ -2098,9 +2098,6 @@ function OwnerWorkspace() {
               Trip Map
             </button>
             <a href="#photos-panel">Photos</a>
-            {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-              <a href="#share-trip-title">Share trip</a>
-            ) : null}
             <a href="#settings-panel">Trip info</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
@@ -2476,26 +2473,6 @@ function OwnerWorkspace() {
               <h2>Trip settings</h2>
             </div>
           </div>
-          <div
-            className={`mobile-page-header mobile-trip-context-header ${
-              mobileTab === "share" ? "mobile-tab-active" : ""
-            }`}
-            data-mobile-tab-panel="share"
-          >
-            <div>
-              {selectedTrip ? (
-                <>
-                  <h2>{selectedTrip.title}</h2>
-                  <p>
-                    {selectedTrip.startDate} - {selectedTrip.endDate}
-                  </p>
-                </>
-              ) : (
-                <p>Select a trip before sharing.</p>
-              )}
-              <h2>Share trip</h2>
-            </div>
-          </div>
           <details
             className={`management-panel ${
               mobileTab === "photos" ? "mobile-tab-active" : ""
@@ -2586,12 +2563,6 @@ function OwnerWorkspace() {
               <p>Select a trip before uploading photos.</p>
             )}
           </details>
-
-          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <h2 className="management-group-title" id="share-trip-title">
-              Share trip
-            </h2>
-          ) : null}
 
           {selectedTrip?.role === "owner" ? (
             <>

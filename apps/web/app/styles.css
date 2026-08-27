@@ -932,12 +932,6 @@ button.is-updating {
   background: var(--panel);
 }
 
-.management-group-title {
-  margin: 8px 2px -4px;
-  font-size: 0.86rem;
-  letter-spacing: 0.01em;
-}
-
 .management-panel > summary {
   display: flex;
   align-items: center;
@@ -1121,7 +1115,6 @@ button.is-updating {
 #review-panel,
 #publish-panel,
 #settings-panel,
-#share-trip-title,
 #trip-stage-title {
   scroll-margin-top: 18px;
 }
