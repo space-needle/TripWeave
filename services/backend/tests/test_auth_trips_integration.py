@@ -3229,6 +3229,51 @@ def test_deleting_last_photo_removes_its_empty_stop(client: TestClient, engine: 
         )
 
 
+def test_deleting_media_does_not_lock_unedited_stops(client: TestClient, engine: Engine) -> None:
+    csrf_token = register(client, "delete-media-lock-owner@example.com")
+    trip = create_trip(client, csrf_token, "Delete Media Lock Trip")
+    trip_id = str(trip["id"])
+    member_id = str(trip["memberId"])
+    media_ids = [
+        insert_ready_media_for_reconstruction(
+            engine,
+            trip_id=trip_id,
+            member_id=member_id,
+            filename=f"delete-lock-{index}.jpg",
+            captured_at=datetime(2026, 6, 10, 10 + (index * 2), 0, tzinfo=UTC),
+            latitude=35.0 + index,
+            longitude=127.0,
+            sha256=str(index + 3) * 64,
+        )
+        for index in range(2)
+    ]
+    reconstructed = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed.status_code == 200, reconstructed.text
+    assert len(reconstructed.json()["days"][0]["stops"]) == 2
+
+    deleted = client.patch(
+        f"/media/{media_ids[0]}",
+        headers={"x-csrf-token": csrf_token},
+        json={"deleted": True},
+    )
+    assert deleted.status_code == 200, deleted.text
+
+    with engine.connect() as connection:
+        remaining_stop = connection.execute(
+            text(
+                """
+                SELECT user_locked, source
+                FROM stops
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).one()
+    assert remaining_stop == (False, "automation")
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:

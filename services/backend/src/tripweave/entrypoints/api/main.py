@@ -3103,7 +3103,6 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         for position, stop in enumerate(stops, start=1):
             stop.position = position
-            lock_record(stop)
 
     def remove_empty_stop_after_media_deletion(
         db: DbSession,
