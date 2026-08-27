@@ -162,8 +162,8 @@ describe("frame story", () => {
     expect(publicStoryEndpoint("http://api:8000", "seoul-weekend-a7f3c9")).toBe(
       "http://api:8000/public/stories/seoul-weekend-a7f3c9",
     );
-    expect(publicStoryEndpoint("http://api:8000", "seoul-weekend-a7f3c9", 2)).toBe(
-      "http://api:8000/public/stories/seoul-weekend-a7f3c9/versions/2",
-    );
+    expect(
+      publicStoryEndpoint("http://api:8000", "seoul-weekend-a7f3c9", 2),
+    ).toBe("http://api:8000/public/stories/seoul-weekend-a7f3c9/versions/2");
   });
 });

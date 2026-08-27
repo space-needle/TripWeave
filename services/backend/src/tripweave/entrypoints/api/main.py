@@ -1052,7 +1052,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             status_value = ShareLinkStatus.EXPIRED.value
         latest_url = None
         version_url = None
-        if trip is not None and version is not None and request is not None and trip.public_story_slug:
+        if (
+            trip is not None
+            and version is not None
+            and request is not None
+            and trip.public_story_slug
+        ):
             latest_url, version_url = story_urls(request, trip, version.version_number)
         return ShareLinkResponse(
             id=link.id,
@@ -1737,9 +1742,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             invitations=[
                 invitation_response(
                     invitation,
-                    invitation_url(
-                        request, invitation.public_invite_id or ""
-                    ) if invitation.public_invite_id else None,
+                    invitation_url(request, invitation.public_invite_id or "")
+                    if invitation.public_invite_id
+                    else None,
                 )
                 for invitation in invitations
             ]
@@ -6593,7 +6598,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 manifest = cached_public_manifest(legacy_version)
             except PublicationError as manifest_exc:
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=manifest_exc.safe_message
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=manifest_exc.safe_message,
                 ) from manifest_exc
             db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
             db.commit()
@@ -6616,7 +6622,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             manifest,
         )
 
-    @app.get("/public/stories/{public_slug}/versions/{version_number}", response_model=PublicStoryResponse)
+    @app.get(
+        "/public/stories/{public_slug}/versions/{version_number}",
+        response_model=PublicStoryResponse,
+    )
     def get_public_story_version(
         request: Request,
         public_slug: str,

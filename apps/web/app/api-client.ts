@@ -348,7 +348,10 @@ export const api = {
   unpublishTrip(tripId: string): Promise<void> {
     return apiRequest<void>(`/trips/${tripId}/unpublish`, { method: "POST" });
   },
-  publicStory(slug: string, versionNumber?: number): Promise<PublicStoryResponse> {
+  publicStory(
+    slug: string,
+    versionNumber?: number,
+  ): Promise<PublicStoryResponse> {
     const storyPath = `/public/stories/${encodeURIComponent(slug)}`;
     return apiRequest<PublicStoryResponse>(
       versionNumber === undefined

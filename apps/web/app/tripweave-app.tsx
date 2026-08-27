@@ -2602,36 +2602,36 @@ function OwnerWorkspace() {
                 id="travelers-panel"
                 data-mobile-tab-panel="share"
               >
-              <summary>
-                <span className="management-summary-copy">
-                  <strong>Invite travelers</strong>
-                  <span>Invite friends to add photos</span>
-                </span>
-                <small>
-                  {activeMemberCount} member
-                  {activeMemberCount === 1 ? "" : "s"}
-                </small>
-              </summary>
-              <div className="stack">
-                {collaborationError ? (
-                  <p className="error">{collaborationError}</p>
-                ) : null}
-                <div className="action-row">
-                  <button
-                    type="button"
-                    onClick={createInvite}
-                    disabled={isBusy}
-                  >
-                    Create shared invite link
-                  </button>
+                <summary>
+                  <span className="management-summary-copy">
+                    <strong>Invite travelers</strong>
+                    <span>Invite friends to add photos</span>
+                  </span>
+                  <small>
+                    {activeMemberCount} member
+                    {activeMemberCount === 1 ? "" : "s"}
+                  </small>
+                </summary>
+                <div className="stack">
+                  {collaborationError ? (
+                    <p className="error">{collaborationError}</p>
+                  ) : null}
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      onClick={createInvite}
+                      disabled={isBusy}
+                    >
+                      Create shared invite link
+                    </button>
+                  </div>
+                  <InvitationList
+                    invitations={invitations}
+                    onRevoke={revokeInvite}
+                    onCopyUrl={(url) => void copyInviteUrl(url)}
+                  />
+                  <MemberRoster members={members} onRemove={removeMember} />
                 </div>
-                <InvitationList
-                  invitations={invitations}
-                  onRevoke={revokeInvite}
-                  onCopyUrl={(url) => void copyInviteUrl(url)}
-                />
-                <MemberRoster members={members} onRemove={removeMember} />
-              </div>
               </details>
             </>
           ) : null}
@@ -2766,7 +2766,6 @@ function OwnerWorkspace() {
               </div>
             </details>
           ) : null}
-
         </aside>
         <div
           className={`mobile-page-header ${
@@ -9959,7 +9958,8 @@ function InvitationCard({
         <div>
           <strong>{invitation.role}</strong>
           <small>
-            {invitation.status} · {invitation.useCount}/{invitation.maxUses} joined
+            {invitation.status} · {invitation.useCount}/{invitation.maxUses}{" "}
+            joined
           </small>
         </div>
         {invitation.status !== "revoked" ? (
@@ -9972,11 +9972,16 @@ function InvitationCard({
         <div className="invite-card-content">
           <div>
             <code>{invitation.inviteUrl}</code>
-            <button type="button" onClick={() => onCopyUrl(invitation.inviteUrl!)}>
+            <button
+              type="button"
+              onClick={() => onCopyUrl(invitation.inviteUrl!)}
+            >
               Copy link
             </button>
           </div>
-          {qrUrl ? <img className="qr-block" src={qrUrl} alt="Invitation QR code" /> : null}
+          {qrUrl ? (
+            <img className="qr-block" src={qrUrl} alt="Invitation QR code" />
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -10045,7 +10050,11 @@ function PublicationList({
             return (
               <article className="publication-card" key={link.id}>
                 <div className="publication-card-status">
-                  <strong>{version ? `Version ${version.versionNumber}` : "Publishing"}</strong>
+                  <strong>
+                    {version
+                      ? `Version ${version.versionNumber}`
+                      : "Publishing"}
+                  </strong>
                   <span>{version?.state ?? link.status}</span>
                   {link.status === "active" ? (
                     <button type="button" onClick={() => onRevoke(link.id)}>
@@ -10056,7 +10065,10 @@ function PublicationList({
                 {link.versionStoryUrl ? (
                   <div className="publication-card-link">
                     <code>{link.versionStoryUrl}</code>
-                    <button type="button" onClick={() => onCopyUrl(link.versionStoryUrl!)}>
+                    <button
+                      type="button"
+                      onClick={() => onCopyUrl(link.versionStoryUrl!)}
+                    >
                       Copy version link
                     </button>
                   </div>

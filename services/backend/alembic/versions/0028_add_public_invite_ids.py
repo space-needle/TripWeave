@@ -7,8 +7,9 @@ Create Date: 2026-08-27
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "0028_public_invite_ids"
 down_revision: str | None = "0027_public_story_slugs"
@@ -30,7 +31,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_trip_invitations_public_invite_id", "trip_invitations", type_="unique"
-    )
+    op.drop_constraint("uq_trip_invitations_public_invite_id", "trip_invitations", type_="unique")
     op.drop_column("trip_invitations", "public_invite_id")

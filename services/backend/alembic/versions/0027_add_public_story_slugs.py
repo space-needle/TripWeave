@@ -7,8 +7,9 @@ Create Date: 2026-08-27
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "0027_public_story_slugs"
 down_revision: str | None = "0026_move_media_on_map"
@@ -24,7 +25,10 @@ def upgrade() -> None:
         UPDATE trips
         SET public_story_slug = left(
             coalesce(
-                nullif(trim(both '-' from regexp_replace(lower(title), '[^a-z0-9]+', '-', 'g')), ''),
+                nullif(
+                    trim(both '-' from regexp_replace(lower(title), '[^a-z0-9]+', '-', 'g')),
+                    ''
+                ),
                 'trip'
             ),
             200
