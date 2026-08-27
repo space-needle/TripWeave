@@ -4182,6 +4182,15 @@ function TripStoryExplorer({
   const selectedStop = filteredModel.stops.find(
     (stop) => stop.id === state.selectedStopId,
   );
+  const timelineStopsById = useMemo(
+    () =>
+      new Map(
+        reconstruction?.days.flatMap((day) =>
+          day.stops.map((stop) => [stop.id, stop] as const),
+        ) ?? [],
+      ),
+    [reconstruction?.days],
+  );
   const selectedMedia = filteredModel.media.find(
     (item) => item.id === state.selectedMediaId,
   );
@@ -5617,6 +5626,13 @@ function TripStoryExplorer({
           0,
         )} photos`
       : "Select a stop on the map to see its note here.";
+  const selectedStopMetrics =
+    selectedStopDetail && !isCollapsedAreaSelected
+      ? {
+          photoCount: selectedStopDetail.mediaCount,
+          travelerCount: selectedStopDetail.contributorCount,
+        }
+      : null;
   const selectedNote =
     (isCollapsedAreaSelected ? "" : selectedStopDetail?.note?.trim()) ||
     activeDay?.note?.trim() ||
@@ -5671,7 +5687,22 @@ function TripStoryExplorer({
                   ? storyDayLabel(activeDay)
                   : "No stop selected"}
             </strong>
-            <p>{selectedStopSummary}</p>
+            {selectedStopMetrics ? (
+              <div className="story-selected-stop-metrics">
+                <span aria-label={`${selectedStopMetrics.photoCount} photos`}>
+                  <TimelineMetricIcon name="camera" />
+                  {selectedStopMetrics.photoCount}
+                </span>
+                <span
+                  aria-label={`${selectedStopMetrics.travelerCount} travelers`}
+                >
+                  <TimelineMetricIcon name="travelers" />
+                  {selectedStopMetrics.travelerCount}
+                </span>
+              </div>
+            ) : (
+              <p>{selectedStopSummary}</p>
+            )}
             {selectedNote ? (
               <p className="story-selected-note">{selectedNote}</p>
             ) : null}
@@ -7127,11 +7158,28 @@ function TripStoryExplorer({
                     const dayPhotos = stops.flatMap(
                       (section) => section.photos,
                     );
+                    const timelineStop = timelineStopsById.get(stop.id);
+                    const stopTime = timelineStop
+                      ? timelineStopTimeLabel(timelineStop)
+                      : null;
                     return (
                       <section className="story-photo-stop-grid" key={stop.id}>
                         <div className="story-photo-stop-heading">
-                          <strong>{displayStopTitle(stop)}</strong>
-                          <span>{photos.length} photos</span>
+                          <div>
+                            <strong>{displayStopTitle(stop)}</strong>
+                            {stopTime ? (
+                              <time
+                                className="story-photo-stop-time"
+                                dateTime={stopTime.dateTime}
+                              >
+                                {stopTime.labels.join(" – ")}
+                              </time>
+                            ) : null}
+                          </div>
+                          <span aria-label={`${photos.length} photos`}>
+                            <TimelineMetricIcon name="camera" />
+                            {photos.length}
+                          </span>
                         </div>
                         <div className="story-photo-tiles">
                           {photos.map((photo) => (

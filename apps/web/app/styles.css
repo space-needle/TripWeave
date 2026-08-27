@@ -1605,6 +1605,37 @@ button.is-updating {
   font-weight: 750;
 }
 
+.story-selected-stop-metrics {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.story-selected-stop-metrics span,
+.story-photo-stop-heading > span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.story-selected-stop-metrics svg,
+.story-photo-stop-heading > span svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
 .story-selected-stop-summary .story-selected-note {
   display: -webkit-box;
   overflow: hidden;
@@ -1758,11 +1789,26 @@ button.is-updating {
   gap: 12px;
 }
 
+.story-photo-stop-heading > div {
+  min-width: 0;
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+}
+
 .story-photo-stop-heading strong {
   min-width: 0;
   overflow: hidden;
   font-size: 0.9rem;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-photo-stop-time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
   white-space: nowrap;
 }
 
