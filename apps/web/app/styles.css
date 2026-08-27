@@ -688,7 +688,6 @@ p {
 }
 
 .mobile-account-card,
-.mobile-story-actions,
 .mobile-app-settings,
 .mobile-page-header {
   display: none;
@@ -4933,10 +4932,6 @@ button.thumb-frame:focus-visible {
     display: none;
   }
 
-  .trip-nav .mobile-story-actions {
-    display: none;
-  }
-
   .trip-management {
     display: contents;
   }
@@ -5025,23 +5020,11 @@ button.thumb-frame:focus-visible {
     overflow-wrap: anywhere;
   }
 
-  .mobile-account-card button,
-  .mobile-story-actions button {
+  .mobile-account-card button {
     width: 100%;
     border-color: var(--border);
     background: #fff;
     color: var(--text);
-  }
-
-  .mobile-story-actions button.needs-update {
-    border-color: #e8ae98;
-    background: #fff1ed;
-    color: #9f3a22;
-  }
-
-  .mobile-story-actions {
-    display: grid;
-    gap: 6px;
   }
 
   .publication-grid {

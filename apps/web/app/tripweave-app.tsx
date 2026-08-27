@@ -1859,38 +1859,6 @@ function OwnerWorkspace() {
             className="mobile-overflow-trip-actions"
             aria-label="Current trip actions"
           >
-            {canManageSelectedTrip ? (
-              <button
-                type="button"
-                aria-label={
-                  isReconstructingStory ? "Updating story" : "Update story"
-                }
-                className={
-                  isReconstructingStory
-                    ? "is-updating"
-                    : storyUpdateNeeded
-                      ? "needs-update"
-                      : ""
-                }
-                disabled={isStoryActionDisabled}
-                aria-busy={isReconstructingStory}
-                onClick={() => {
-                  setOwnerStoryPhotosOpen(false);
-                  closeMobileMenus();
-                  void runReconstruction();
-                }}
-                title={storyActionTitle}
-              >
-                {isReconstructingStory ? (
-                  <span className="button-spinner" aria-hidden="true" />
-                ) : (
-                  <StoryHeaderIcon action="update" />
-                )}
-                <span className="mobile-menu-label">
-                  {isReconstructingStory ? "Updating story" : "Update story"}
-                </span>
-              </button>
-            ) : null}
             <button
               type="button"
               aria-label="Upload photos"
@@ -1928,7 +1896,7 @@ function OwnerWorkspace() {
                 </button>
                 <button
                   type="button"
-                  aria-label="Trip settings"
+                  aria-label="Manage trip"
                   aria-pressed={mobileTab === "tripSettings"}
                   className={mobileTab === "tripSettings" ? "active" : ""}
                   disabled={
@@ -1939,10 +1907,10 @@ function OwnerWorkspace() {
                     closeMobileMenus();
                     setMobileTab("tripSettings");
                   }}
-                  title="Trip settings"
+                  title="Manage trip"
                 >
                   <StoryHeaderIcon action="manage" />
-                  <span className="mobile-menu-label">Trip settings</span>
+                  <span className="mobile-menu-label">Manage trip</span>
                 </button>
               </>
             ) : null}
@@ -2050,36 +2018,6 @@ function OwnerWorkspace() {
           aria-label="Trip navigation"
           data-mobile-tab-panel="trips"
         >
-          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <div className="mobile-story-actions">
-              <button
-                className={storyUpdateNeeded ? "needs-update" : undefined}
-                type="button"
-                onClick={runReconstruction}
-                disabled={isStoryActionDisabled}
-                aria-busy={isReconstructingStory}
-                title={storyActionTitle}
-              >
-                {isReconstructingStory ? (
-                  <span className="button-spinner" aria-hidden="true" />
-                ) : null}
-                {storyActionButtonLabel}
-              </button>
-              {storyUpdate || isReconstructingStory ? (
-                <span
-                  className={
-                    isReconstructingStory
-                      ? "story-update-status updating"
-                      : storyUpdateNeeded
-                        ? "story-update-status needs-update"
-                        : "story-update-status"
-                  }
-                >
-                  {storyActionStatusLabel}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
           <nav className="trip-primary-nav" aria-label="Workspace sections">
             <a
               href="#trip-stage-title"
@@ -2098,7 +2036,7 @@ function OwnerWorkspace() {
               Trip Map
             </button>
             <a href="#photos-panel">Photos</a>
-            <a href="#settings-panel">Trip info</a>
+            <a href="#settings-panel">Manage trip</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
                 <a href="#review-panel">Review</a>
@@ -2242,43 +2180,6 @@ function OwnerWorkspace() {
                     </button>
                     {canOrganizeSelectedTrip ? (
                       <div className="button-row">
-                        <div className="story-action-stack">
-                          <button
-                            className={
-                              isReconstructingStory
-                                ? "is-updating"
-                                : storyUpdateNeeded
-                                  ? "needs-update"
-                                  : undefined
-                            }
-                            type="button"
-                            onClick={runReconstruction}
-                            disabled={isStoryActionDisabled}
-                            aria-busy={isReconstructingStory}
-                            title={storyActionTitle}
-                          >
-                            {isReconstructingStory ? (
-                              <span
-                                className="button-spinner"
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            {storyActionButtonLabel}
-                          </button>
-                          {storyUpdate || isReconstructingStory ? (
-                            <span
-                              className={
-                                isReconstructingStory
-                                  ? "story-update-status updating"
-                                  : storyUpdateNeeded
-                                    ? "story-update-status needs-update"
-                                    : "story-update-status"
-                              }
-                            >
-                              {storyActionStatusLabel}
-                            </span>
-                          ) : null}
-                        </div>
                         <button
                           type="button"
                           onClick={publishTrip}
@@ -2409,9 +2310,9 @@ function OwnerWorkspace() {
             <section aria-labelledby="help-story">
               <h3 id="help-story">Update the story</h3>
               <p>
-                After adding or correcting photos, choose Update story from the
-                trip actions menu. Review any items that need a human decision
-                before sharing.
+                After adding or correcting photos, open Manage trip and choose
+                Update story. Review any items that need a human decision before
+                sharing.
               </p>
             </section>
             <section aria-labelledby="help-sharing">
@@ -2470,7 +2371,7 @@ function OwnerWorkspace() {
               ) : (
                 <p>Select a trip to manage its details.</p>
               )}
-              <h2>Trip settings</h2>
+              <h2>Manage trip</h2>
             </div>
           </div>
           <details
@@ -2669,13 +2570,60 @@ function OwnerWorkspace() {
           >
             <summary>
               <span className="management-summary-copy">
-                <strong>Trip info</strong>
-                <span>Edit name, dates, and timezone</span>
+                <strong>Manage trip</strong>
+                <span>Edit trip info or update its story</span>
               </span>
             </summary>
             <form className="stack" onSubmit={updateTrip}>
               {selectedTrip ? (
                 <>
+                  {canOrganizeSelectedTrip ? (
+                    <div className="stack">
+                      <div>
+                        <strong>Update story</strong>
+                        <p>
+                          Rebuild the map and timeline from your latest photos.
+                        </p>
+                      </div>
+                      <div className="story-action-stack">
+                        <button
+                          className={
+                            isReconstructingStory
+                              ? "is-updating"
+                              : storyUpdateNeeded
+                                ? "needs-update"
+                                : undefined
+                          }
+                          type="button"
+                          onClick={runReconstruction}
+                          disabled={isStoryActionDisabled}
+                          aria-busy={isReconstructingStory}
+                          title={storyActionTitle}
+                        >
+                          {isReconstructingStory ? (
+                            <span
+                              className="button-spinner"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {storyActionButtonLabel}
+                        </button>
+                        {storyUpdate || isReconstructingStory ? (
+                          <span
+                            className={
+                              isReconstructingStory
+                                ? "story-update-status updating"
+                                : storyUpdateNeeded
+                                  ? "story-update-status needs-update"
+                                  : "story-update-status"
+                            }
+                          >
+                            {storyActionStatusLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   <TripFields form={settingsForm} onChange={setSettingsForm} />
                   <div className="button-row">
                     <button type="submit" disabled={isBusy}>
