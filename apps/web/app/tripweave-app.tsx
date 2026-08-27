@@ -10,6 +10,7 @@ import {
   TouchEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -4233,6 +4234,8 @@ function TripStoryExplorer({
   const [splittingStopKey, setSplittingStopKey] = useState<string | null>(null);
   const [pendingSplitKey, setPendingSplitKey] = useState<string | null>(null);
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
+  const photoRollScrollRef = useRef<HTMLDivElement | null>(null);
+  const photoRollScrollTopRef = useRef(0);
   const [photoProjectionCache, setPhotoProjectionCache] = useState<
     Record<string, StoryPhotoProjectionResponse>
   >({});
@@ -4368,6 +4371,22 @@ function TripStoryExplorer({
     [photoRollDays],
   );
   const isPhotoRollVisible = isPhotoRollOpen || mobilePane === "photos";
+
+  useLayoutEffect(() => {
+    if (!isPhotoRollVisible) {
+      photoRollScrollTopRef.current = 0;
+      return;
+    }
+    const photoRoll = photoRollScrollRef.current;
+    if (!photoRoll) {
+      return;
+    }
+    photoRoll.scrollTop = Math.min(
+      photoRollScrollTopRef.current,
+      Math.max(0, photoRoll.scrollHeight - photoRoll.clientHeight),
+    );
+  }, [isPhotoRollVisible, photoRollDays]);
+
   const closePhotoRoll = useCallback(() => {
     setIsPhotoRollOpen(false);
     if (mobilePane === "photos") {
@@ -7160,7 +7179,14 @@ function TripStoryExplorer({
                 <TimelineActionIcon name="x" />
               </button>
             </div>
-            <div className="story-photo-roll" aria-label="Photos by stop">
+            <div
+              ref={photoRollScrollRef}
+              className="story-photo-roll"
+              aria-label="Photos by stop"
+              onScroll={(event) => {
+                photoRollScrollTopRef.current = event.currentTarget.scrollTop;
+              }}
+            >
               {photoRollDays.length === 0 ? (
                 <p>
                   {loadingPhotoProjectionKey

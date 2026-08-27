@@ -1764,6 +1764,7 @@ button.is-updating {
   display: grid;
   gap: 16px;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 18px;
 }
 
