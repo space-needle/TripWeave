@@ -98,6 +98,7 @@ type GalleryPhoto = {
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
+type OnboardingView = "hidden" | "welcome" | "example";
 type MobileWorkspaceTab =
   | "story"
   | "timeline"
@@ -340,6 +341,8 @@ function OwnerWorkspace() {
   const [latestInviteUrl, setLatestInviteUrl] = useState("");
   const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
+  const [onboardingView, setOnboardingView] =
+    useState<OnboardingView>("hidden");
   const [mobileOverflowMenuOpen, setMobileOverflowMenuOpen] = useState(false);
   const [ownerStoryPhotosOpen, setOwnerStoryPhotosOpen] = useState(false);
   const [ownerSlideshowOpen, setOwnerSlideshowOpen] = useState(false);
@@ -821,6 +824,7 @@ function OwnerWorkspace() {
           ? await api.register({ email, password, displayName })
           : await api.login({ email, password });
       setUser(result.user);
+      setOnboardingView("hidden");
       await loadTrips();
       setPassword("");
     } catch (error) {
@@ -851,6 +855,7 @@ function OwnerWorkspace() {
       setMembers([]);
       setPublications(null);
       setLatestShareUrl("");
+      setOnboardingView("hidden");
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -1681,6 +1686,118 @@ function OwnerWorkspace() {
     );
   }
 
+  const isOnboardingVisible = trips.length === 0 || onboardingView !== "hidden";
+
+  if (isOnboardingVisible) {
+    return (
+      <main className="app-shell onboarding-shell">
+        <header className="app-header onboarding-header">
+          <strong>TripWeave</strong>
+          <div className="onboarding-header-actions">
+            {trips.length > 0 ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setOnboardingView("hidden")}
+              >
+                Back to my trips
+              </button>
+            ) : null}
+            <button type="button" onClick={logout} disabled={isBusy}>
+              Logout
+            </button>
+          </div>
+        </header>
+
+        {onboardingView === "example" ? (
+          <ExampleTripPreview onBack={() => setOnboardingView("welcome")} />
+        ) : (
+          <section className="onboarding" aria-labelledby="onboarding-title">
+            <div className="onboarding-intro">
+              <p className="eyebrow">Your shared travel story starts here</p>
+              <h1 id="onboarding-title">
+                Turn scattered travel photos into one shared story.
+              </h1>
+              <p className="onboarding-lede">
+                Create a trip, invite the people who were there, and weave
+                everyone&apos;s moments into a journey you can revisit.
+              </p>
+
+              <ol className="onboarding-steps" aria-label="How TripWeave works">
+                <li>
+                  <span>01</span>
+                  <div>
+                    <strong>Create a trip</strong>
+                    <p>Give the journey a home before the photos arrive.</p>
+                  </div>
+                </li>
+                <li>
+                  <span>02</span>
+                  <div>
+                    <strong>Add photos together</strong>
+                    <p>Invite fellow travelers to contribute their moments.</p>
+                  </div>
+                </li>
+                <li>
+                  <span>03</span>
+                  <div>
+                    <strong>Revisit the story</strong>
+                    <p>See the trip take shape as a map and timeline.</p>
+                  </div>
+                </li>
+              </ol>
+              <button
+                className="secondary-button onboarding-example-button"
+                type="button"
+                onClick={() => setOnboardingView("example")}
+              >
+                Explore an example trip
+              </button>
+            </div>
+
+            <section
+              className="onboarding-create panel"
+              aria-labelledby="create-first-trip-title"
+            >
+              <div>
+                <p className="eyebrow">Step 1</p>
+                <h2 id="create-first-trip-title">Create your first trip</h2>
+                <p>Give it a name and add any details you already know.</p>
+              </div>
+              <form className="stack" onSubmit={createTrip}>
+                <TripFields
+                  form={createForm}
+                  onChange={setCreateForm}
+                  showDayCutoffHour={false}
+                />
+                {tripQuota ? (
+                  <p
+                    className={
+                      tripQuotaReached
+                        ? "quota-message quota-reached"
+                        : "quota-message"
+                    }
+                    role="status"
+                  >
+                    {tripQuotaMessage(tripQuota)}
+                  </p>
+                ) : null}
+                {tripError ? (
+                  <p className="error" role="alert">
+                    {tripError}
+                  </p>
+                ) : null}
+                <button type="submit" disabled={isBusy || tripQuotaReached}>
+                  {isBusy ? "Creating trip..." : "Create your first trip"}
+                </button>
+              </form>
+            </section>
+          </section>
+        )}
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell owner-workspace-shell">
       <header className="app-header workspace-header">
@@ -1910,6 +2027,19 @@ function OwnerWorkspace() {
               <StoryHeaderIcon action="help" />
               <span className="mobile-menu-label">Help</span>
             </button>
+            <button
+              type="button"
+              aria-label="How TripWeave works"
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                setOnboardingView("welcome");
+              }}
+              title="How TripWeave works"
+            >
+              <StoryHeaderIcon action="help" />
+              <span className="mobile-menu-label">How TripWeave works</span>
+            </button>
           </div>
         </nav>
       ) : null}
@@ -2062,6 +2192,14 @@ function OwnerWorkspace() {
               </button>
             </form>
           </details>
+          <button
+            className="tripweave-guide-link"
+            type="button"
+            onClick={() => setOnboardingView("welcome")}
+          >
+            <span>How TripWeave works</span>
+            <small>View onboarding</small>
+          </button>
         </aside>
 
         <section
@@ -9255,6 +9393,91 @@ function useMediaQuery(queryText: string): boolean {
     return () => query.removeEventListener("change", listener);
   }, [queryText]);
   return matches;
+}
+
+function ExampleTripPreview({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="example-trip" aria-labelledby="example-trip-title">
+      <header className="example-trip-header">
+        <div>
+          <p className="eyebrow">Read-only example</p>
+          <h1 id="example-trip-title">A Weekend in Jeju</h1>
+          <p>May 16–18 · 4 travelers · 86 photos</p>
+        </div>
+        <button className="secondary-button" type="button" onClick={onBack}>
+          Back to start
+        </button>
+      </header>
+
+      <div className="example-trip-grid">
+        <section
+          className="example-story-card"
+          aria-labelledby="example-story-title"
+        >
+          <div className="example-photo-grid" aria-hidden="true">
+            <div className="example-photo example-photo-sunrise" />
+            <div className="example-photo example-photo-coast" />
+            <div className="example-photo example-photo-market" />
+            <div className="example-photo example-photo-dinner" />
+          </div>
+          <div className="example-story-copy">
+            <p className="eyebrow">The story</p>
+            <h2 id="example-story-title">One trip, seen through every lens.</h2>
+            <p>
+              Photos from everyone&apos;s camera rolls come together as one
+              journey — from the first sunrise to the last shared dinner.
+            </p>
+          </div>
+        </section>
+
+        <aside
+          className="example-timeline"
+          aria-labelledby="example-timeline-title"
+        >
+          <div>
+            <p className="eyebrow">Map + timeline</p>
+            <h2 id="example-timeline-title">Follow the journey</h2>
+          </div>
+          <ol>
+            <li>
+              <span className="example-stop-marker example-stop-marker-start" />
+              <div>
+                <strong>Day 1 · Seongsan</strong>
+                <p>Sunrise, coastal walks, and 24 shared photos</p>
+              </div>
+            </li>
+            <li>
+              <span className="example-stop-marker example-stop-marker-middle" />
+              <div>
+                <strong>Day 2 · Hallasan</strong>
+                <p>A trail day captured from four perspectives</p>
+              </div>
+            </li>
+            <li>
+              <span className="example-stop-marker example-stop-marker-end" />
+              <div>
+                <strong>Day 3 · Jeju City</strong>
+                <p>Market finds and the last dinner together</p>
+              </div>
+            </li>
+          </ol>
+        </aside>
+      </div>
+
+      <footer className="example-trip-footer">
+        <div>
+          <strong>This is what your trip can become.</strong>
+          <p>
+            Create a trip, add everyone&apos;s photos, and let the story take
+            shape.
+          </p>
+        </div>
+        <button type="button" onClick={onBack}>
+          Create your own trip
+        </button>
+      </footer>
+    </section>
+  );
 }
 
 function TripFields({
