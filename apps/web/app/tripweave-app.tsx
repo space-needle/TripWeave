@@ -108,8 +108,7 @@ type MobileWorkspaceTab =
   | "tripSettings"
   | "appSettings"
   | "trips"
-  | "tripBrowse"
-  | "help";
+  | "tripBrowse";
 type StoryMobilePane = "map" | "timeline" | "photos";
 type StoryHeaderIconAction =
   | StoryMobilePane
@@ -1967,21 +1966,6 @@ function OwnerWorkspace() {
             </button>
             <button
               type="button"
-              aria-label="Help"
-              aria-pressed={mobileTab === "help"}
-              className={mobileTab === "help" ? "active" : ""}
-              onClick={() => {
-                setOwnerStoryPhotosOpen(false);
-                closeMobileMenus();
-                setMobileTab("help");
-              }}
-              title="Help"
-            >
-              <StoryHeaderIcon action="help" />
-              <span className="mobile-menu-label">Help</span>
-            </button>
-            <button
-              type="button"
               aria-label="How TripWeave works"
               onClick={() => {
                 setOwnerStoryPhotosOpen(false);
@@ -2275,62 +2259,6 @@ function OwnerWorkspace() {
               </p>
             </div>
           )}
-        </section>
-
-        <section
-          className={`help-panel panel ${
-            mobileTab === "help" ? "mobile-tab-active" : ""
-          }`}
-          aria-labelledby="help-title"
-          data-mobile-tab-panel="help"
-        >
-          <div className="help-heading">
-            <p className="eyebrow">TripWeave guide</p>
-            <h2 id="help-title">Help</h2>
-            <p>
-              Turn photos from a shared trip into a map, timeline, and story.
-            </p>
-          </div>
-          <div className="help-sections">
-            <section aria-labelledby="help-getting-started">
-              <h3 id="help-getting-started">Get started</h3>
-              <ol>
-                <li>Create a trip and add its dates and timezone.</li>
-                <li>Invite fellow travelers to contribute their photos.</li>
-                <li>Upload JPEG or HEIC photos to the trip.</li>
-              </ol>
-            </section>
-            <section aria-labelledby="help-explore">
-              <h3 id="help-explore">Explore the trip</h3>
-              <p>
-                Use Map to follow the route and Timeline to move through each
-                day and stop. Select a stop to focus the map and its photos.
-              </p>
-            </section>
-            <section aria-labelledby="help-story">
-              <h3 id="help-story">Update the story</h3>
-              <p>
-                After adding or correcting photos, open Manage trip and choose
-                Update story. Review any items that need a human decision before
-                sharing.
-              </p>
-            </section>
-            <section aria-labelledby="help-sharing">
-              <h3 id="help-sharing">Share safely</h3>
-              <p>
-                Create an invite link for contributors, then publish a story
-                link when it is ready. Shared stories use sanitized derivatives
-                instead of original photos.
-              </p>
-            </section>
-            <section aria-labelledby="help-privacy">
-              <h3 id="help-privacy">Privacy and ownership</h3>
-              <p>
-                Original photos and metadata stay private. Contributors retain
-                ownership and control over the media they upload.
-              </p>
-            </section>
-          </div>
         </section>
 
         <aside className="trip-management" aria-label="Trip management">
