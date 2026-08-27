@@ -358,6 +358,22 @@ p {
   gap: 18px;
 }
 
+.example-trip-frame {
+  min-height: min(720px, calc(100vh - 245px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgb(23 32 42 / 9%);
+}
+
+.example-trip-frame iframe {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  border: 0;
+}
+
 .example-story-card,
 .example-timeline,
 .example-trip-footer {
@@ -611,6 +627,10 @@ p {
 
   .example-trip-grid {
     grid-template-columns: 1fr;
+  }
+
+  .example-trip-frame {
+    min-height: 620px;
   }
 
   .example-photo-grid {

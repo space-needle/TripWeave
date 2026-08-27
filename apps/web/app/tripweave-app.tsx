@@ -9334,7 +9334,50 @@ const exampleTripStops: ExampleTripStop[] = [
   },
 ];
 
+const sampleTripUrl =
+  "https://tripweave.chronotrailai.com/story/korea-aef41b9bcda5/v/2";
+
 function ExampleTripPreview({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="example-trip" aria-labelledby="example-trip-title">
+      <header className="example-trip-header">
+        <div>
+          <p className="eyebrow">Read-only example</p>
+          <h1 id="example-trip-title">Explore a real shared trip</h1>
+          <p>See how photos become a map, timeline, and story.</p>
+        </div>
+        <button className="secondary-button" type="button" onClick={onBack}>
+          Back to start
+        </button>
+      </header>
+
+      <div className="example-trip-frame">
+        <iframe
+          title="Sample TripWeave story"
+          src={sampleTripUrl}
+          allow="fullscreen"
+        />
+      </div>
+
+      <footer className="example-trip-footer">
+        <div>
+          <strong>This is a real TripWeave story.</strong>
+          <p>Explore it freely, then create a trip of your own.</p>
+        </div>
+        <a
+          className="secondary-button"
+          href={sampleTripUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open in a new tab
+        </a>
+      </footer>
+    </section>
+  );
+}
+
+function LegacyExampleTripPreview({ onBack }: { onBack: () => void }) {
   const [selectedStopId, setSelectedStopId] = useState(exampleTripStops[0].id);
 
   return (
