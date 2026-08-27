@@ -4236,6 +4236,7 @@ function TripStoryExplorer({
   const [isPhotoRollOpen, setIsPhotoRollOpen] = useState(false);
   const photoRollScrollRef = useRef<HTMLDivElement | null>(null);
   const photoRollScrollTopRef = useRef(0);
+  const photoRollContentKeyRef = useRef<string | null>(null);
   const [photoProjectionCache, setPhotoProjectionCache] = useState<
     Record<string, StoryPhotoProjectionResponse>
   >({});
@@ -4302,6 +4303,9 @@ function TripStoryExplorer({
   const activeDayPhotoProjection = activePhotoDayId
     ? photoProjectionCache[`${photoProjectionScope}:day:${activePhotoDayId}`]
     : undefined;
+  const photoRollContentKey = `${photoProjectionScope}:day:${
+    activePhotoDayId ?? "none"
+  }`;
   const photoRollDays = useMemo(() => {
     if (!activeDayPhotoProjection || !activePhotoDayId) {
       if (tripId) {
@@ -4375,17 +4379,20 @@ function TripStoryExplorer({
   useLayoutEffect(() => {
     if (!isPhotoRollVisible) {
       photoRollScrollTopRef.current = 0;
+      photoRollContentKeyRef.current = null;
       return;
     }
+    if (photoRollContentKeyRef.current === photoRollContentKey) {
+      return;
+    }
+    photoRollContentKeyRef.current = photoRollContentKey;
+    photoRollScrollTopRef.current = 0;
     const photoRoll = photoRollScrollRef.current;
     if (!photoRoll) {
       return;
     }
-    photoRoll.scrollTop = Math.min(
-      photoRollScrollTopRef.current,
-      Math.max(0, photoRoll.scrollHeight - photoRoll.clientHeight),
-    );
-  }, [isPhotoRollVisible, photoRollDays]);
+    photoRoll.scrollTop = 0;
+  }, [isPhotoRollVisible, photoRollContentKey]);
 
   const closePhotoRoll = useCallback(() => {
     setIsPhotoRollOpen(false);
