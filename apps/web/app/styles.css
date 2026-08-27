@@ -693,6 +693,10 @@ p {
   display: none;
 }
 
+.mobile-manage-trip-update {
+  display: none;
+}
+
 .story-action-stack {
   display: grid;
   gap: 4px;
@@ -3084,6 +3088,18 @@ button.is-updating {
     display: grid;
     gap: 3px;
     min-width: 0;
+  }
+
+  .mobile-manage-trip-update {
+    width: fit-content;
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .manage-trip-manual-update {
+    display: none;
   }
 
   .mobile-page-header h2 {

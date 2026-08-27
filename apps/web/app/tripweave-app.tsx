@@ -2302,6 +2302,42 @@ function OwnerWorkspace() {
               )}
               <h2>Manage trip</h2>
             </div>
+            {canOrganizeSelectedTrip ? (
+              <div className="mobile-manage-trip-update">
+                <button
+                  className={
+                    isReconstructingStory
+                      ? "is-updating"
+                      : storyUpdateNeeded
+                        ? "needs-update"
+                        : undefined
+                  }
+                  type="button"
+                  onClick={runReconstruction}
+                  disabled={isStoryActionDisabled}
+                  aria-busy={isReconstructingStory}
+                  title={storyActionTitle}
+                >
+                  {isReconstructingStory ? (
+                    <span className="button-spinner" aria-hidden="true" />
+                  ) : null}
+                  {storyActionButtonLabel}
+                </button>
+                {storyUpdate || isReconstructingStory ? (
+                  <span
+                    className={
+                      isReconstructingStory
+                        ? "story-update-status updating"
+                        : storyUpdateNeeded
+                          ? "story-update-status needs-update"
+                          : "story-update-status"
+                    }
+                  >
+                    {storyActionStatusLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div
             className={`mobile-page-header mobile-trip-context-header ${
@@ -2549,7 +2585,7 @@ function OwnerWorkspace() {
               {selectedTrip ? (
                 <>
                   {canOrganizeSelectedTrip ? (
-                    <div className="stack">
+                    <div className="stack manage-trip-manual-update">
                       <div>
                         <strong>Update story</strong>
                         <p>
