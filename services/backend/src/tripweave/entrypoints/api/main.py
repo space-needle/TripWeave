@@ -966,16 +966,28 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return f"http://localhost:3000/invite/{token}"
 
     def share_url(request: Request, token: str) -> str:
+        return f"{public_web_base_url(request)}/story/{token}"
+
+    def public_web_base_url(request: Request) -> str:
         origin = request.headers.get("origin")
         if resolved_settings.web_origin_is_allowed(origin):
-            return f"{origin}/story/{token}"
-        return f"http://localhost:3000/story/{token}"
+            return (origin or "").rstrip("/")
+        referer = request.headers.get("referer")
+        if referer:
+            parsed_referer = urlparse(referer)
+            if parsed_referer.scheme in {"http", "https"} and parsed_referer.netloc:
+                request_host = urlparse(str(request.base_url)).hostname
+                if parsed_referer.hostname == request_host:
+                    return f"{parsed_referer.scheme}://{parsed_referer.netloc}"
+        configured_base_url = resolved_settings.public_api_base_url.rstrip("/")
+        if urlparse(configured_base_url).hostname not in {"localhost", "127.0.0.1", "::1"}:
+            return configured_base_url
+        return "http://localhost:3000"
 
     def story_urls(request: Request, trip: orm.Trip, version_number: int) -> tuple[str, str]:
         if trip.public_story_slug is None:
             raise ValueError("Published trip is missing its public story slug")
-        origin = request.headers.get("origin")
-        base_url = origin if resolved_settings.web_origin_is_allowed(origin) else "http://localhost:3000"
+        base_url = public_web_base_url(request)
         latest_url = f"{base_url}/story/{trip.public_story_slug}"
         return latest_url, f"{latest_url}/v/{version_number}"
 

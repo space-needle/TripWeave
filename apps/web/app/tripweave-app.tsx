@@ -10006,64 +10006,47 @@ function PublicationList({
   if (!publications) {
     return <p>No publication data loaded.</p>;
   }
+  const versionsById = new Map(
+    publications.versions.map((version) => [version.id, version]),
+  );
   return (
-    <div className="publication-grid">
-      <div>
-        <h3>Versions</h3>
-        {publications.versions.length === 0 ? (
-          <p>No versions yet.</p>
-        ) : (
-          <div className="compact-list">
-            {publications.versions.map((version) => (
-              <div className="compact-row" key={version.id}>
-                <span>v{version.versionNumber}</span>
-                <small>{version.state}</small>
-                {version.errorMessage ? (
+    <div className="publication-list">
+      <h3>Published versions</h3>
+      {publications.shareLinks.length === 0 ? (
+        <p>No versions yet.</p>
+      ) : (
+        <div className="compact-list">
+          {publications.shareLinks.map((link) => {
+            const version = link.storyVersionId
+              ? versionsById.get(link.storyVersionId)
+              : undefined;
+            return (
+              <article className="publication-card" key={link.id}>
+                <div className="publication-card-status">
+                  <strong>{version ? `Version ${version.versionNumber}` : "Publishing"}</strong>
+                  <span>{version?.state ?? link.status}</span>
+                  {link.status === "active" ? (
+                    <button type="button" onClick={() => onRevoke(link.id)}>
+                      Revoke
+                    </button>
+                  ) : null}
+                </div>
+                {link.versionStoryUrl ? (
+                  <div className="publication-card-link">
+                    <code>{link.versionStoryUrl}</code>
+                    <button type="button" onClick={() => onCopyUrl(link.versionStoryUrl!)}>
+                      Copy version link
+                    </button>
+                  </div>
+                ) : null}
+                {version?.errorMessage ? (
                   <small className="error">{version.errorMessage}</small>
                 ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div>
-        <h3>Share links</h3>
-        {publications.shareLinks.length === 0 ? (
-          <p>No links yet.</p>
-        ) : (
-          <div className="compact-list">
-            {publications.shareLinks.map((link) => (
-              <div className="compact-row" key={link.id}>
-                <span>{link.status}</span>
-                <small>
-                  {link.storyVersionId ? "version assigned" : "publishing"}
-                </small>
-                {link.latestStoryUrl ? (
-                  <div>
-                    <small>Latest: <code>{link.latestStoryUrl}</code></small>
-                    <button type="button" onClick={() => onCopyUrl(link.latestStoryUrl!)}>
-                      Copy latest
-                    </button>
-                  </div>
-                ) : null}
-                {link.versionStoryUrl ? (
-                  <div>
-                    <small>Fixed version: <code>{link.versionStoryUrl}</code></small>
-                    <button type="button" onClick={() => onCopyUrl(link.versionStoryUrl!)}>
-                      Copy version
-                    </button>
-                  </div>
-                ) : null}
-                {link.status === "active" ? (
-                  <button type="button" onClick={() => onRevoke(link.id)}>
-                    Revoke
-                  </button>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

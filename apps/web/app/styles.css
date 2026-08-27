@@ -1341,6 +1341,46 @@ button.is-updating {
   color: var(--muted);
 }
 
+.publication-list {
+  display: grid;
+  gap: 8px;
+}
+
+.publication-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.publication-card-status,
+.publication-card-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.publication-card-status span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.publication-card-status button {
+  margin-left: auto;
+}
+
+.publication-card-link {
+  align-items: flex-start;
+}
+
+.publication-card-link code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .public-story-shell {
   width: min(1480px, calc(100% - 32px));
 }
