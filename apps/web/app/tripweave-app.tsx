@@ -2303,6 +2303,26 @@ function OwnerWorkspace() {
               <h2>Manage trip</h2>
             </div>
           </div>
+          <div
+            className={`mobile-page-header mobile-trip-context-header ${
+              mobileTab === "share" ? "mobile-tab-active" : ""
+            }`}
+            data-mobile-tab-panel="share"
+          >
+            <div>
+              {selectedTrip ? (
+                <>
+                  <h2>{selectedTrip.title}</h2>
+                  <p>
+                    {selectedTrip.startDate} - {selectedTrip.endDate}
+                  </p>
+                </>
+              ) : (
+                <p>Select a trip before sharing it.</p>
+              )}
+              <h2>Share trip</h2>
+            </div>
+          </div>
           <details
             className={`management-panel ${
               mobileTab === "photos" ? "mobile-tab-active" : ""
