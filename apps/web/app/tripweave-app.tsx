@@ -5633,6 +5633,16 @@ function TripStoryExplorer({
           travelerCount: selectedStopDetail.contributorCount,
         }
       : null;
+  const selectedDayMetrics =
+    !selectedStopDetail && activeDay
+      ? {
+          stopCount: activeDay.stops.length,
+          photoCount: activeDay.stops.reduce(
+            (total, stop) => total + stop.mediaCount,
+            0,
+          ),
+        }
+      : null;
   const selectedNote =
     (isCollapsedAreaSelected ? "" : selectedStopDetail?.note?.trim()) ||
     activeDay?.note?.trim() ||
@@ -5698,6 +5708,17 @@ function TripStoryExplorer({
                 >
                   <TimelineMetricIcon name="travelers" />
                   {selectedStopMetrics.travelerCount}
+                </span>
+              </div>
+            ) : selectedDayMetrics ? (
+              <div className="story-selected-stop-metrics">
+                <span aria-label={`${selectedDayMetrics.stopCount} stops`}>
+                  <TimelineMetricIcon name="stops" />
+                  {selectedDayMetrics.stopCount}
+                </span>
+                <span aria-label={`${selectedDayMetrics.photoCount} photos`}>
+                  <TimelineMetricIcon name="camera" />
+                  {selectedDayMetrics.photoCount}
                 </span>
               </div>
             ) : (
