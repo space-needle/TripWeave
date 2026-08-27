@@ -948,6 +948,14 @@ button.is-updating {
   padding: 16px;
 }
 
+.management-panel > .management-panel-static-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
 .trip-start {
   min-height: 420px;
   align-content: center;
@@ -1068,6 +1076,7 @@ button.is-updating {
     0 4px 9px rgb(23 32 42 / 7%);
 }
 
+#add-photos-panel,
 #photos-panel,
 #travelers-panel,
 #review-panel,

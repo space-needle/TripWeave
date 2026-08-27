@@ -2020,7 +2020,7 @@ function OwnerWorkspace() {
             >
               Trip Map
             </button>
-            <a href="#photos-panel">Photos</a>
+            <a href="#add-photos-panel">Photos</a>
             <a href="#settings-panel">Manage trip</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
@@ -2323,22 +2323,19 @@ function OwnerWorkspace() {
               <h2>Share trip</h2>
             </div>
           </div>
-          <details
+          <section
             className={`management-panel ${
               mobileTab === "photos" ? "mobile-tab-active" : ""
             }`}
-            id="photos-panel"
-            open={isMobileWorkspace ? mobileTab === "photos" : true}
+            id="add-photos-panel"
             data-mobile-tab-panel="photos"
           >
-            <summary>
-              <span>Photos</span>
-              {selectedTrip ? (
-                <small>
-                  {media.length} photo{media.length === 1 ? "" : "s"}
-                </small>
-              ) : null}
-            </summary>
+            <div className="management-panel-static-heading">
+              <span className="management-summary-copy">
+                <strong>Add photos</strong>
+                <span>Upload JPEG or HEIC photos to this trip</span>
+              </span>
+            </div>
             {selectedTrip ? (
               <div className="stack">
                 <div
@@ -2376,6 +2373,31 @@ function OwnerWorkspace() {
                   onCancel={cancelUpload}
                   onRetry={retryUpload}
                 />
+              </div>
+            ) : (
+              <p>Select a trip before uploading photos.</p>
+            )}
+          </section>
+          <details
+            className={`management-panel ${
+              mobileTab === "photos" ? "mobile-tab-active" : ""
+            }`}
+            id="photos-panel"
+            data-mobile-tab-panel="photos"
+          >
+            <summary>
+              <span className="management-summary-copy">
+                <strong>Photo library</strong>
+                <span>Browse and manage trip photos</span>
+              </span>
+              {selectedTrip ? (
+                <small>
+                  {media.length} photo{media.length === 1 ? "" : "s"}
+                </small>
+              ) : null}
+            </summary>
+            {selectedTrip ? (
+              <div className="stack">
                 <div className="panel-heading">
                   <h2 id="media-title">Photo library</h2>
                   <span>{hasProcessingMedia ? "Preparing" : "Ready"}</span>
@@ -2410,7 +2432,7 @@ function OwnerWorkspace() {
                 ) : null}
               </div>
             ) : (
-              <p>Select a trip before uploading photos.</p>
+              <p>Select a trip before viewing its photo library.</p>
             )}
           </details>
 
