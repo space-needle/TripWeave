@@ -1860,7 +1860,7 @@ function OwnerWorkspace() {
           >
             <button
               type="button"
-              aria-label="Upload photos"
+              aria-label="Add photos"
               aria-pressed={mobileTab === "photos"}
               className={mobileTab === "photos" ? "active" : ""}
               onClick={() => {
@@ -1868,10 +1868,10 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("photos");
               }}
-              title="Upload photos"
+              title="Add photos"
             >
               <StoryHeaderIcon action="upload" />
-              <span className="mobile-menu-label">Upload photos</span>
+              <span className="mobile-menu-label">Add photos</span>
             </button>
             {canManageSelectedTrip ? (
               <>
@@ -2277,9 +2277,9 @@ function OwnerWorkspace() {
                   </p>
                 </>
               ) : (
-                <p>Select a trip before uploading photos.</p>
+                <p>Select a trip before adding photos.</p>
               )}
-              <h2>Upload photos</h2>
+              <h2>Add photos</h2>
             </div>
           </div>
           <div
