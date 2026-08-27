@@ -356,7 +356,6 @@ function OwnerWorkspace() {
   const [tripMapEndDate, setTripMapEndDate] = useState("");
   const [tripMapError, setTripMapError] = useState("");
   const [isTripMapLoading, setIsTripMapLoading] = useState(false);
-  const isMobileWorkspace = useMediaQuery("(max-width: 920px)");
   const [uploadProgress, setUploadProgress] = useState<
     Record<string, UploadProgress>
   >({});
@@ -9286,25 +9285,6 @@ function useReducedMotion(): boolean {
   return reducedMotion;
 }
 
-function useMediaQuery(queryText: string): boolean {
-  const [matches, setMatches] = useState(() => {
-    if (typeof window === "undefined" || !window.matchMedia) {
-      return false;
-    }
-    return window.matchMedia(queryText).matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) {
-      return;
-    }
-    const query = window.matchMedia(queryText);
-    const listener = (event: MediaQueryListEvent) => setMatches(event.matches);
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }, [queryText]);
-  return matches;
-}
-
 type ExampleTripStop = {
   id: string;
   day: string;
@@ -11261,12 +11241,6 @@ function MediaList({
   if (media.length === 0) {
     return <p>No processed media yet.</p>;
   }
-  const visibilityLabels: Record<string, string> = {
-    trip: "Member only",
-    story: "Public",
-    private: "Private",
-    excluded: "Excluded",
-  };
   return (
     <>
       <div className="media-list" role="list">
@@ -11294,44 +11268,10 @@ function MediaList({
                     }`
                   : ""}
               </small>
-              <small className="media-state">
-                {visibilityLabels[item.visibility] ?? item.visibility}
-              </small>
-              <dl>
-                <div>
-                  <dt>Captured</dt>
-                  <dd>
-                    {formatReconstructionTime(
-                      item.capturedAt ?? null,
-                      item.capturedAtLocal ?? null,
-                      timezoneId,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>GPS</dt>
-                  <dd>{item.gpsPresent ? "Present" : "Not found"}</dd>
-                </div>
-                <div>
-                  <dt>Dimensions</dt>
-                  <dd>
-                    {item.width && item.height
-                      ? `${item.width} × ${item.height}`
-                      : "Unknown"}
-                  </dd>
-                </div>
-              </dl>
-              {item.errorMessage ? (
-                <p className="error">{item.errorMessage}</p>
-              ) : null}
-              {item.processingState === "failed" && onRetry ? (
-                <button type="button" onClick={() => onRetry(item)}>
-                  Retry processing
-                </button>
-              ) : null}
               {onVisibilityChange &&
               (canChangeVisibility ? canChangeVisibility(item) : true) ? (
-                <div className="media-actions">
+                <div className="media-property-row media-visibility-row">
+                  <span>Visibility</span>
                   <div className="visibility-control">
                     <div
                       className="visibility-toggle"
@@ -11340,31 +11280,25 @@ function MediaList({
                     >
                       <button
                         type="button"
-                        className={`media-icon-button ${
-                          item.visibility === "trip" ? "active" : ""
-                        }`}
+                        className={item.visibility === "trip" ? "active" : ""}
                         aria-pressed={item.visibility === "trip"}
                         onClick={() => onVisibilityChange(item, "trip")}
-                        aria-label="Member only"
-                        title="Member only"
                       >
-                        <MediaActionIcon action="members" />
+                        Member only
                       </button>
                       <button
                         type="button"
-                        className={`media-icon-button ${
+                        className={
                           item.visibility === "story" && item.includeInStory
                             ? "active"
                             : ""
-                        }`}
+                        }
                         aria-pressed={
                           item.visibility === "story" && item.includeInStory
                         }
                         onClick={() => onVisibilityChange(item, "story")}
-                        aria-label="Public"
-                        title="Public"
                       >
-                        <MediaActionIcon action="public" />
+                        Public
                       </button>
                     </div>
                     <div className="visibility-help">
@@ -11413,29 +11347,59 @@ function MediaList({
                       ) : null}
                     </div>
                   </div>
-                  {onDelete ? (
-                    <button
-                      className="media-icon-button danger"
-                      type="button"
-                      onClick={() => onDelete(item)}
-                      aria-label="Delete photo"
-                      title="Delete photo"
-                    >
-                      <MediaActionIcon action="delete" />
-                    </button>
-                  ) : null}
-                  {onAdjustLocation ? (
-                    <button
-                      className="media-icon-button"
-                      type="button"
-                      onClick={() => onAdjustLocation(item)}
-                      aria-label="Adjust location"
-                      title="Adjust location"
-                    >
-                      <MediaActionIcon action="location" />
-                    </button>
-                  ) : null}
                 </div>
+              ) : null}
+              <dl>
+                <div>
+                  <dt>Captured</dt>
+                  <dd>
+                    {formatReconstructionTime(
+                      item.capturedAt ?? null,
+                      item.capturedAtLocal ?? null,
+                      timezoneId,
+                    )}
+                  </dd>
+                </div>
+                <div className="media-gps-row">
+                  <dt>GPS</dt>
+                  <dd>
+                    <span>{item.gpsPresent ? "Present" : "Not found"}</span>
+                    {onAdjustLocation ? (
+                      <button
+                        className="media-inline-action"
+                        type="button"
+                        onClick={() => onAdjustLocation(item)}
+                      >
+                        Update
+                      </button>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Dimensions</dt>
+                  <dd>
+                    {item.width && item.height
+                      ? `${item.width} × ${item.height}`
+                      : "Unknown"}
+                  </dd>
+                </div>
+              </dl>
+              {item.errorMessage ? (
+                <p className="error">{item.errorMessage}</p>
+              ) : null}
+              {item.processingState === "failed" && onRetry ? (
+                <button type="button" onClick={() => onRetry(item)}>
+                  Retry processing
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  className="danger media-delete-button"
+                  type="button"
+                  onClick={() => onDelete(item)}
+                >
+                  Delete photo
+                </button>
               ) : null}
             </div>
           </article>

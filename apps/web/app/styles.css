@@ -2364,7 +2364,7 @@ button.is-updating {
 .visibility-toggle {
   width: fit-content;
   display: grid;
-  grid-template-columns: repeat(2, 36px);
+  grid-template-columns: repeat(2, auto);
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -2404,16 +2404,18 @@ button.is-updating {
 }
 
 .visibility-toggle button {
-  width: 36px;
-  min-width: 36px;
-  min-height: 34px;
+  width: auto;
+  min-width: 0;
+  min-height: 36px;
   display: grid;
   place-items: center;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--muted);
-  padding: 0;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0 10px;
 }
 
 .visibility-toggle button + button {
@@ -2423,6 +2425,18 @@ button.is-updating {
 .visibility-toggle button.active {
   background: var(--accent);
   color: #fff;
+}
+
+.media-property-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.media-property-row > span {
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .visibility-help {
@@ -4749,18 +4763,6 @@ button.thumb-frame:focus-visible {
   gap: 8px;
 }
 
-.media-state {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.media-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -4901,6 +4903,27 @@ button.thumb-frame:focus-visible {
 
 .media-details dt {
   color: var(--muted);
+}
+
+.media-gps-row dd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.media-inline-action {
+  min-height: 28px;
+  border-color: var(--border-strong);
+  background: #fff;
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.media-delete-button {
+  justify-self: start;
 }
 
 @media (max-width: 9999px) {
