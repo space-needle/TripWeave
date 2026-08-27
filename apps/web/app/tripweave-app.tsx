@@ -2098,14 +2098,13 @@ function OwnerWorkspace() {
               Trip Map
             </button>
             <a href="#photos-panel">Photos</a>
-            {selectedTrip?.role === "owner" ? (
-              <a href="#travelers-panel">Travelers</a>
+            {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+              <a href="#share-trip-title">Share trip</a>
             ) : null}
             <a href="#settings-panel">Trip info</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
                 <a href="#review-panel">Review</a>
-                <a href="#publish-panel">Publish</a>
               </>
             ) : null}
           </nav>
@@ -2588,21 +2587,28 @@ function OwnerWorkspace() {
             )}
           </details>
 
+          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+            <h2 className="management-group-title" id="share-trip-title">
+              Share trip
+            </h2>
+          ) : null}
+
           {selectedTrip?.role === "owner" ? (
-            <details
-              className={`management-panel ${
-                mobileTab === "tripSettings" ? "mobile-tab-active" : ""
-              }`}
-              id="travelers-panel"
-              open={
-                isMobileWorkspace ? mobileTab === "tripSettings" : undefined
-              }
-              data-mobile-tab-panel="tripSettings"
-            >
+            <>
+              <details
+                className={`management-panel ${
+                  mobileTab === "share" ? "mobile-tab-active" : ""
+                }`}
+                id="travelers-panel"
+                data-mobile-tab-panel="share"
+              >
               <summary>
-                <span>Travelers</span>
+                <span className="management-summary-copy">
+                  <strong>Invite travelers</strong>
+                  <span>Invite friends to add photos</span>
+                </span>
                 <small>
-                  Invite friends · {activeMemberCount} member
+                  {activeMemberCount} member
                   {activeMemberCount === 1 ? "" : "s"}
                 </small>
               </summary>
@@ -2626,85 +2632,8 @@ function OwnerWorkspace() {
                 />
                 <MemberRoster members={members} onRemove={removeMember} />
               </div>
-            </details>
-          ) : null}
-
-          <details
-            className={`management-panel ${
-              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
-            }`}
-            id="settings-panel"
-            open={isMobileWorkspace ? mobileTab === "tripSettings" : undefined}
-            data-mobile-tab-panel="tripSettings"
-          >
-            <summary>
-              <span>Trip info</span>
-              <small>Name, dates, and timezone</small>
-            </summary>
-            <form className="stack" onSubmit={updateTrip}>
-              {selectedTrip ? (
-                <>
-                  <TripFields form={settingsForm} onChange={setSettingsForm} />
-                  <div className="button-row">
-                    <button type="submit" disabled={isBusy}>
-                      Save changes
-                    </button>
-                    <button
-                      className="danger"
-                      type="button"
-                      onClick={deleteTrip}
-                      disabled={isBusy}
-                    >
-                      Delete trip
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p>Select a trip to edit its settings.</p>
-              )}
-            </form>
-          </details>
-
-          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
-            <details
-              className={`management-panel ${
-                mobileTab === "tripSettings" ? "mobile-tab-active" : ""
-              }`}
-              id="review-panel"
-              open={
-                isMobileWorkspace ? mobileTab === "tripSettings" : undefined
-              }
-              data-mobile-tab-panel="tripSettings"
-              onToggle={(event) => {
-                if (event.currentTarget.open) {
-                  loadReviewDetails();
-                }
-              }}
-            >
-              <summary>
-                <span>Review</span>
-                <small>
-                  Check trip details · {openReviewCount} issue
-                  {openReviewCount === 1 ? "" : "s"}
-                </small>
-              </summary>
-              <div className="stack">
-                <ReconstructionOutline
-                  reconstruction={reconstruction}
-                  timezoneId={selectedTrip.timezoneId}
-                  reviewIndex={reviewIndex}
-                  onSkipReview={() => setReviewIndex((current) => current + 1)}
-                  onResolveReview={(id) =>
-                    void applyReviewDecision(id, "resolve_review_item")
-                  }
-                  onDismissReview={(id) =>
-                    void applyReviewDecision(id, "dismiss_review_item")
-                  }
-                  onAcceptClockOffset={(id) => void acceptClockOffset(id)}
-                  onUndo={undoLatestEdit}
-                />
-              </div>
-            </details>
+              </details>
+            </>
           ) : null}
 
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
@@ -2713,11 +2642,13 @@ function OwnerWorkspace() {
                 mobileTab === "share" ? "mobile-tab-active" : ""
               }`}
               id="publish-panel"
-              open={isMobileWorkspace ? mobileTab === "share" : undefined}
               data-mobile-tab-panel="share"
             >
               <summary>
-                <span>Publish</span>
+                <span className="management-summary-copy">
+                  <strong>Publish story</strong>
+                  <span>Share a read-only story with anyone</span>
+                </span>
                 <small>
                   {activeShareCount} active link
                   {activeShareCount === 1 ? "" : "s"}
@@ -2753,6 +2684,84 @@ function OwnerWorkspace() {
                   publications={publications}
                   onRevoke={revokeShareLink}
                   onCopyUrl={(url) => void copyPublicationUrl(url)}
+                />
+              </div>
+            </details>
+          ) : null}
+
+          <details
+            className={`management-panel ${
+              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
+            }`}
+            id="settings-panel"
+            data-mobile-tab-panel="tripSettings"
+          >
+            <summary>
+              <span className="management-summary-copy">
+                <strong>Trip info</strong>
+                <span>Edit name, dates, and timezone</span>
+              </span>
+            </summary>
+            <form className="stack" onSubmit={updateTrip}>
+              {selectedTrip ? (
+                <>
+                  <TripFields form={settingsForm} onChange={setSettingsForm} />
+                  <div className="button-row">
+                    <button type="submit" disabled={isBusy}>
+                      Save changes
+                    </button>
+                    <button
+                      className="danger"
+                      type="button"
+                      onClick={deleteTrip}
+                      disabled={isBusy}
+                    >
+                      Delete trip
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>Select a trip to edit its settings.</p>
+              )}
+            </form>
+          </details>
+
+          {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
+            <details
+              className={`management-panel ${
+                mobileTab === "tripSettings" ? "mobile-tab-active" : ""
+              }`}
+              id="review-panel"
+              data-mobile-tab-panel="tripSettings"
+              onToggle={(event) => {
+                if (event.currentTarget.open) {
+                  loadReviewDetails();
+                }
+              }}
+            >
+              <summary>
+                <span className="management-summary-copy">
+                  <strong>Review</strong>
+                  <span>Resolve questions in your trip</span>
+                </span>
+                <small>
+                  {openReviewCount} issue{openReviewCount === 1 ? "" : "s"}
+                </small>
+              </summary>
+              <div className="stack">
+                <ReconstructionOutline
+                  reconstruction={reconstruction}
+                  timezoneId={selectedTrip.timezoneId}
+                  reviewIndex={reviewIndex}
+                  onSkipReview={() => setReviewIndex((current) => current + 1)}
+                  onResolveReview={(id) =>
+                    void applyReviewDecision(id, "resolve_review_item")
+                  }
+                  onDismissReview={(id) =>
+                    void applyReviewDecision(id, "dismiss_review_item")
+                  }
+                  onAcceptClockOffset={(id) => void acceptClockOffset(id)}
+                  onUndo={undoLatestEdit}
                 />
               </div>
             </details>
@@ -9926,7 +9935,6 @@ function InvitationCard({
   useEffect(() => {
     let cancelled = false;
     if (!invitation.inviteUrl) {
-      setQrUrl("");
       return;
     }
     QRCode.toDataURL(invitation.inviteUrl, {

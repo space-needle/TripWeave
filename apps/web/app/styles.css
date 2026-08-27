@@ -932,6 +932,12 @@ button.is-updating {
   background: var(--panel);
 }
 
+.management-group-title {
+  margin: 8px 2px -4px;
+  font-size: 0.86rem;
+  letter-spacing: 0.01em;
+}
+
 .management-panel > summary {
   display: flex;
   align-items: center;
@@ -944,8 +950,26 @@ button.is-updating {
   padding: 14px 16px;
 }
 
-.management-panel > summary span {
+.management-panel > summary > span {
   min-width: 0;
+}
+
+.management-summary-copy {
+  display: flex;
+  align-items: baseline;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0 7px;
+}
+
+.management-summary-copy strong {
+  font-size: 0.96rem;
+}
+
+.management-summary-copy > span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 650;
 }
 
 .management-panel > summary small {
@@ -1097,6 +1121,7 @@ button.is-updating {
 #review-panel,
 #publish-panel,
 #settings-panel,
+#share-trip-title,
 #trip-stage-title {
   scroll-margin-top: 18px;
 }
