@@ -1850,6 +1850,7 @@ function OwnerWorkspace() {
       {mobileOverflowMenuOpen ? (
         <nav className="mobile-overflow-menu" aria-label="More options">
           <div className="mobile-overflow-trip">
+            <span className="mobile-overflow-trip-label">Current trip</span>
             <span className="mobile-overflow-trip-title">
               {selectedTrip?.title ?? "Current trip"}
             </span>
