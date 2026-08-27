@@ -11459,29 +11459,17 @@ function MediaLocationDialog({
   return (
     <div className="modal-backdrop" role="presentation">
       <section
-        className="panel stack media-location-dialog"
+        className="media-location-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="Adjust photo location"
       >
-        <div>
-          <p className="eyebrow">Photo location</p>
-          <h2>{media.filename ?? "Photo"}</h2>
-          <p>Move the map until the desired place is under the center pin.</p>
-        </div>
-        <div className="media-location-map" ref={containerRef}>
-          <span className="media-location-pin" aria-hidden="true">
-            ●
-          </span>
-        </div>
-        <small>
-          {center[1].toFixed(6)}, {center[0].toFixed(6)}
-        </small>
-        {error ? <p className="error">{error}</p> : null}
-        <div className="button-row">
-          <button type="button" onClick={() => void submit()} disabled={saving}>
-            {saving ? "Saving…" : "Use this location"}
-          </button>
+        <header className="media-location-dialog-header">
+          <div>
+            <p className="eyebrow">Photo location</p>
+            <h2>{media.filename ?? "Photo"}</h2>
+            <p>Move the map until the desired place is under the center pin.</p>
+          </div>
           <button
             type="button"
             className="secondary-button"
@@ -11490,7 +11478,27 @@ function MediaLocationDialog({
           >
             Cancel
           </button>
+        </header>
+        <div className="media-location-map" ref={containerRef}>
+          <span className="media-location-pin" aria-hidden="true">
+            ●
+          </span>
         </div>
+        <footer className="media-location-dialog-footer">
+          <small>
+            {center[1].toFixed(6)}, {center[0].toFixed(6)}
+          </small>
+          {error ? <p className="error">{error}</p> : null}
+          <div className="button-row">
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Use this location"}
+            </button>
+          </div>
+        </footer>
       </section>
     </div>
   );
