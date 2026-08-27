@@ -48,8 +48,15 @@ export function frameStoryApiBaseUrl(
   );
 }
 
-export function publicStoryEndpoint(baseUrl: string, token: string): string {
-  return `${baseUrl}/public/shares/${encodeURIComponent(token)}`;
+export function publicStoryEndpoint(
+  baseUrl: string,
+  slug: string,
+  versionNumber?: number,
+): string {
+  const storyPath = `${baseUrl}/public/stories/${encodeURIComponent(slug)}`;
+  return versionNumber === undefined
+    ? storyPath
+    : `${storyPath}/versions/${versionNumber}`;
 }
 
 export function buildFrameStory(story: PublicStoryResponse): FrameStory {

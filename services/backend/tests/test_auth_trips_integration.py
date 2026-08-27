@@ -2349,9 +2349,13 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     assert publication.status_code == 200
     share_link = publication.json()["shareLink"]
     link_id = share_link["id"]
-    share_url = share_link["shareUrl"]
-    assert isinstance(share_url, str)
-    token = share_url.rsplit("/", 1)[-1]
+    latest_story_url = share_link["latestStoryUrl"]
+    version_story_url = share_link["versionStoryUrl"]
+    assert isinstance(latest_story_url, str)
+    assert isinstance(version_story_url, str)
+    assert version_story_url == share_link["shareUrl"]
+    public_slug = latest_story_url.rsplit("/", 1)[-1]
+    assert version_story_url.endswith("/v/1")
 
     run_one_worker_job(client, engine)
     first_manifest = published_manifest(client, engine, trip_id, 1)
@@ -2367,7 +2371,7 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     ]
     assert manifest_day["standaloneStops"] == []
 
-    public_story = client.get(f"/public/shares/{token}")
+    public_story = client.get(f"/public/stories/{public_slug}")
     assert public_story.status_code == 200
     body = public_story.text
     assert "Published Kyoto" in body
@@ -2403,18 +2407,29 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
         headers={"x-csrf-token": csrf_token},
     )
     assert second_publication.status_code == 200
-    second_token = second_publication.json()["shareLink"]["shareUrl"].rsplit("/", 1)[-1]
+    second_share_link = second_publication.json()["shareLink"]
+    assert second_share_link["latestStoryUrl"] == latest_story_url
+    assert second_share_link["versionStoryUrl"].endswith("/v/2")
     run_one_worker_job(client, engine)
     second_manifest = published_manifest(client, engine, trip_id, 2)
     assert published_asset_keys(second_manifest) == first_asset_keys
-    assert client.get(f"/public/shares/{second_token}").status_code == 200
+    assert client.get(f"/public/stories/{public_slug}").status_code == 200
+    assert client.get(f"/public/stories/{public_slug}/versions/1").status_code == 200
+    assert client.get(f"/public/stories/{public_slug}/versions/2").status_code == 200
 
     links = client.get(f"/trips/{trip_id}/publications")
     assert links.status_code == 200
     assert any(link["id"] == link_id for link in links.json()["shareLinks"])
     revoked = client.delete(f"/share-links/{link_id}", headers={"x-csrf-token": csrf_token})
     assert revoked.status_code == 204
-    assert client.get(f"/public/shares/{token}").status_code == 404
+    assert client.get(f"/public/stories/{public_slug}/versions/1").status_code == 404
+    assert client.get(f"/public/stories/{public_slug}").status_code == 200
+
+    revoked_latest = client.delete(
+        f"/share-links/{second_share_link['id']}", headers={"x-csrf-token": csrf_token}
+    )
+    assert revoked_latest.status_code == 204
+    assert client.get(f"/public/stories/{public_slug}").status_code == 404
 
 
 def test_publication_requires_story_visible_media(client: TestClient, engine: Engine) -> None:

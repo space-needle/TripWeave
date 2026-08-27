@@ -53,6 +53,7 @@ erDiagram
     trips {
         uuid id
         string title
+        string public_story_slug
         string timezone_id
         int day_cutoff_hour
         string status
@@ -200,7 +201,6 @@ erDiagram
     share_links {
         uuid id
         uuid story_version_id
-        string token_hash
         string status
         timestamptz revoked_at
     }
@@ -261,7 +261,10 @@ A story version may include:
 
 Publication must not expose original files, original metadata dumps, private storage paths, signed URLs as permanent records, or provider-specific details.
 
-Publication versions are immutable snapshots. `share_links` store only token hashes and
-point to a version. Revoking a link removes public access without deleting the version
-audit record. Published manifests reference `story_published` BlobRefs for sanitized
-derivatives only.
+Publication versions are immutable snapshots. A trip's stable `public_story_slug` serves
+the latest successfully published version, while `/v/{versionNumber}` serves its fixed
+version. `share_links` point to versions and control revocation; public slugs are public
+identifiers rather than secret capabilities. Revoking the newest published version makes
+the stable URL unavailable rather than falling back to older content. Legacy token hashes
+may remain temporarily for existing links. Published manifests reference
+`story_published` BlobRefs for sanitized derivatives only.

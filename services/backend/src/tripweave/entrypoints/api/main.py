@@ -1,6 +1,7 @@
 # ruff: noqa: B008, E501
 import json
 import os
+import re
 import secrets
 import time
 from collections import defaultdict
@@ -970,6 +971,29 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             return f"{origin}/story/{token}"
         return f"http://localhost:3000/story/{token}"
 
+    def story_urls(request: Request, trip: orm.Trip, version_number: int) -> tuple[str, str]:
+        if trip.public_story_slug is None:
+            raise ValueError("Published trip is missing its public story slug")
+        origin = request.headers.get("origin")
+        base_url = origin if resolved_settings.web_origin_is_allowed(origin) else "http://localhost:3000"
+        latest_url = f"{base_url}/story/{trip.public_story_slug}"
+        return latest_url, f"{latest_url}/v/{version_number}"
+
+    def ensure_public_story_slug(db: DbSession, trip: orm.Trip) -> str:
+        if trip.public_story_slug:
+            return trip.public_story_slug
+        title_slug = re.sub(r"[^a-z0-9]+", "-", trip.title.lower()).strip("-")
+        if not title_slug:
+            title_slug = "trip"
+        suffix = secrets.token_hex(3)
+        candidate = f"{title_slug[:200].rstrip('-')}-{suffix}"
+        while db.scalar(select(orm.Trip.id).where(orm.Trip.public_story_slug == candidate)):
+            suffix = secrets.token_hex(3)
+            candidate = f"{title_slug[:200].rstrip('-')}-{suffix}"
+        trip.public_story_slug = candidate
+        db.flush()
+        return candidate
+
     def invitation_response(
         invitation: orm.TripInvitation, invite_url: str | None = None
     ) -> InvitationResponse:
@@ -1003,7 +1027,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             errorMessage=version.error_message,
         )
 
-    def share_link_response(link: orm.ShareLink, url: str | None = None) -> ShareLinkResponse:
+    def share_link_response(
+        link: orm.ShareLink,
+        trip: orm.Trip | None = None,
+        version: orm.StoryVersion | None = None,
+        request: Request | None = None,
+        url: str | None = None,
+    ) -> ShareLinkResponse:
         status_value = link.status
         if (
             status_value == ShareLinkStatus.ACTIVE.value
@@ -1011,6 +1041,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             and link.expires_at <= datetime.now(UTC)
         ):
             status_value = ShareLinkStatus.EXPIRED.value
+        latest_url = None
+        version_url = None
+        if trip is not None and version is not None and request is not None and trip.public_story_slug:
+            latest_url, version_url = story_urls(request, trip, version.version_number)
         return ShareLinkResponse(
             id=link.id,
             tripId=link.trip_id,
@@ -1018,7 +1052,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             status=status_value,
             expiresAt=link.expires_at,
             revokedAt=link.revoked_at,
-            shareUrl=url,
+            shareUrl=url or version_url,
+            latestStoryUrl=latest_url,
+            versionStoryUrl=version_url,
         )
 
     def next_story_version_number(db: DbSession, trip_id: UUID) -> int:
@@ -1150,14 +1186,52 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.flush()
         return link
 
+    def active_share_link_for_version(
+        db: DbSession, public_slug: str, version_number: int | None = None
+    ) -> tuple[orm.Trip, orm.ShareLink, orm.StoryVersion]:
+        trip = db.scalar(select(orm.Trip).where(orm.Trip.public_story_slug == public_slug))
+        if trip is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        version_query = select(orm.StoryVersion).where(
+            orm.StoryVersion.trip_id == trip.id,
+            orm.StoryVersion.state == StoryVersionState.PUBLISHED.value,
+        )
+        if version_number is None:
+            version_query = version_query.order_by(orm.StoryVersion.version_number.desc()).limit(1)
+        else:
+            version_query = version_query.where(orm.StoryVersion.version_number == version_number)
+        version = db.scalar(version_query)
+        if version is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        link = db.scalar(
+            select(orm.ShareLink)
+            .where(orm.ShareLink.story_version_id == version.id)
+            .order_by(orm.ShareLink.created_at.desc(), orm.ShareLink.id.desc())
+            .limit(1)
+        )
+        now = datetime.now(UTC)
+        if (
+            link is None
+            or link.revoked_at is not None
+            or link.status != ShareLinkStatus.ACTIVE.value
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        if link.expires_at is not None and link.expires_at <= now:
+            link.status = ShareLinkStatus.EXPIRED.value
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Story link expired")
+        link.last_accessed_at = now
+        db.flush()
+        return trip, link, version
+
     def public_story_response(
         request: Request,
-        token: str,
+        asset_route: str,
         link: orm.ShareLink,
         version: orm.StoryVersion,
         manifest: dict[str, object],
     ) -> PublicStoryResponse:
-        asset_urls = public_asset_urls(request, token, manifest)
+        asset_urls = public_asset_urls(request, asset_route, manifest)
         story = reconstruction_from_manifest(manifest, asset_urls)
         trip = dict_or_empty(manifest.get("trip"))
         return PublicStoryResponse(
@@ -1169,7 +1243,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
 
     def public_asset_urls(
-        request: Request, token: str, manifest: dict[str, object]
+        request: Request, asset_route: str, manifest: dict[str, object]
     ) -> dict[str, str]:
         assets = manifest.get("assets")
         if not isinstance(assets, list):
@@ -1177,7 +1251,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         request_base_url = str(request.base_url).rstrip("/")
         public_base_url = public_asset_base_url(resolved_settings, request_base_url)
         return {
-            str(asset["id"]): f"{public_base_url}/public/shares/{token}/assets/{asset['id']}"
+            str(asset["id"]): f"{public_base_url}{asset_route}/assets/{asset['id']}"
             for asset in assets
             if isinstance(asset, dict) and isinstance(asset.get("id"), str)
         }
@@ -6275,6 +6349,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         if trip is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
         source_run_id = validate_publishable(db, trip_id)
+        ensure_public_story_slug(db, trip)
         version_number = next_story_version_number(db, trip_id)
         version = orm.StoryVersion(
             trip_id=trip_id,
@@ -6313,12 +6388,13 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.commit()
         return PublicationResponse(
             version=story_version_response(version),
-            shareLink=share_link_response(link, share_url(request, token)),
+            shareLink=share_link_response(link, trip, version, request),
         )
 
     @app.get("/trips/{trip_id}/publications", response_model=PublicationsListResponse)
     def list_publications(
         trip_id: UUID,
+        request: Request,
         actor: AuthenticatedActor = Depends(current_actor),
         db: DbSession = Depends(db_session),
     ) -> PublicationsListResponse:
@@ -6339,9 +6415,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 .order_by(orm.ShareLink.created_at.desc(), orm.ShareLink.id.desc())
             )
         )
+        trip = db.get(orm.Trip, trip_id)
+        versions_by_id = {version.id: version for version in versions}
         return PublicationsListResponse(
             versions=[story_version_response(version) for version in versions],
-            shareLinks=[share_link_response(link) for link in links],
+            shareLinks=[
+                share_link_response(
+                    link,
+                    trip,
+                    versions_by_id.get(link.story_version_id) if link.story_version_id else None,
+                    request,
+                )
+                for link in links
+            ],
         )
 
     @app.delete("/share-links/{share_link_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -6414,7 +6500,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             ) from exc
         db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
         db.commit()
-        return public_story_response(request, token, link, version, manifest)
+        return public_story_response(request, f"/public/shares/{token}", link, version, manifest)
 
     @app.get("/public/shares/{token}/assets/{asset_id}")
     def get_public_story_asset(
@@ -6426,6 +6512,111 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         version = db.get(orm.StoryVersion, link.story_version_id)
         if version is None or version.state != StoryVersionState.PUBLISHED.value:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable")
+        try:
+            manifest = cached_public_manifest(version)
+            asset = public_asset_for_id(manifest, asset_id)
+            blob_ref = blob_ref_for_public_asset(asset)
+            if blob_ref.store_alias != "story_published":
+                raise PublicationError("publication_invalid", "Story asset is invalid")
+        except PublicationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=exc.safe_message
+            ) from exc
+        except BlobNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
+            ) from exc
+        db.commit()
+
+        def body() -> Iterator[bytes]:
+            with app.state.blob_store.open_reader(blob_ref) as reader:
+                while True:
+                    chunk = reader.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return StreamingResponse(
+            body(),
+            media_type=blob_ref.content_type or "application/octet-stream",
+            headers={"cache-control": "public, max-age=86400"},
+        )
+
+    @app.get("/public/stories/{public_slug}", response_model=PublicStoryResponse)
+    def get_public_story_by_slug(
+        request: Request, public_slug: str, db: DbSession = Depends(db_session)
+    ) -> PublicStoryResponse:
+        try:
+            trip, link, version = active_share_link_for_version(db, public_slug)
+        except HTTPException as exc:
+            # Existing token URLs remain valid while public stories move to stable slugs.
+            if exc.status_code != status.HTTP_404_NOT_FOUND:
+                raise
+            link = active_share_link_for_token(db, public_slug)
+            legacy_version = db.get(orm.StoryVersion, link.story_version_id)
+            if legacy_version is None or legacy_version.state != StoryVersionState.PUBLISHED.value:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Story unavailable"
+                ) from exc
+            try:
+                manifest = cached_public_manifest(legacy_version)
+            except PublicationError as manifest_exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=manifest_exc.safe_message
+                ) from manifest_exc
+            db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
+            db.commit()
+            return public_story_response(
+                request, f"/public/shares/{public_slug}", link, legacy_version, manifest
+            )
+        try:
+            manifest = cached_public_manifest(version)
+        except PublicationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
+            ) from exc
+        db.add(orm.TripViewEvent(trip_id=trip.id, share_link_id=link.id))
+        db.commit()
+        return public_story_response(
+            request,
+            f"/public/stories/{public_slug}/versions/{version.version_number}",
+            link,
+            version,
+            manifest,
+        )
+
+    @app.get("/public/stories/{public_slug}/versions/{version_number}", response_model=PublicStoryResponse)
+    def get_public_story_version(
+        request: Request,
+        public_slug: str,
+        version_number: int,
+        db: DbSession = Depends(db_session),
+    ) -> PublicStoryResponse:
+        trip, link, version = active_share_link_for_version(db, public_slug, version_number)
+        try:
+            manifest = cached_public_manifest(version)
+        except PublicationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.safe_message
+            ) from exc
+        db.add(orm.TripViewEvent(trip_id=trip.id, share_link_id=link.id))
+        db.commit()
+        return public_story_response(
+            request,
+            f"/public/stories/{public_slug}/versions/{version.version_number}",
+            link,
+            version,
+            manifest,
+        )
+
+    @app.get("/public/stories/{public_slug}/versions/{version_number}/assets/{asset_id}")
+    def get_public_story_version_asset(
+        public_slug: str,
+        version_number: int,
+        asset_id: str,
+        db: DbSession = Depends(db_session),
+    ) -> StreamingResponse:
+        _, _, version = active_share_link_for_version(db, public_slug, version_number)
         try:
             manifest = cached_public_manifest(version)
             asset = public_asset_for_id(manifest, asset_id)

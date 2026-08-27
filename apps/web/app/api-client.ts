@@ -348,9 +348,12 @@ export const api = {
   unpublishTrip(tripId: string): Promise<void> {
     return apiRequest<void>(`/trips/${tripId}/unpublish`, { method: "POST" });
   },
-  publicStory(token: string): Promise<PublicStoryResponse> {
+  publicStory(slug: string, versionNumber?: number): Promise<PublicStoryResponse> {
+    const storyPath = `/public/stories/${encodeURIComponent(slug)}`;
     return apiRequest<PublicStoryResponse>(
-      `/public/shares/${encodeURIComponent(token)}`,
+      versionNumber === undefined
+        ? storyPath
+        : `${storyPath}/versions/${versionNumber}`,
     );
   },
   updateMedia(

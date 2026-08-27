@@ -159,8 +159,11 @@ describe("frame story", () => {
     expect(
       frameStoryApiBaseUrl("http://api:8000/", "https://tripweave.example/api"),
     ).toBe("http://api:8000");
-    expect(publicStoryEndpoint("http://api:8000", "share token")).toBe(
-      "http://api:8000/public/shares/share%20token",
+    expect(publicStoryEndpoint("http://api:8000", "seoul-weekend-a7f3c9")).toBe(
+      "http://api:8000/public/stories/seoul-weekend-a7f3c9",
+    );
+    expect(publicStoryEndpoint("http://api:8000", "seoul-weekend-a7f3c9", 2)).toBe(
+      "http://api:8000/public/stories/seoul-weekend-a7f3c9/versions/2",
     );
   });
 });

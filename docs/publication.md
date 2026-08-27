@@ -9,9 +9,16 @@ Publication creates an immutable local story version from the private trip state
 version number, publication audit fields, manifest BlobRef, source reconstruction run,
 and a versioned manifest prefix in `story_published`.
 
-`share_links` records unlisted access. A share token is generated once and only its hash
-is stored. A link points at one story version and can be revoked without deleting the
-version or private trip data.
+`share_links` records access to one story version and can be revoked without deleting
+the version or private trip data. A published trip receives one stable public slug,
+derived from its title plus a short random suffix (for example, `korea-2019-a7f3c9`).
+The slug does not change when the trip title changes.
+
+The stable story URL, `/story/{slug}`, resolves to the newest successfully published
+version. Every version also has an immutable URL, `/story/{slug}/v/{versionNumber}`.
+Creating a new publication updates the stable URL once that version is published; it
+never changes an existing version URL. Revoking the newest published version makes the
+stable URL unavailable rather than silently falling back to an older version.
 
 ## Manifest
 
@@ -51,11 +58,13 @@ not publish media that remains private or trip-members-only.
 
 ## Public Access
 
-The logged-out viewer requests `/public/shares/{token}`. The API hashes the token,
-checks revocation and expiration, loads the immutable manifest, and returns a read-only
-story contract. Asset requests use `/public/shares/{token}/assets/{asset_id}` and are
-authorized against the same share token before streaming the `story_published` object
-through BlobStore.
+The logged-out viewer requests `/public/stories/{slug}` for the latest published story
+or `/public/stories/{slug}/versions/{versionNumber}` for a fixed version. Asset requests
+always include the resolved version and are authorized against that version's share-link
+record before streaming the `story_published` object through BlobStore. These are public
+identifiers, not secrets; the privacy boundary is the sanitized publication snapshot and
+its revocation state. Legacy token URLs remain available for existing links during the
+migration.
 
 The public contract remains provider-neutral: future storage adapters can replace local
 streaming with short-lived `DownloadGrant` redirects without changing the manifest
@@ -63,10 +72,11 @@ shape.
 
 ## Revocation And Unpublish
 
-Revoking a share link marks it revoked and removes future public access through that
-URL. Unpublish revokes all active links for the trip and returns the trip visibility to
-private. Existing immutable versions remain as audit records; they are inaccessible
-without an active share link.
+Revoking a share link marks that version revoked and removes future public access through
+its version URL. If it is the newest successfully published version, the stable URL also
+becomes unavailable. Unpublish revokes all active links for the trip and returns the trip
+visibility to private. Existing immutable versions remain as audit records; they are
+inaccessible without an active share link.
 
 ## Limitations
 

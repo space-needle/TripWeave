@@ -335,6 +335,8 @@ export type ShareLinkResponse = {
   expiresAt?: string | null;
   revokedAt?: string | null;
   shareUrl?: string | null;
+  latestStoryUrl?: string | null;
+  versionStoryUrl?: string | null;
 };
 
 export type SimilarityGroupResponse = {

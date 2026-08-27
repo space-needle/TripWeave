@@ -176,6 +176,7 @@ class Trip(Base, TimestampMixin):
     visibility: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default=text("'private'")
     )
+    public_story_slug: Mapped[str | None] = mapped_column(String(220), unique=True)
     created_by: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )

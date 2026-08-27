@@ -265,12 +265,18 @@ export default function TripWeaveApp() {
     const storyPath = path.slice("/story/".length);
     const slideshowSuffix = "/slideshow";
     const isSlideshow = storyPath.endsWith(slideshowSuffix);
-    const tokenPath = isSlideshow
+    const publicPath = isSlideshow
       ? storyPath.slice(0, -slideshowSuffix.length)
       : storyPath;
+    const [slug, versionMarker, versionText] = publicPath.split("/");
+    const versionNumber =
+      versionMarker === "v" && /^\d+$/.test(versionText ?? "")
+        ? Number(versionText)
+        : undefined;
     return (
       <PublicStoryViewer
-        token={decodeURIComponent(tokenPath)}
+        slug={decodeURIComponent(slug)}
+        versionNumber={versionNumber}
         initialView={isSlideshow ? "slideshow" : "story"}
       />
     );
@@ -1193,6 +1199,13 @@ function OwnerWorkspace() {
     await navigator.clipboard.writeText(latestShareUrl);
   }
 
+  async function copyPublicationUrl(url: string) {
+    if (typeof navigator === "undefined") {
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+  }
+
   async function revokeInvite(invitation: InvitationResponse) {
     if (!selectedTrip) {
       return;
@@ -1569,7 +1582,7 @@ function OwnerWorkspace() {
     setIsBusy(true);
     try {
       const result = await api.publishTrip(selectedTrip.id);
-      setLatestShareUrl(result.shareLink.shareUrl ?? "");
+      setLatestShareUrl(result.shareLink.latestStoryUrl ?? "");
       await loadPublications(selectedTrip.id);
     } catch (error) {
       setPublicationError(messageFrom(error));
@@ -2737,6 +2750,7 @@ function OwnerWorkspace() {
                 ) : null}
                 {latestShareUrl ? (
                   <div className="invite-card">
+                    <small>Latest published story</small>
                     <code>{latestShareUrl}</code>
                     <button type="button" onClick={copyLatestShareUrl}>
                       Copy link
@@ -2746,6 +2760,7 @@ function OwnerWorkspace() {
                 <PublicationList
                   publications={publications}
                   onRevoke={revokeShareLink}
+                  onCopyUrl={(url) => void copyPublicationUrl(url)}
                 />
               </div>
             </details>
@@ -9982,9 +9997,11 @@ function MemberRoster({
 function PublicationList({
   publications,
   onRevoke,
+  onCopyUrl,
 }: {
   publications: PublicationsListResponse | null;
   onRevoke: (id: string) => void;
+  onCopyUrl: (url: string) => void;
 }) {
   if (!publications) {
     return <p>No publication data loaded.</p>;
@@ -10021,7 +10038,22 @@ function PublicationList({
                 <small>
                   {link.storyVersionId ? "version assigned" : "publishing"}
                 </small>
-                <small>URL hidden after creation</small>
+                {link.latestStoryUrl ? (
+                  <div>
+                    <small>Latest: <code>{link.latestStoryUrl}</code></small>
+                    <button type="button" onClick={() => onCopyUrl(link.latestStoryUrl!)}>
+                      Copy latest
+                    </button>
+                  </div>
+                ) : null}
+                {link.versionStoryUrl ? (
+                  <div>
+                    <small>Fixed version: <code>{link.versionStoryUrl}</code></small>
+                    <button type="button" onClick={() => onCopyUrl(link.versionStoryUrl!)}>
+                      Copy version
+                    </button>
+                  </div>
+                ) : null}
                 {link.status === "active" ? (
                   <button type="button" onClick={() => onRevoke(link.id)}>
                     Revoke
@@ -10037,10 +10069,12 @@ function PublicationList({
 }
 
 function PublicStoryViewer({
-  token,
+  slug,
+  versionNumber,
   initialView = "story",
 }: {
-  token: string;
+  slug: string;
+  versionNumber?: number;
   initialView?: "story" | "slideshow";
 }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -10057,7 +10091,7 @@ function PublicStoryViewer({
   useEffect(() => {
     let cancelled = false;
     api
-      .publicStory(token)
+      .publicStory(slug, versionNumber)
       .then((result) => {
         if (!cancelled) {
           setStory(result);
@@ -10077,7 +10111,7 @@ function PublicStoryViewer({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [slug, versionNumber]);
 
   if (loadState === "loading") {
     return (

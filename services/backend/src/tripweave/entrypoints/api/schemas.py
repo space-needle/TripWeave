@@ -664,6 +664,8 @@ class ShareLinkResponse(BaseModel):
     expires_at: datetime | None = Field(default=None, alias="expiresAt")
     revoked_at: datetime | None = Field(default=None, alias="revokedAt")
     share_url: str | None = Field(default=None, alias="shareUrl")
+    latest_story_url: str | None = Field(default=None, alias="latestStoryUrl")
+    version_story_url: str | None = Field(default=None, alias="versionStoryUrl")
 
 
 class PublicationResponse(BaseModel):
