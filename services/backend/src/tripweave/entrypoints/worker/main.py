@@ -23,11 +23,7 @@ from tripweave.adapters.database import check_database, create_database_engine
 from tripweave.adapters.geocoder_factory import create_geocoder
 from tripweave.adapters.local_blob_store import BlobNotFoundError
 from tripweave.adapters.publication import PublicationError, publish_story_version
-from tripweave.adapters.reconstruction import (
-    has_visible_story,
-    latest_reconstruction_run,
-    reconstruct_trip,
-)
+from tripweave.adapters.reconstruction import reconstruct_trip
 from tripweave.adapters.trip_map_projection import rebuild_trip_map_point_projection
 from tripweave.adapters.worker_heartbeat import write_heartbeat
 from tripweave.application.media_processing import (
@@ -373,9 +369,6 @@ def enqueue_auto_story_update(db: Session, settings: Settings, trip_id: UUID) ->
 
 
 def should_auto_incremental_reconstruct(db: Session, trip_id: UUID) -> bool:
-    latest_run = latest_reconstruction_run(db, trip_id)
-    if latest_run is None or not has_visible_story(db, trip_id, latest_run):
-        return False
     assigned_media_ids = select(orm.MomentMedia.media_item_id).where(
         orm.MomentMedia.trip_id == trip_id
     )

@@ -2245,6 +2245,29 @@ def test_worker_ingests_media_and_rerun_creates_no_duplicate_assets(
     assert str(auto_job.target_id) == trip["id"]
     assert auto_job.run_after > datetime.now(UTC)
 
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE processing_jobs SET run_after = now() - interval '1 second' "
+                "WHERE idempotency_key = :idempotency_key"
+            ),
+            {"idempotency_key": f"auto-reconstruct-trip:{trip['id']}"},
+        )
+    with session_factory() as db:
+        auto_reconstruction_job = claim_job(db, settings, "test-worker")
+    assert auto_reconstruction_job is not None
+    handle_job(
+        settings,
+        session_factory,
+        blob_store,
+        ManualGeocoder(),
+        "test-worker",
+        auto_reconstruction_job,
+    )
+    reconstructed = client.get(f"/trips/{trip['id']}/reconstruction")
+    assert reconstructed.status_code == 200
+    assert reconstructed.json()["latestRun"] is not None
+
     retry = client.post(f"/media/{media_item_id}/retry", headers={"x-csrf-token": csrf_token})
     assert retry.status_code == 409
     assert retry.json()["detail"] == "Original file is no longer retained"

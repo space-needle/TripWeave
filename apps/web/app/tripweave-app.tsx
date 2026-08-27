@@ -9711,11 +9711,11 @@ function StoryAutoUpdateNotice({
         <section className="story-auto-update-notice queued" aria-live="polite">
           <span aria-hidden="true" />
           <div>
-            <strong>Story setup needed</strong>
+            <strong>First story is being prepared</strong>
             <small>
               {canUpdateStory
-                ? "Run Update Story once. Future uploads will update automatically."
-                : "An organizer needs to run the first story update."}
+                ? "It will appear automatically when photo processing finishes."
+                : "An organizer can review it once photo processing finishes."}
             </small>
           </div>
         </section>
