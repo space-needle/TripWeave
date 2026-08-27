@@ -2101,13 +2101,13 @@ function OwnerWorkspace() {
             {selectedTrip?.role === "owner" ? (
               <a href="#travelers-panel">Travelers</a>
             ) : null}
+            <a href="#settings-panel">Trip info</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
                 <a href="#review-panel">Review</a>
                 <a href="#publish-panel">Publish</a>
               </>
             ) : null}
-            <a href="#settings-panel">Settings</a>
           </nav>
           <section
             className="trip-list-section"
@@ -2602,7 +2602,7 @@ function OwnerWorkspace() {
               <summary>
                 <span>Travelers</span>
                 <small>
-                  {activeMemberCount} member
+                  Invite friends · {activeMemberCount} member
                   {activeMemberCount === 1 ? "" : "s"}
                 </small>
               </summary>
@@ -2629,6 +2629,42 @@ function OwnerWorkspace() {
             </details>
           ) : null}
 
+          <details
+            className={`management-panel ${
+              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
+            }`}
+            id="settings-panel"
+            open={isMobileWorkspace ? mobileTab === "tripSettings" : undefined}
+            data-mobile-tab-panel="tripSettings"
+          >
+            <summary>
+              <span>Trip info</span>
+              <small>Name, dates, and timezone</small>
+            </summary>
+            <form className="stack" onSubmit={updateTrip}>
+              {selectedTrip ? (
+                <>
+                  <TripFields form={settingsForm} onChange={setSettingsForm} />
+                  <div className="button-row">
+                    <button type="submit" disabled={isBusy}>
+                      Save changes
+                    </button>
+                    <button
+                      className="danger"
+                      type="button"
+                      onClick={deleteTrip}
+                      disabled={isBusy}
+                    >
+                      Delete trip
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>Select a trip to edit its settings.</p>
+              )}
+            </form>
+          </details>
+
           {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
             <details
               className={`management-panel ${
@@ -2648,7 +2684,8 @@ function OwnerWorkspace() {
               <summary>
                 <span>Review</span>
                 <small>
-                  {openReviewCount} issue{openReviewCount === 1 ? "" : "s"}
+                  Check trip details · {openReviewCount} issue
+                  {openReviewCount === 1 ? "" : "s"}
                 </small>
               </summary>
               <div className="stack">
@@ -2721,41 +2758,6 @@ function OwnerWorkspace() {
             </details>
           ) : null}
 
-          <details
-            className={`management-panel ${
-              mobileTab === "tripSettings" ? "mobile-tab-active" : ""
-            }`}
-            id="settings-panel"
-            open={isMobileWorkspace ? mobileTab === "tripSettings" : undefined}
-            data-mobile-tab-panel="tripSettings"
-          >
-            <summary>
-              <span>Trip info</span>
-              <small>Photo times use metadata and GPS</small>
-            </summary>
-            <form className="stack" onSubmit={updateTrip}>
-              {selectedTrip ? (
-                <>
-                  <TripFields form={settingsForm} onChange={setSettingsForm} />
-                  <div className="button-row">
-                    <button type="submit" disabled={isBusy}>
-                      Save changes
-                    </button>
-                    <button
-                      className="danger"
-                      type="button"
-                      onClick={deleteTrip}
-                      disabled={isBusy}
-                    >
-                      Delete trip
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p>Select a trip to edit its settings.</p>
-              )}
-            </form>
-          </details>
         </aside>
         <div
           className={`mobile-page-header ${
