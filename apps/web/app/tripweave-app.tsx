@@ -11147,7 +11147,7 @@ function SimilarityGroupsPanel({
 function MediaActionIcon({
   action,
 }: {
-  action: "members" | "public" | "delete" | "location";
+  action: "members" | "public" | "help" | "delete" | "location";
 }) {
   if (action === "members") {
     return (
@@ -11164,6 +11164,16 @@ function MediaActionIcon({
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="8.5" />
         <path d="M3.5 12h17M12 3.5a13.5 13.5 0 0 1 0 17M12 3.5a13.5 13.5 0 0 0 0 17" />
+      </svg>
+    );
+  }
+
+  if (action === "help") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M9.8 9a2.4 2.4 0 1 1 3.8 1.9c-1 .7-1.6 1.2-1.6 2.6" />
+        <path d="M12 16.8h.01" />
       </svg>
     );
   }
@@ -11202,6 +11212,9 @@ function MediaList({
   timezoneId?: string;
 }) {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [visibilityHelpItemId, setVisibilityHelpItemId] = useState<
+    string | null
+  >(null);
   const galleryPhotos = useMemo(
     () => media.map(galleryPhotoFromMediaItem),
     [media],
@@ -11313,6 +11326,51 @@ function MediaList({
                     >
                       <MediaActionIcon action="public" />
                     </button>
+                  </div>
+                  <div className="visibility-help">
+                    <button
+                      className="media-icon-button"
+                      type="button"
+                      aria-label="Photo visibility help"
+                      aria-expanded={visibilityHelpItemId === item.id}
+                      aria-controls={`visibility-help-${item.id}`}
+                      onClick={() =>
+                        setVisibilityHelpItemId((current) =>
+                          current === item.id ? null : item.id,
+                        )
+                      }
+                      title="Photo visibility help"
+                    >
+                      <MediaActionIcon action="help" />
+                    </button>
+                    {visibilityHelpItemId === item.id ? (
+                      <div
+                        className="visibility-help-popover"
+                        id={`visibility-help-${item.id}`}
+                        role="dialog"
+                        aria-label="Photo visibility help"
+                      >
+                        <div>
+                          <strong>Who can see this photo?</strong>
+                          <p>
+                            Member only keeps it inside this trip. Public lets
+                            it appear in a published story.
+                          </p>
+                          <p>
+                            Published stories use a sanitized derivative, never
+                            the original photo.
+                          </p>
+                        </div>
+                        <button
+                          className="visibility-help-close"
+                          type="button"
+                          onClick={() => setVisibilityHelpItemId(null)}
+                          aria-label="Close photo visibility help"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {onDelete ? (
                     <button
