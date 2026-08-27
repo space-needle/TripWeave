@@ -2323,6 +2323,9 @@ function OwnerWorkspace() {
                   ) : null}
                   {storyActionButtonLabel}
                 </button>
+                <p className="mobile-manage-trip-update-description">
+                  Refreshes your map and timeline using the latest photos.
+                </p>
                 {storyUpdate || isReconstructingStory ? (
                   <span
                     className={

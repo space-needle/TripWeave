@@ -3095,7 +3095,17 @@ button.is-updating {
     display: grid;
     justify-items: start;
     gap: 4px;
-    margin-top: 6px;
+    margin-top: 16px;
+  }
+
+  .mobile-page-header .mobile-manage-trip-update-description {
+    max-width: 300px;
+    overflow: visible;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .manage-trip-manual-update {
