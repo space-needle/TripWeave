@@ -11424,6 +11424,11 @@ function MediaLocationDialog({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const savedLocation: [number, number] | null =
+    media.latitude != null && media.longitude != null
+      ? [media.longitude, media.latitude]
+      : null;
+  const hasSavedLocation = savedLocation !== null;
   const [center, setCenter] = useState<[number, number]>([
     media.longitude ?? 127,
     media.latitude ?? 35,
@@ -11439,12 +11444,25 @@ function MediaLocationDialog({
       center,
       zoom: media.latitude == null || media.longitude == null ? 4 : 14,
     });
+    const currentLocationMarker = savedLocation
+      ? new maplibregl.Marker({
+          anchor: "center",
+          element: Object.assign(document.createElement("div"), {
+            className: "media-location-current-marker",
+          }),
+        })
+          .setLngLat(savedLocation)
+          .addTo(map)
+      : null;
     map.on("move", () => {
       const next = map.getCenter();
       setCenter([next.lng, next.lat]);
     });
     mapRef.current = map;
-    return () => map.remove();
+    return () => {
+      currentLocationMarker?.remove();
+      map.remove();
+    };
   }, []); // The dialog is recreated for each photo.
 
   async function submit() {
@@ -11487,9 +11505,20 @@ function MediaLocationDialog({
           </span>
         </div>
         <footer className="media-location-dialog-footer">
-          <small>
-            {center[1].toFixed(6)}, {center[0].toFixed(6)}
-          </small>
+          <div className="media-location-status">
+            <small>Selected location</small>
+            <strong>
+              {center[1].toFixed(6)}, {center[0].toFixed(6)}
+            </strong>
+            {hasSavedLocation ? (
+              <small className="media-location-current-label">
+                <span aria-hidden="true" />
+                Blue dot: current photo location
+              </small>
+            ) : (
+              <small>No location saved for this photo yet.</small>
+            )}
+          </div>
           {error ? <p className="error">{error}</p> : null}
           <div className="button-row">
             <button

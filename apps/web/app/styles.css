@@ -4799,6 +4799,36 @@ button.thumb-frame:focus-visible {
   font-weight: 700;
 }
 
+.media-location-status {
+  display: grid;
+  gap: 2px;
+}
+
+.media-location-status strong {
+  font-size: 0.86rem;
+}
+
+.media-location-current-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.media-location-current-label span,
+.media-location-current-marker {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #2878d4;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 38%);
+}
+
+.media-location-current-marker {
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
 .media-location-dialog-footer .button-row {
   margin-left: auto;
 }
