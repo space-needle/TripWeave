@@ -2454,8 +2454,8 @@ button.is-updating {
   position: absolute;
   z-index: 12;
   top: calc(100% + 8px);
-  left: 0;
-  width: min(290px, calc(100vw - 48px));
+  right: 0;
+  width: min(290px, calc(100vw - 32px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
