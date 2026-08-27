@@ -345,8 +345,6 @@ function OwnerWorkspace() {
     useState<PublicationsListResponse | null>(null);
   const [publicationError, setPublicationError] = useState("");
   const [latestShareUrl, setLatestShareUrl] = useState("");
-  const [latestInviteUrl, setLatestInviteUrl] = useState("");
-  const [latestInviteQrUrl, setLatestInviteQrUrl] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>("story");
   const [onboardingView, setOnboardingView] =
     useState<OnboardingView>("hidden");
@@ -709,31 +707,6 @@ function OwnerWorkspace() {
       );
     }
   }, [loadPublications, selectedTrip?.id, selectedTrip?.role]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!latestInviteUrl) {
-      return;
-    }
-    QRCode.toDataURL(latestInviteUrl, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      width: 160,
-    })
-      .then((url) => {
-        if (!cancelled) {
-          setLatestInviteQrUrl(url);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLatestInviteQrUrl("");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [latestInviteUrl]);
 
   useEffect(() => {
     if (!selectedTrip?.id) {
@@ -1176,20 +1149,18 @@ function OwnerWorkspace() {
     }
     setCollaborationError("");
     try {
-      const invitation = await api.createInvitation(selectedTrip.id);
-      setLatestInviteQrUrl("");
-      setLatestInviteUrl(invitation.inviteUrl ?? "");
+      await api.createInvitation(selectedTrip.id);
       await loadCollaboration(selectedTrip.id);
     } catch (error) {
       setCollaborationError(messageFrom(error));
     }
   }
 
-  async function copyInviteUrl() {
-    if (!latestInviteUrl || typeof navigator === "undefined") {
+  async function copyInviteUrl(url: string) {
+    if (typeof navigator === "undefined") {
       return;
     }
-    await navigator.clipboard.writeText(latestInviteUrl);
+    await navigator.clipboard.writeText(url);
   }
 
   async function copyLatestShareUrl() {
@@ -2647,27 +2618,11 @@ function OwnerWorkspace() {
                   >
                     Create shared invite link
                   </button>
-                  {latestInviteUrl ? (
-                    <button type="button" onClick={copyInviteUrl}>
-                      Copy link
-                    </button>
-                  ) : null}
                 </div>
-                {latestInviteUrl ? (
-                  <div className="invite-card">
-                    <code>{latestInviteUrl}</code>
-                    {latestInviteQrUrl ? (
-                      <img
-                        className="qr-block"
-                        src={latestInviteQrUrl}
-                        alt="Invitation QR code"
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
                 <InvitationList
                   invitations={invitations}
                   onRevoke={revokeInvite}
+                  onCopyUrl={(url) => void copyInviteUrl(url)}
                 />
                 <MemberRoster members={members} onRemove={removeMember} />
               </div>
@@ -9932,9 +9887,11 @@ function shouldShowUploadStatus(
 function InvitationList({
   invitations,
   onRevoke,
+  onCopyUrl,
 }: {
   invitations: InvitationResponse[];
   onRevoke: (invitation: InvitationResponse) => void;
+  onCopyUrl: (url: string) => void;
 }) {
   if (invitations.length === 0) {
     return <p>No invitations yet.</p>;
@@ -9942,22 +9899,77 @@ function InvitationList({
   return (
     <div className="simple-list" role="list">
       {invitations.map((invitation) => (
-        <div className="simple-row" key={invitation.id} role="listitem">
-          <div>
-            <strong>{invitation.role}</strong>
-            <small>
-              {invitation.status} · {invitation.useCount}/{invitation.maxUses}{" "}
-              joined
-            </small>
-          </div>
-          {invitation.status !== "revoked" ? (
-            <button type="button" onClick={() => onRevoke(invitation)}>
-              Revoke
-            </button>
-          ) : null}
-        </div>
+        <InvitationCard
+          invitation={invitation}
+          key={invitation.id}
+          onCopyUrl={onCopyUrl}
+          onRevoke={onRevoke}
+        />
       ))}
     </div>
+  );
+}
+
+function InvitationCard({
+  invitation,
+  onRevoke,
+  onCopyUrl,
+}: {
+  invitation: InvitationResponse;
+  onRevoke: (invitation: InvitationResponse) => void;
+  onCopyUrl: (url: string) => void;
+}) {
+  const [qrUrl, setQrUrl] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!invitation.inviteUrl) {
+      setQrUrl("");
+      return;
+    }
+    QRCode.toDataURL(invitation.inviteUrl, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 160,
+    })
+      .then((url) => {
+        if (!cancelled) setQrUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invitation.inviteUrl]);
+
+  return (
+    <article className="invite-card" role="listitem">
+      <div className="invite-card-header">
+        <div>
+          <strong>{invitation.role}</strong>
+          <small>
+            {invitation.status} · {invitation.useCount}/{invitation.maxUses} joined
+          </small>
+        </div>
+        {invitation.status !== "revoked" ? (
+          <button type="button" onClick={() => onRevoke(invitation)}>
+            Revoke
+          </button>
+        ) : null}
+      </div>
+      {invitation.inviteUrl ? (
+        <div className="invite-card-content">
+          <div>
+            <code>{invitation.inviteUrl}</code>
+            <button type="button" onClick={() => onCopyUrl(invitation.inviteUrl!)}>
+              Copy link
+            </button>
+          </div>
+          {qrUrl ? <img className="qr-block" src={qrUrl} alt="Invitation QR code" /> : null}
+        </div>
+      ) : null}
+    </article>
   );
 }
 

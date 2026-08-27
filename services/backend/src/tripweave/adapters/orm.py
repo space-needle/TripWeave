@@ -229,6 +229,7 @@ class TripInvitation(Base):
     email: Mapped[str | None] = mapped_column(String(320))
     role: Mapped[str] = mapped_column(String(40), nullable=False)
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    public_invite_id: Mapped[str | None] = mapped_column(String(36), unique=True)
     status: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default=text("'pending'")
     )

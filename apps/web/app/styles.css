@@ -1381,6 +1381,31 @@ button.is-updating {
   overflow-wrap: anywhere;
 }
 
+.invite-card-header,
+.invite-card-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.invite-card-header small,
+.invite-card-content code {
+  display: block;
+  margin-top: 3px;
+}
+
+.invite-card-content > div {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invite-card-content code {
+  overflow-wrap: anywhere;
+}
+
 .public-story-shell {
   width: min(1480px, calc(100% - 32px));
 }

@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -959,11 +959,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             updatedAt=trip.updated_at,
         )
 
-    def invitation_url(request: Request, token: str) -> str:
-        origin = request.headers.get("origin")
-        if resolved_settings.web_origin_is_allowed(origin):
-            return f"{origin}/invite/{token}"
-        return f"http://localhost:3000/invite/{token}"
+    def invitation_url(request: Request, invite_reference: str) -> str:
+        return f"{public_web_base_url(request)}/invite/{invite_reference}"
 
     def share_url(request: Request, token: str) -> str:
         return f"{public_web_base_url(request)}/story/{token}"
@@ -1598,9 +1595,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             isGuest=member.user_id is None,
         )
 
-    def active_invitation_for_token(db: DbSession, token: str) -> orm.TripInvitation:
+    def active_invitation_for_reference(db: DbSession, invite_reference: str) -> orm.TripInvitation:
         invitation = db.execute(
-            select(orm.TripInvitation).where(orm.TripInvitation.token_hash == hash_token(token))
+            select(orm.TripInvitation).where(
+                or_(
+                    orm.TripInvitation.public_invite_id == invite_reference,
+                    orm.TripInvitation.token_hash == hash_token(invite_reference),
+                )
+            )
         ).scalar_one_or_none()
         now = datetime.now(UTC)
         if invitation is None:
@@ -1703,6 +1705,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             email=None,
             role=TripMemberRole.CONTRIBUTOR.value,
             token_hash=hash_token(token),
+            public_invite_id=str(uuid4()),
             status=InvitationStatus.PENDING.value,
             expires_at=now
             + timedelta(
@@ -1713,11 +1716,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         db.add(invitation)
         db.commit()
-        return invitation_response(invitation, invitation_url(request, token))
+        return invitation_response(
+            invitation, invitation_url(request, invitation.public_invite_id or token)
+        )
 
     @app.get("/trips/{trip_id}/invitations", response_model=InvitationsListResponse)
     def list_invitations(
         trip_id: UUID,
+        request: Request,
         auth: AuthenticatedUser = Depends(current_user),
         db: DbSession = Depends(db_session),
     ) -> InvitationsListResponse:
@@ -1728,7 +1734,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             .order_by(orm.TripInvitation.created_at.desc(), orm.TripInvitation.id)
         ).all()
         return InvitationsListResponse(
-            invitations=[invitation_response(invitation) for invitation in invitations]
+            invitations=[
+                invitation_response(
+                    invitation,
+                    invitation_url(
+                        request, invitation.public_invite_id or ""
+                    ) if invitation.public_invite_id else None,
+                )
+                for invitation in invitations
+            ]
         )
 
     @app.delete("/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1750,11 +1764,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    @app.get("/invitations/{token}", response_model=InvitationPreviewResponse)
+    @app.get("/invitations/{invite_reference}", response_model=InvitationPreviewResponse)
     def preview_invitation(
-        token: str, db: DbSession = Depends(db_session)
+        invite_reference: str, db: DbSession = Depends(db_session)
     ) -> InvitationPreviewResponse:
-        invitation = active_invitation_for_token(db, token)
+        invitation = active_invitation_for_reference(db, invite_reference)
         trip = db.get(orm.Trip, invitation.trip_id)
         if trip is None:
             raise HTTPException(
@@ -1768,9 +1782,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             status=invitation.status,
         )
 
-    @app.post("/invitations/{token}/accept", response_model=GuestMemberResponse)
+    @app.post("/invitations/{invite_reference}/accept", response_model=GuestMemberResponse)
     def accept_invitation(
-        token: str,
+        invite_reference: str,
         payload: InvitationAcceptRequest,
         request: Request,
         auth: AuthenticatedUser = Depends(current_user),
@@ -1779,7 +1793,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         require_csrf(request)
         invitation = db.execute(
             select(orm.TripInvitation)
-            .where(orm.TripInvitation.token_hash == hash_token(token))
+            .where(
+                or_(
+                    orm.TripInvitation.public_invite_id == invite_reference,
+                    orm.TripInvitation.token_hash == hash_token(invite_reference),
+                )
+            )
             .with_for_update()
         ).scalar_one_or_none()
         if invitation is None:

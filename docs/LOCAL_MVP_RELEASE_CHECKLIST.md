@@ -19,7 +19,7 @@ Status legend: `PASS` verified locally, `PARTIAL` implemented with documented ga
 
 - `PASS` Originals remain in `media_private`; public stories use `story_published`.
 - `PASS` Public manifests omit raw EXIF, original filenames, private blob refs, and source blob refs.
-- `PASS` Session tokens, invitation tokens, and share tokens are stored only as hashes.
+- `PASS` Session, upload, and legacy invitation/share tokens are stored only as hashes; persistent invitation IDs are revocable and expiry-limited.
 - `PASS` CSRF is required for state-changing browser requests.
 - `PASS` Auth, invitation creation, upload registration, and publication have local rate limits.
 - `PASS` Upload size, file count, MIME type, extension, path traversal, and token-expiration checks are covered.

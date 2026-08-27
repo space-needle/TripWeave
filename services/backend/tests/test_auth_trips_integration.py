@@ -751,6 +751,7 @@ def test_owner_shared_invite_adds_multiple_account_contributors_with_attribution
     invitations = client.get(f"/trips/{trip['id']}/invitations")
     assert invitations.status_code == 200
     assert invitations.json()["invitations"][0]["useCount"] == 2
+    assert invitations.json()["invitations"][0]["inviteUrl"].endswith(f"/invite/{token}")
 
     media_item_id = upload_completed_jpeg(
         contributor_client,

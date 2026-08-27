@@ -17,6 +17,10 @@ TripWeave handles personal travel photos, location histories, timestamps, and co
 
 Trip owners manage trips, invitations, review, and publication. Contributors can upload media and control their own media. Viewers can access only the published story versions or private draft views they are authorized to see.
 
+Invitation URLs use persistent public identifiers so an authenticated trip owner can view and
+copy them again. These identifiers authorize joining only until their configured expiry, use
+limit, or explicit revocation; owners must treat them as shareable access links.
+
 Authorization must be enforced in backend application services, not only in the web UI. Each authorization rule must have tests for allowed and denied cases.
 
 ## Media Privacy

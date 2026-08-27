@@ -29,9 +29,11 @@ Public stories never expose:
 - raw EXIF or XMP
 - private store refs
 - source blob refs
-- session, invitation, upload, or share token hashes
+- session, upload, or legacy invitation/share token hashes
 
-Unlisted share tokens are random and stored only as hashes. Revocation denies future public access.
+Published-story legacy share tokens are random and stored only as hashes. Invitation URLs use
+persistent public identifiers so owners can retrieve and share them again; expiry, use limits,
+and revocation deny future invitation acceptance.
 
 ## Local Operations
 
