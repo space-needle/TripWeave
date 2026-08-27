@@ -95,6 +95,26 @@ def test_parallel_contributor_path_is_not_forced_into_same_stop() -> None:
     assert [len(clusters) for clusters in clusters_by_day.values()] == [2]
 
 
+def test_stop_cluster_diameter_prevents_gradual_sprawl() -> None:
+    day = datetime(2026, 7, 2, 16, 0, tzinfo=UTC)
+    points = [
+        media_point(day, latitude=37.0, longitude=-122.0),
+        media_point(day.replace(minute=5), latitude=37.001304, longitude=-122.0),
+        media_point(day.replace(minute=10), latitude=37.001978, longitude=-122.0),
+        media_point(day.replace(minute=15), latitude=37.002428, longitude=-122.0),
+        media_point(day.replace(minute=20), latitude=37.002761, longitude=-122.0),
+    ]
+    for point in points:
+        point.day = effective_day(
+            orm.Trip(title="Trip", timezone_id="America/Los_Angeles", day_cutoff_hour=4),
+            point,
+        )
+
+    clusters_by_day = cluster_stops(points)
+
+    assert [len(cluster.media) for cluster in next(iter(clusters_by_day.values()))] == [4, 1]
+
+
 def stop_at(position: int, captured_at: datetime) -> orm.Stop:
     return orm.Stop(
         id=uuid4(),

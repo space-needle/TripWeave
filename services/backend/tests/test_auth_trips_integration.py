@@ -3274,6 +3274,61 @@ def test_deleting_media_does_not_lock_unedited_stops(client: TestClient, engine:
     assert remaining_stop == (False, "automation")
 
 
+def test_incremental_reconstruction_updates_stop_centroid(
+    client: TestClient, engine: Engine
+) -> None:
+    csrf_token = register(client, "incremental-centroid-owner@example.com")
+    trip = create_trip(client, csrf_token, "Incremental Centroid Trip")
+    trip_id = str(trip["id"])
+    member_id = str(trip["memberId"])
+    insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=trip_id,
+        member_id=member_id,
+        filename="centroid-first.jpg",
+        captured_at=datetime(2026, 6, 10, 10, 0, tzinfo=UTC),
+        latitude=35.0,
+        longitude=127.0,
+        sha256="c" * 64,
+    )
+    initial = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert initial.status_code == 200, initial.text
+
+    insert_ready_media_for_reconstruction(
+        engine,
+        trip_id=trip_id,
+        member_id=member_id,
+        filename="centroid-second.jpg",
+        captured_at=datetime(2026, 6, 10, 10, 5, tzinfo=UTC),
+        latitude=35.001,
+        longitude=127.0,
+        sha256="d" * 64,
+    )
+    incremental = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert incremental.status_code == 200, incremental.text
+    assert len(incremental.json()["days"][0]["stops"]) == 1
+
+    with engine.connect() as connection:
+        latitude, longitude = connection.execute(
+            text(
+                """
+                SELECT
+                    ST_Y(centroid::geometry),
+                    ST_X(centroid::geometry)
+                FROM stops
+                WHERE trip_id = CAST(:trip_id AS uuid)
+                """
+            ),
+            {"trip_id": trip_id},
+        ).one()
+    assert latitude == pytest.approx(35.0005)
+    assert longitude == pytest.approx(127.0)
+
+
 def test_similarity_groups_and_clock_offset_suggestion_workflow(
     client: TestClient, engine: Engine
 ) -> None:

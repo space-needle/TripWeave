@@ -26,8 +26,9 @@ from tripweave.domain.enums import (
 )
 from tripweave.ports.geocoder import Geocoder
 
-ALGORITHM_VERSION = "reconstruction_v1"
+ALGORITHM_VERSION = "reconstruction_v2"
 STOP_RADIUS_METERS = 150
+STOP_MAX_DIAMETER_METERS = 300
 EMPTY_LOCKED_STOP_MERGE_RADIUS_METERS = 300
 STOP_GAP_MINUTES = 60
 MOMENT_GAP_MINUTES = 15
@@ -35,6 +36,7 @@ MISSING_GPS_BRACKET_MINUTES = 30
 MAX_IMPLIED_SPEED_KMH = 160
 ALGORITHM_CONFIG: dict[str, object] = {
     "stop_radius_meters": STOP_RADIUS_METERS,
+    "stop_max_diameter_meters": STOP_MAX_DIAMETER_METERS,
     "stop_gap_minutes": STOP_GAP_MINUTES,
     "moment_gap_minutes": MOMENT_GAP_MINUTES,
     "missing_gps_bracket_minutes": MISSING_GPS_BRACKET_MINUTES,
@@ -310,6 +312,7 @@ def increment_story(
         moment, created = find_or_create_incremental_moment(db, run, stop, point)
         added_moments += int(created)
         add_media_to_moment(db, run, moment, point)
+        update_stop_centroid_from_media(db, stop)
         assigned_media += 1
 
     for day_id in changed_days:
@@ -558,9 +561,61 @@ def find_incremental_stop(db: Session, trip_id: UUID, point: MediaPoint) -> orm.
         )
         if distance > STOP_RADIUS_METERS:
             continue
+        if stop_diameter_with_point_exceeds(db, stop.id, point):
+            continue
         if best is None or distance < best[0]:
             best = (distance, stop)
     return best[1] if best is not None else None
+
+
+def stop_diameter_with_point_exceeds(db: Session, stop_id: UUID, point: MediaPoint) -> bool:
+    assert point.latitude is not None and point.longitude is not None
+    coordinates: list[tuple[float, float]] = [
+        (float(latitude), float(longitude))
+        for latitude, longitude in db.execute(
+            select(
+                literal_column("ST_Y(media_items.effective_location::geometry)"),
+                literal_column("ST_X(media_items.effective_location::geometry)"),
+            )
+            .select_from(orm.MediaItem)
+            .join(orm.MomentMedia, orm.MomentMedia.media_item_id == orm.MediaItem.id)
+            .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+            .where(
+                orm.Moment.stop_id == stop_id,
+                orm.MediaItem.effective_location.is_not(None),
+            )
+        )
+    ]
+    return any(
+        haversine_meters(latitude, longitude, point.latitude, point.longitude)
+        > STOP_MAX_DIAMETER_METERS
+        for latitude, longitude in coordinates
+    )
+
+
+def update_stop_centroid_from_media(db: Session, stop: orm.Stop) -> None:
+    db.flush()
+    coordinates: list[tuple[float, float]] = [
+        (float(latitude), float(longitude))
+        for latitude, longitude in db.execute(
+            select(
+                literal_column("ST_Y(media_items.effective_location::geometry)"),
+                literal_column("ST_X(media_items.effective_location::geometry)"),
+            )
+            .select_from(orm.MediaItem)
+            .join(orm.MomentMedia, orm.MomentMedia.media_item_id == orm.MediaItem.id)
+            .join(orm.Moment, orm.Moment.id == orm.MomentMedia.moment_id)
+            .where(
+                orm.Moment.stop_id == stop.id,
+                orm.MediaItem.effective_location.is_not(None),
+            )
+        )
+    ]
+    if not coordinates:
+        return
+    latitude = sum(item[0] for item in coordinates) / len(coordinates)
+    longitude = sum(item[1] for item in coordinates) / len(coordinates)
+    stop.centroid = point_wkt(latitude, longitude)
 
 
 def create_incremental_stop(
@@ -1361,6 +1416,7 @@ def cluster_stops(points: list[MediaPoint]) -> dict[date, list[StopCluster]]:
                 starts_new = (
                     gap_minutes > STOP_GAP_MINUTES
                     or distance_m > STOP_RADIUS_METERS
+                    or cluster_diameter_with_point_exceeds(current, point)
                     or speed_kmh > MAX_IMPLIED_SPEED_KMH
                 )
             if starts_new:
@@ -1373,6 +1429,15 @@ def cluster_stops(points: list[MediaPoint]) -> dict[date, list[StopCluster]]:
             previous = point
         clusters_by_day[day] = clusters
     return clusters_by_day
+
+
+def cluster_diameter_with_point_exceeds(cluster: StopCluster, point: MediaPoint) -> bool:
+    assert point.latitude is not None and point.longitude is not None
+    return any(
+        haversine_meters(latitude, longitude, point.latitude, point.longitude)
+        > STOP_MAX_DIAMETER_METERS
+        for latitude, longitude in zip(cluster.latitudes, cluster.longitudes, strict=True)
+    )
 
 
 def persist_clusters(
