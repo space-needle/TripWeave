@@ -8848,7 +8848,7 @@ function StoryMapCanvas({
       }`}
     >
       <div className="story-map" ref={mapNode} aria-hidden="true" />
-      {activeDayLabel && ["STOP", "MOMENT"].includes(state.viewMode) ? (
+      {activeDayLabel ? (
         <div className="map-active-day" aria-live="polite">
           {canReturnToDayMode && state.selectedDayId ? (
             <button
@@ -10141,7 +10141,6 @@ function PublicStoryViewer({
             [
               ["map", "Map"],
               ["timeline", "Timeline"],
-              ["photos", "Photos"],
             ] as Array<[StoryMobilePane, string]>
           ).map(([action, label]) => (
             <button
@@ -10174,6 +10173,7 @@ function PublicStoryViewer({
         initialAreaVisitsByDay={areaVisitsByDay}
         mobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
+        onOpenPhotos={() => setMobilePane("photos")}
         timezoneId={timezoneId}
       />
     </main>
