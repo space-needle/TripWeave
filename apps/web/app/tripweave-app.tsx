@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import NextImage from "next/image";
 import maplibregl, {
   GeoJSONSource,
   LngLatBounds,
@@ -9395,7 +9396,58 @@ function useMediaQuery(queryText: string): boolean {
   return matches;
 }
 
+type ExampleTripStop = {
+  id: string;
+  day: string;
+  title: string;
+  description: string;
+  coordinates: [number, number];
+  image: string;
+  imageAlt: string;
+};
+
+const exampleTripStops: ExampleTripStop[] = [
+  {
+    id: "seongsan",
+    day: "Day 1",
+    title: "Seongsan",
+    description: "Sunrise, coastal walks, and 24 shared photos",
+    coordinates: [126.9327, 33.4581],
+    image: "/example-trip/jeju-sunrise.png",
+    imageAlt: "Sunrise over the coast of Jeju Island",
+  },
+  {
+    id: "seopjikoji",
+    day: "Day 1",
+    title: "Seopjikoji coast",
+    description: "A bright afternoon along Jeju's volcanic shore",
+    coordinates: [126.9289, 33.4236],
+    image: "/example-trip/jeju-coast.png",
+    imageAlt: "Volcanic coast and turquoise water on Jeju Island",
+  },
+  {
+    id: "hallasan",
+    day: "Day 2",
+    title: "Hallasan",
+    description: "A trail day captured from four perspectives",
+    coordinates: [126.5327, 33.3617],
+    image: "/example-trip/hallasan-hike.png",
+    imageAlt: "Travelers hiking a green trail on Hallasan",
+  },
+  {
+    id: "dongmun",
+    day: "Day 2",
+    title: "Dongmun Market",
+    description: "Market finds and the last dinner together",
+    coordinates: [126.5261, 33.5121],
+    image: "/example-trip/jeju-market.png",
+    imageAlt: "Friends visiting a warm-lit Jeju market",
+  },
+];
+
 function ExampleTripPreview({ onBack }: { onBack: () => void }) {
+  const [selectedStopId, setSelectedStopId] = useState(exampleTripStops[0].id);
+
   return (
     <section className="example-trip" aria-labelledby="example-trip-title">
       <header className="example-trip-header">
@@ -9414,12 +9466,43 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
           className="example-story-card"
           aria-labelledby="example-story-title"
         >
-          <div className="example-photo-grid" aria-hidden="true">
-            <div className="example-photo example-photo-sunrise" />
-            <div className="example-photo example-photo-coast" />
-            <div className="example-photo example-photo-market" />
-            <div className="example-photo example-photo-dinner" />
+          <div className="example-photo-grid" aria-label="Example trip photos">
+            {exampleTripStops.map((stop) => (
+              <button
+                className={
+                  stop.id === selectedStopId
+                    ? "example-photo active"
+                    : "example-photo"
+                }
+                key={stop.id}
+                type="button"
+                onClick={() => setSelectedStopId(stop.id)}
+              >
+                <NextImage
+                  alt={stop.imageAlt}
+                  fill
+                  sizes="(max-width: 760px) 50vw, 24vw"
+                  src={stop.image}
+                />
+              </button>
+            ))}
           </div>
+          <section
+            className="example-map-card"
+            aria-labelledby="example-map-title"
+          >
+            <div className="example-map-heading">
+              <div>
+                <p className="eyebrow">The route</p>
+                <h2 id="example-map-title">Four stops, one shared map.</h2>
+              </div>
+              <span>2 days</span>
+            </div>
+            <ExampleTripMap
+              activeStopId={selectedStopId}
+              onSelectStop={setSelectedStopId}
+            />
+          </section>
           <div className="example-story-copy">
             <p className="eyebrow">The story</p>
             <h2 id="example-story-title">One trip, seen through every lens.</h2>
@@ -9435,31 +9518,38 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
           aria-labelledby="example-timeline-title"
         >
           <div>
-            <p className="eyebrow">Map + timeline</p>
+            <p className="eyebrow">Timeline</p>
             <h2 id="example-timeline-title">Follow the journey</h2>
           </div>
           <ol>
-            <li>
-              <span className="example-stop-marker example-stop-marker-start" />
-              <div>
-                <strong>Day 1 · Seongsan</strong>
-                <p>Sunrise, coastal walks, and 24 shared photos</p>
-              </div>
-            </li>
-            <li>
-              <span className="example-stop-marker example-stop-marker-middle" />
-              <div>
-                <strong>Day 2 · Hallasan</strong>
-                <p>A trail day captured from four perspectives</p>
-              </div>
-            </li>
-            <li>
-              <span className="example-stop-marker example-stop-marker-end" />
-              <div>
-                <strong>Day 3 · Jeju City</strong>
-                <p>Market finds and the last dinner together</p>
-              </div>
-            </li>
+            {exampleTripStops.map((stop) => (
+              <li key={stop.id}>
+                <button
+                  className={
+                    stop.id === selectedStopId
+                      ? "example-stop-marker active"
+                      : "example-stop-marker"
+                  }
+                  type="button"
+                  onClick={() => setSelectedStopId(stop.id)}
+                  aria-label={`Show ${stop.title} on the map`}
+                />
+                <button
+                  className={
+                    stop.id === selectedStopId
+                      ? "example-timeline-stop active"
+                      : "example-timeline-stop"
+                  }
+                  type="button"
+                  onClick={() => setSelectedStopId(stop.id)}
+                >
+                  <strong>
+                    {stop.day} · {stop.title}
+                  </strong>
+                  <span>{stop.description}</span>
+                </button>
+              </li>
+            ))}
           </ol>
         </aside>
       </div>
@@ -9478,6 +9568,78 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
       </footer>
     </section>
   );
+}
+
+function ExampleTripMap({
+  activeStopId,
+  onSelectStop,
+}: {
+  activeStopId: string;
+  onSelectStop: (stopId: string) => void;
+}) {
+  const mapNode = useRef<HTMLDivElement | null>(null);
+  const markerNodes = useRef(new Map<string, HTMLButtonElement>());
+
+  useEffect(() => {
+    if (!mapNode.current) {
+      return;
+    }
+    const markers = markerNodes.current;
+    const map = new maplibregl.Map({
+      container: mapNode.current,
+      style: configuredMapStyle(),
+      center: [126.72, 33.43],
+      zoom: 9.3,
+      attributionControl: false,
+      dragRotate: false,
+      pitchWithRotate: false,
+    });
+    const route = {
+      type: "Feature" as const,
+      properties: {},
+      geometry: {
+        type: "LineString" as const,
+        coordinates: exampleTripStops.map((stop) => stop.coordinates),
+      },
+    };
+    map.on("load", () => {
+      map.addSource("example-trip-route", { type: "geojson", data: route });
+      map.addLayer({
+        id: "example-trip-route-line",
+        type: "line",
+        source: "example-trip-route",
+        paint: {
+          "line-color": "#23695b",
+          "line-width": 3,
+          "line-opacity": 0.88,
+        },
+      });
+      for (const stop of exampleTripStops) {
+        const markerNode = document.createElement("button");
+        markerNode.type = "button";
+        markerNode.className = "example-map-marker";
+        markerNode.setAttribute("aria-label", `Show ${stop.title}`);
+        markerNode.innerHTML = `<img src="${stop.image}" alt="" />`;
+        markerNode.addEventListener("click", () => onSelectStop(stop.id));
+        markers.set(stop.id, markerNode);
+        new maplibregl.Marker({ element: markerNode, anchor: "bottom" })
+          .setLngLat(stop.coordinates)
+          .addTo(map);
+      }
+    });
+    return () => {
+      markers.clear();
+      map.remove();
+    };
+  }, [onSelectStop]);
+
+  useEffect(() => {
+    markerNodes.current.forEach((marker, stopId) => {
+      marker.classList.toggle("active", stopId === activeStopId);
+    });
+  }, [activeStopId]);
+
+  return <div ref={mapNode} className="example-trip-map" />;
 }
 
 function TripFields({
