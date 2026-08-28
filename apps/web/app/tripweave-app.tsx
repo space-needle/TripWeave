@@ -7870,7 +7870,10 @@ function StoryMapCanvas({
       ? (areaVisitsByDay[state.selectedDayId] ?? null)
       : null;
   const visibleStopIdSet = useMemo(() => {
-    if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
+    if (
+      !["DAY", "STOP", "MOMENT"].includes(state.viewMode) ||
+      !state.selectedDayId
+    ) {
       return null;
     }
     const visibleStopIds = new Set<string>();
@@ -8044,7 +8047,7 @@ function StoryMapCanvas({
       model.stops
         .filter(
           (stop) =>
-            !["STOP", "MOMENT"].includes(state.viewMode) ||
+            state.viewMode === "TRIP_OVERVIEW" ||
             !state.selectedDayId ||
             stop.dayId === state.selectedDayId,
         )
@@ -8146,8 +8149,7 @@ function StoryMapCanvas({
       ),
     [areaMarkerData],
   );
-  const showDayMarkers =
-    state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
+  const showDayMarkers = state.viewMode === "TRIP_OVERVIEW";
 
   useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
@@ -9122,13 +9124,26 @@ function focusCoordinates(
   areaVisitsByDay: Record<string, AreaVisitsResponse>,
   expandedAreaId: string | null,
 ): [number, number][] {
-  if (state.viewMode === "TRIP_OVERVIEW" || state.viewMode === "DAY") {
+  if (state.viewMode === "TRIP_OVERVIEW") {
     return [
       ...model.stops
         .map((item) => stopCoordinates.get(item.id) ?? null)
         .filter((coordinate) => coordinate !== null),
       ...model.media
         .filter((item) => item.coordinates)
+        .map((item) => item.coordinates as [number, number]),
+    ];
+  }
+  if (state.viewMode === "DAY" && state.selectedDayId) {
+    return [
+      ...model.stops
+        .filter((item) => item.dayId === state.selectedDayId)
+        .map((item) => stopCoordinates.get(item.id) ?? null)
+        .filter((coordinate) => coordinate !== null),
+      ...model.media
+        .filter(
+          (item) => item.dayId === state.selectedDayId && item.coordinates,
+        )
         .map((item) => item.coordinates as [number, number]),
     ];
   }
