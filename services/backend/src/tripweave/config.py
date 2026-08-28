@@ -118,6 +118,26 @@ class Settings(BaseSettings):
     google_geocoding_min_interval_seconds: float = Field(
         default=0.0, ge=0.0, alias="TRIPWEAVE_GOOGLE_GEOCODING_MIN_INTERVAL_SECONDS"
     )
+    google_places_api_key: str = Field(default="", alias="TRIPWEAVE_GOOGLE_PLACES_API_KEY")
+    google_places_nearby_endpoint: str = Field(
+        default="https://places.googleapis.com/v1/places:searchNearby",
+        alias="TRIPWEAVE_GOOGLE_PLACES_NEARBY_ENDPOINT",
+    )
+    google_places_language_code: str = Field(
+        default="en", alias="TRIPWEAVE_GOOGLE_PLACES_LANGUAGE_CODE"
+    )
+    google_places_radius_meters: float = Field(
+        default=100.0, ge=1.0, le=50_000.0, alias="TRIPWEAVE_GOOGLE_PLACES_RADIUS_METERS"
+    )
+    google_places_max_result_count: int = Field(
+        default=10, ge=1, le=20, alias="TRIPWEAVE_GOOGLE_PLACES_MAX_RESULT_COUNT"
+    )
+    google_places_timeout_seconds: float = Field(
+        default=2.0, ge=0.1, alias="TRIPWEAVE_GOOGLE_PLACES_TIMEOUT_SECONDS"
+    )
+    google_places_min_interval_seconds: float = Field(
+        default=0.0, ge=0.0, alias="TRIPWEAVE_GOOGLE_PLACES_MIN_INTERVAL_SECONDS"
+    )
     oci_auth_mode: str = Field(default="instance_principal", alias="TRIPWEAVE_OCI_AUTH_MODE")
     oci_region: str = Field(default="", alias="TRIPWEAVE_OCI_REGION")
     oci_namespace: str = Field(default="", alias="TRIPWEAVE_OCI_NAMESPACE")

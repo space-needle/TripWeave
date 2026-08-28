@@ -1,12 +1,18 @@
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from typing import cast
 from urllib.request import Request
 from uuid import uuid4
 
 from tripweave.adapters import orm
 from tripweave.adapters.google_geocoder import GoogleGeocoder, geocode_result_from_google
+from tripweave.adapters.google_places_geocoder import (
+    GooglePlacesNearbyGeocoder,
+    geocode_result_from_google_places,
+)
 from tripweave.adapters.manual_geocoder import ManualGeocoder, ManualPlaceName
 from tripweave.adapters.nominatim_geocoder import NominatimGeocoder, geocode_result_from_nominatim
 from tripweave.adapters.reconstruction import (
@@ -407,4 +413,84 @@ def test_google_geocoder_encodes_coordinates_language_and_key() -> None:
     assert "latlng=37.5665000%2C126.9780000" in requested_url
     assert "language=ko" in requested_url
     assert "key=test+key" in requested_url
+    assert result.name is None
+
+
+def test_google_places_result_prefers_the_closest_named_poi() -> None:
+    result = geocode_result_from_google_places(
+        {
+            "places": [
+                {
+                    "displayName": {"text": "Further cafe"},
+                    "location": {"latitude": 37.5672, "longitude": 126.9780},
+                },
+                {
+                    "displayName": {"text": "Seoul City Hall"},
+                    "location": {"latitude": 37.5663, "longitude": 126.9780},
+                },
+            ]
+        },
+        latitude=37.5665,
+        longitude=126.9780,
+        radius_meters=100,
+    )
+
+    assert result.name == "Seoul City Hall"
+    assert result.confidence is not None
+    assert result.source == "google_places_nearby"
+
+
+def test_google_places_result_ignores_unnamed_or_out_of_radius_results() -> None:
+    result = geocode_result_from_google_places(
+        {
+            "places": [
+                {
+                    "displayName": {"text": ""},
+                    "location": {"latitude": 37.5665, "longitude": 126.978},
+                },
+                {
+                    "displayName": {"text": "Too far"},
+                    "location": {"latitude": 37.5765, "longitude": 126.978},
+                },
+            ]
+        },
+        latitude=37.5665,
+        longitude=126.978,
+        radius_meters=100,
+    )
+
+    assert result.name is None
+    assert result.source == "google_places_nearby"
+
+
+def test_google_places_nearby_geocoder_sends_minimal_request() -> None:
+    request_body = b""
+    request_headers: dict[str, str] = {}
+
+    def opener(request: Request, _timeout_seconds: float) -> bytes:
+        nonlocal request_body, request_headers
+        request_body = cast(bytes, request.data or b"")
+        request_headers = dict(request.headers)
+        return b'{"places":[]}'
+
+    geocoder = GooglePlacesNearbyGeocoder(api_key="test-key", language_code="ko", opener=opener)
+
+    result = geocoder.reverse_geocode(latitude=37.5665, longitude=126.978)
+
+    assert json.loads(request_body) == {
+        "languageCode": "ko",
+        "maxResultCount": 10,
+        "rankPreference": "DISTANCE",
+        "locationRestriction": {
+            "circle": {
+                "center": {"latitude": 37.5665, "longitude": 126.978},
+                "radius": 100.0,
+            }
+        },
+    }
+    assert request_headers["X-goog-api-key"] == "test-key"
+    assert (
+        request_headers["X-goog-fieldmask"]
+        == "places.displayName,places.location,places.primaryType"
+    )
     assert result.name is None
