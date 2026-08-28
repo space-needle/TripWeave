@@ -8363,8 +8363,9 @@ function StoryMapCanvas({
       style: configuredMapStyle(),
       center: [0, 0],
       zoom: 1,
-      attributionControl: { compact: true },
+      attributionControl: false,
     });
+    map.addControl(new maplibregl.AttributionControl({ compact: true }));
     mapRef.current = map;
     const emptyFeatureCollection = {
       type: "FeatureCollection" as const,
