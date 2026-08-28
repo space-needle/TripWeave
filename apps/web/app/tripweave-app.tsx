@@ -5903,7 +5903,7 @@ function TripStoryExplorer({
     ? (formatMapPhotoDateLabel(activeDay.date) ?? storyDayLabel(activeDay))
     : null;
   const hasMapContextBar = Boolean(activeDay && activeDayPhotoLabel);
-  const canReturnToAllDays = state.viewMode !== "TRIP_OVERVIEW";
+  const canReturnToAllDays = ["STOP", "MOMENT"].includes(state.viewMode);
 
   return (
     <div
@@ -8370,6 +8370,10 @@ function StoryMapCanvas({
       attributionControl: false,
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
+    map
+      .getContainer()
+      .querySelector(".maplibregl-ctrl-attrib")
+      ?.classList.remove("maplibregl-compact-show");
     mapRef.current = map;
     const emptyFeatureCollection = {
       type: "FeatureCollection" as const,
