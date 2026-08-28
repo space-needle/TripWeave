@@ -1729,6 +1729,14 @@ function OwnerWorkspace() {
                   </div>
                 </li>
               </ol>
+              <aside className="onboarding-location-tip">
+                <strong>Turn on photo location</strong>
+                <p>
+                  Enable Location in your camera settings. GPS helps TripWeave
+                  place photos on the map and build your route. Photos without
+                  GPS can still be included, but may not appear on the map.
+                </p>
+              </aside>
               <button
                 className="secondary-button onboarding-example-button"
                 type="button"
@@ -2397,6 +2405,14 @@ function OwnerWorkspace() {
                       : "JPEG and HEIC"}
                   </p>
                 </div>
+                <aside className="photo-location-tip">
+                  <strong>Turn on photo location</strong>
+                  <p>
+                    Enable Location in your camera settings. GPS helps TripWeave
+                    place photos on the map and build your route. Photos without
+                    GPS can still be included, but may not appear on the map.
+                  </p>
+                </aside>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
                 <StoryAutoUpdateNotice
                   canUpdateStory={canOrganizeSelectedTrip}
