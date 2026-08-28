@@ -5814,7 +5814,10 @@ function TripStoryExplorer({
               <p>{selectedStopSummary}</p>
             )}
             {selectedNote ? (
-              <p className="story-selected-note">{selectedNote}</p>
+              <div className="story-selected-note">
+                <span>{selectedStop ? "Stop note" : "Day note"}</span>
+                <p>{selectedNote}</p>
+              </div>
             ) : null}
           </div>
           <div className="story-summary-actions">

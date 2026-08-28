@@ -2170,18 +2170,18 @@ button.is-updating {
 }
 
 .story-selected-stop-summary span {
-  color: var(--muted);
+  color: var(--accent);
   font-size: 0.72rem;
   font-weight: 850;
-  letter-spacing: 0;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
 }
 
 .story-selected-stop-summary strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--text);
-  font-size: 0.98rem;
+  color: var(--accent-strong);
+  font-size: 1.02rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2225,11 +2225,28 @@ button.is-updating {
 }
 
 .story-selected-stop-summary .story-selected-note {
+  display: grid;
+  gap: 3px;
+  overflow: hidden;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 72%, #fff);
+  background: color-mix(in srgb, var(--accent) 7%, #fff);
+  padding: 7px 9px;
+}
+
+.story-selected-stop-summary .story-selected-note > span {
+  color: var(--accent-strong);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+}
+
+.story-selected-stop-summary .story-selected-note p {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--text);
-  font-weight: 700;
-  line-height: 1.35;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+  line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
