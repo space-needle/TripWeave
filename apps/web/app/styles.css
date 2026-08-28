@@ -5181,6 +5181,16 @@ button.thumb-frame:focus-visible {
     background: #f1f7f4;
   }
 
+  .mobile-overflow-menu .mobile-overflow-create-trip {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .mobile-overflow-menu .mobile-overflow-create-trip:hover:not(:disabled),
+  .mobile-overflow-menu .mobile-overflow-create-trip:focus-visible {
+    background: var(--accent-strong);
+  }
+
   .mobile-menu-label {
     min-width: 0;
     overflow: hidden;

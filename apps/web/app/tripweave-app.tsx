@@ -119,6 +119,7 @@ type StoryHeaderIconAction =
   | "update"
   | "upload"
   | "manage"
+  | "create"
   | "trips"
   | "browse"
   | "settings"
@@ -361,6 +362,8 @@ function OwnerWorkspace() {
   >({});
   const localFiles = useRef<Map<string, File>>(new Map());
   const abortUpload = useRef<Map<string, () => void>>(new Map());
+  const createTripPanelRef = useRef<HTMLDetailsElement>(null);
+  const [createTripPanelOpen, setCreateTripPanelOpen] = useState(false);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
@@ -617,6 +620,19 @@ function OwnerWorkspace() {
     if (trip) {
       selectTrip(trip);
     }
+  }
+
+  function openCreateTripForm() {
+    setOwnerStoryPhotosOpen(false);
+    closeMobileMenus();
+    setMobileTab("trips");
+    setCreateTripPanelOpen(true);
+    requestAnimationFrame(() => {
+      createTripPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   }
 
   function updateTripInState(updated: TripResponse) {
@@ -1929,6 +1945,17 @@ function OwnerWorkspace() {
           >
             <button
               type="button"
+              className="mobile-overflow-create-trip"
+              aria-label="Create a new trip"
+              disabled={isBusy || tripQuotaReached}
+              onClick={openCreateTripForm}
+              title="Create a new trip"
+            >
+              <StoryHeaderIcon action="create" />
+              <span className="mobile-menu-label">Create a new trip</span>
+            </button>
+            <button
+              type="button"
               aria-label="Trips"
               aria-pressed={mobileTab === "trips"}
               className={mobileTab === "trips" ? "active" : ""}
@@ -2078,8 +2105,13 @@ function OwnerWorkspace() {
               </div>
             )}
           </section>
-          <details className="management-panel">
-            <summary>Create trip</summary>
+          <details
+            className="management-panel"
+            ref={createTripPanelRef}
+            open={createTripPanelOpen}
+            onToggle={(event) => setCreateTripPanelOpen(event.currentTarget.open)}
+          >
+            <summary>Create a new trip</summary>
             <form className="stack" onSubmit={createTrip}>
               <TripFields
                 form={createForm}
@@ -10850,6 +10882,16 @@ function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
 }
 
 function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
+  if (action === "create") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 7.5h14v11H5z" />
+        <path d="M12 10v6" />
+        <path d="M9 13h6" />
+      </svg>
+    );
+  }
+
   if (action === "trips") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
