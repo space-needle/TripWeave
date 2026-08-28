@@ -5898,31 +5898,63 @@ function TripStoryExplorer({
       ? pendingTimelineDaySelection.dayId
       : (activeTimelineDay?.id ?? null);
   const timelineDays = activeTimelineDay ? [activeTimelineDay] : [];
+  const isMapStopSubview =
+    Boolean(state.selectedDayId) &&
+    !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
+  const activeDayPhotoLabel = activeDay
+    ? (formatMapPhotoDateLabel(activeDay.date) ?? storyDayLabel(activeDay))
+    : null;
 
   return (
     <div
-      className={`story-explorer story-shell story-mobile-pane-${displayMobilePane}`}
+      className={`story-explorer story-shell story-mobile-pane-${displayMobilePane} ${
+        isMapStopSubview ? "has-map-context-bar" : ""
+      }`}
     >
+      {isMapStopSubview && activeDay && activeDayPhotoLabel ? (
+        <div
+          className="story-map-context-bar"
+          aria-label="Selected day controls"
+        >
+          <button
+            type="button"
+            className="story-map-context-back"
+            aria-label="Show all days"
+            onClick={() => setViewMode("TRIP_OVERVIEW")}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            <span>All days</span>
+          </button>
+          <span className="story-map-context-title">
+            Day {activeDayIndex + 1} · {activeDayPhotoLabel}
+          </span>
+          {onOpenPhotos &&
+          activeDay.stops.some((stop) => stop.mediaCount > 0) ? (
+            <button
+              type="button"
+              className="story-map-context-photos"
+              aria-label={`Browse ${activeDayPhotoLabel} photos`}
+              onClick={onOpenPhotos}
+            >
+              <StoryHeaderIcon action="photos" />
+              <span className="story-map-context-photo-date">
+                {activeDayPhotoLabel}
+              </span>
+              <span>photos</span>
+            </button>
+          ) : (
+            <span aria-hidden="true" />
+          )}
+        </div>
+      ) : null}
       <div className="story-map-panel">
         <StoryMapCanvas
           model={filteredModel}
           state={state}
           areaVisitsByDay={areaVisitsByDay}
           expandedAreaId={expandedMapAreaId}
-          activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
-          activeDayPhotoLabel={
-            activeDay
-              ? (formatMapPhotoDateLabel(activeDay.date) ??
-                storyDayLabel(activeDay))
-              : null
-          }
-          canOpenActiveDayPhotos={
-            Boolean(onOpenPhotos) &&
-            Boolean(
-              activeDay?.stops.some((stop) => stop.mediaCount > 0) ?? false,
-            )
-          }
-          onOpenActiveDayPhotos={onOpenPhotos}
           onStateChange={onStateChange}
           onExpandedAreaChange={setExpandedMapAreaId}
           onDayMarkerClick={showDayStops}
@@ -7974,10 +8006,6 @@ function StoryMapCanvas({
   state,
   areaVisitsByDay,
   expandedAreaId,
-  activeDayLabel,
-  activeDayPhotoLabel,
-  canOpenActiveDayPhotos,
-  onOpenActiveDayPhotos,
   onStateChange,
   onExpandedAreaChange,
   onDayMarkerClick,
@@ -7988,10 +8016,6 @@ function StoryMapCanvas({
   state: StoryMapState;
   areaVisitsByDay: Record<string, AreaVisitsResponse>;
   expandedAreaId: string | null;
-  activeDayLabel: string | null;
-  activeDayPhotoLabel: string | null;
-  canOpenActiveDayPhotos?: boolean;
-  onOpenActiveDayPhotos?: () => void;
   onStateChange: (state: StoryMapState) => void;
   onExpandedAreaChange: (areaId: string | null) => void;
   onDayMarkerClick: (dayId: string) => void;
@@ -8166,9 +8190,6 @@ function StoryMapCanvas({
       stopCollection,
     };
   }, [areaCollection, mapRouteCollection, mediaCollection, stopCollection]);
-  const canReturnToDayMode =
-    Boolean(state.selectedDayId) &&
-    !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
   const dayMarkerData = useMemo(
     () =>
       Array.from(new Set(model.stops.map((stop) => stop.dayId)))
@@ -8941,66 +8962,6 @@ function StoryMapCanvas({
       }`}
     >
       <div className="story-map" ref={mapNode} aria-hidden="true" />
-      {activeDayLabel ? (
-        <div className="map-active-day" aria-live="polite">
-          {canReturnToDayMode && state.selectedDayId ? (
-            <div className="map-active-day-stop-controls">
-              <button
-                type="button"
-                className="map-active-day-back"
-                aria-label="Show all days"
-                title="Show all days"
-                onClick={() => {
-                  onExpandedAreaChange(null);
-                  onStateChange({
-                    ...state,
-                    viewMode: "TRIP_OVERVIEW",
-                    selectedDayId: null,
-                    selectedStopId: null,
-                    selectedMomentId: null,
-                    selectedMediaId: null,
-                    mapControlMode: "STORY_CONTROLLED",
-                  });
-                }}
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="m15 18-6-6 6-6" />
-                </svg>
-                <span>All days</span>
-              </button>
-              {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
-                <button
-                  type="button"
-                  className="map-active-day-photos"
-                  aria-label={`Browse ${activeDayPhotoLabel ?? activeDayLabel} photos`}
-                  title={`Browse ${activeDayPhotoLabel ?? activeDayLabel} photos`}
-                  onClick={onOpenActiveDayPhotos}
-                >
-                  <StoryHeaderIcon action="photos" />
-                  <span>{activeDayPhotoLabel ?? activeDayLabel} photos</span>
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <>
-              <div>
-                <strong>{activeDayLabel}</strong>
-              </div>
-              {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
-                <button
-                  type="button"
-                  className="map-active-day-photos"
-                  aria-label="Browse selected day photos"
-                  title="Browse selected day photos"
-                  onClick={onOpenActiveDayPhotos}
-                >
-                  <StoryHeaderIcon action="photos" />
-                </button>
-              ) : null}
-            </>
-          )}
-        </div>
-      ) : null}
       {!hasMapData ? (
         <div className="map-empty-state">
           <strong>No mapped stops yet</strong>
