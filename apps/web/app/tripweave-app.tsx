@@ -107,6 +107,7 @@ type MobileWorkspaceTab =
   | "share"
   | "tripSettings"
   | "appSettings"
+  | "createTrip"
   | "trips"
   | "tripBrowse";
 type StoryMobilePane = "map" | "timeline" | "photos";
@@ -362,8 +363,6 @@ function OwnerWorkspace() {
   >({});
   const localFiles = useRef<Map<string, File>>(new Map());
   const abortUpload = useRef<Map<string, () => void>>(new Map());
-  const createTripPanelRef = useRef<HTMLDetailsElement>(null);
-  const [createTripPanelOpen, setCreateTripPanelOpen] = useState(false);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
@@ -625,14 +624,7 @@ function OwnerWorkspace() {
   function openCreateTripForm() {
     setOwnerStoryPhotosOpen(false);
     closeMobileMenus();
-    setMobileTab("trips");
-    setCreateTripPanelOpen(true);
-    requestAnimationFrame(() => {
-      createTripPanelRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
+    setMobileTab("createTrip");
   }
 
   function updateTripInState(updated: TripResponse) {
@@ -865,6 +857,7 @@ function OwnerWorkspace() {
       const trip = await api.createTrip(toCreatePayload(createForm));
       await loadTrips(trip.id);
       setCreateForm(emptyTripForm);
+      setMobileTab("photos");
     } catch (error) {
       setTripError(messageFrom(error));
     } finally {
@@ -2105,36 +2098,6 @@ function OwnerWorkspace() {
               </div>
             )}
           </section>
-          <details
-            className="management-panel"
-            ref={createTripPanelRef}
-            open={createTripPanelOpen}
-            onToggle={(event) => setCreateTripPanelOpen(event.currentTarget.open)}
-          >
-            <summary>Create a new trip</summary>
-            <form className="stack" onSubmit={createTrip}>
-              <TripFields
-                form={createForm}
-                onChange={setCreateForm}
-                showDayCutoffHour={false}
-              />
-              {tripQuota ? (
-                <p
-                  className={
-                    tripQuotaReached
-                      ? "quota-message quota-reached"
-                      : "quota-message"
-                  }
-                  role="status"
-                >
-                  {tripQuotaMessage(tripQuota)}
-                </p>
-              ) : null}
-              <button type="submit" disabled={isBusy || tripQuotaReached}>
-                Create trip
-              </button>
-            </form>
-          </details>
           <button
             className="tripweave-guide-link"
             type="button"
@@ -2147,14 +2110,64 @@ function OwnerWorkspace() {
 
         <section
           className={`trip-stage ${
-            ["story", "timeline", "tripBrowse"].includes(mobileTab)
+            ["story", "timeline", "tripBrowse", "createTrip"].includes(
+              mobileTab,
+            )
               ? "mobile-tab-active"
               : ""
           }`}
-          aria-labelledby="trip-stage-title"
+          aria-labelledby={
+            mobileTab === "createTrip"
+              ? "create-trip-title"
+              : "trip-stage-title"
+          }
           data-mobile-tab-panel="story"
         >
-          {mobileTab === "tripBrowse" ? (
+          {mobileTab === "createTrip" ? (
+            <section className="panel create-trip-page">
+              <div className="section-heading">
+                <p className="eyebrow">New trip</p>
+                <h2 id="create-trip-title">Create a new trip</h2>
+                <p>Start with the details you know. You can add photos next.</p>
+              </div>
+              <form className="stack" onSubmit={createTrip}>
+                <TripFields
+                  form={createForm}
+                  onChange={setCreateForm}
+                  showDayCutoffHour={false}
+                />
+                {tripQuota ? (
+                  <p
+                    className={
+                      tripQuotaReached
+                        ? "quota-message quota-reached"
+                        : "quota-message"
+                    }
+                    role="status"
+                  >
+                    {tripQuotaMessage(tripQuota)}
+                  </p>
+                ) : null}
+                {tripError ? (
+                  <p className="error" role="alert">
+                    {tripError}
+                  </p>
+                ) : null}
+                <div className="button-row">
+                  <button type="submit" disabled={isBusy || tripQuotaReached}>
+                    {isBusy ? "Creating trip..." : "Create trip"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setMobileTab("trips")}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : mobileTab === "tripBrowse" ? (
             <TripBrowserPanel
               data={tripMapPoints}
               endDate={tripMapEndDate}
