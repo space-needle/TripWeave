@@ -9351,6 +9351,39 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
         </button>
       </header>
 
+      <section
+        className="example-trip-guide"
+        aria-label="How to explore this trip"
+      >
+        <div>
+          <span className="example-trip-guide-icon" aria-hidden="true">
+            <StoryHeaderIcon action="map" />
+          </span>
+          <p>
+            <strong>Explore the map</strong>
+            <span>Select a day or stop to follow the route.</span>
+          </p>
+        </div>
+        <div>
+          <span className="example-trip-guide-icon" aria-hidden="true">
+            <StoryHeaderIcon action="timeline" />
+          </span>
+          <p>
+            <strong>Follow the timeline</strong>
+            <span>See the trip unfold moment by moment.</span>
+          </p>
+        </div>
+        <div>
+          <span className="example-trip-guide-icon" aria-hidden="true">
+            <StoryHeaderIcon action="slideshow" />
+          </span>
+          <p>
+            <strong>Play the story</strong>
+            <span>Sit back and relive the journey.</span>
+          </p>
+        </div>
+      </section>
+
       <div className="example-trip-frame">
         <iframe
           title="Sample TripWeave story"

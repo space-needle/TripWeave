@@ -358,6 +358,61 @@ p {
   gap: 18px;
 }
 
+.example-trip-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.example-trip-guide > div {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.example-trip-guide-icon {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #edf7f3;
+  color: var(--accent-strong);
+}
+
+.example-trip-guide-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.example-trip-guide p {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.example-trip-guide strong {
+  font-size: 0.84rem;
+}
+
+.example-trip-guide p span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .example-trip-frame {
   min-height: min(720px, calc(100vh - 245px));
   overflow: hidden;
@@ -626,6 +681,10 @@ p {
   }
 
   .example-trip-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .example-trip-guide {
     grid-template-columns: 1fr;
   }
 
