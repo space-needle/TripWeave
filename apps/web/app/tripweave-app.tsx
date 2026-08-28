@@ -4813,7 +4813,8 @@ function TripStoryExplorer({
       onStateChange({
         ...state,
         viewMode,
-        selectedDayId: null,
+        selectedDayId:
+          state.selectedDayId ?? filteredModel.stops[0]?.dayId ?? null,
         selectedStopId: null,
         selectedMomentId: null,
         selectedMediaId: null,
@@ -5898,35 +5899,38 @@ function TripStoryExplorer({
       ? pendingTimelineDaySelection.dayId
       : (activeTimelineDay?.id ?? null);
   const timelineDays = activeTimelineDay ? [activeTimelineDay] : [];
-  const isMapStopSubview =
-    Boolean(state.selectedDayId) &&
-    !["TRIP_OVERVIEW", "DAY"].includes(state.viewMode);
   const activeDayPhotoLabel = activeDay
     ? (formatMapPhotoDateLabel(activeDay.date) ?? storyDayLabel(activeDay))
     : null;
+  const hasMapContextBar = Boolean(activeDay && activeDayPhotoLabel);
+  const canReturnToAllDays = state.viewMode !== "TRIP_OVERVIEW";
 
   return (
     <div
       className={`story-explorer story-shell story-mobile-pane-${displayMobilePane} ${
-        isMapStopSubview ? "has-map-context-bar" : ""
+        hasMapContextBar ? "has-map-context-bar" : ""
       }`}
     >
-      {isMapStopSubview && activeDay && activeDayPhotoLabel ? (
+      {hasMapContextBar && activeDay && activeDayPhotoLabel ? (
         <div
           className="story-map-context-bar"
           aria-label="Selected day controls"
         >
-          <button
-            type="button"
-            className="story-map-context-back"
-            aria-label="Show all days"
-            onClick={() => setViewMode("TRIP_OVERVIEW")}
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            <span>All days</span>
-          </button>
+          {canReturnToAllDays ? (
+            <button
+              type="button"
+              className="story-map-context-back"
+              aria-label="Show all days"
+              onClick={() => setViewMode("TRIP_OVERVIEW")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+              <span>All days</span>
+            </button>
+          ) : (
+            <span aria-hidden="true" />
+          )}
           <span className="story-map-context-title">
             Day {activeDayIndex + 1} · {activeDayPhotoLabel}
           </span>
