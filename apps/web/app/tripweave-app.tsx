@@ -4267,6 +4267,8 @@ function TripStoryExplorer({
       dayId: string;
       previousSelectedDayId: string | null;
     } | null>(null);
+  const dayStopTransitionTimerRef = useRef<number | null>(null);
+  const storyStateRef = useRef(state);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteError, setNoteError] = useState("");
   const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
@@ -4602,6 +4604,19 @@ function TripStoryExplorer({
     };
   }, [displayMobilePane, reducedMotion, state.selectedStopId]);
 
+  useEffect(
+    () => () => {
+      if (dayStopTransitionTimerRef.current !== null) {
+        window.clearTimeout(dayStopTransitionTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    storyStateRef.current = state;
+  }, [state]);
+
   useEffect(() => {
     if (!isPhotoRollVisible) {
       return;
@@ -4754,15 +4769,26 @@ function TripStoryExplorer({
   function showDayStops(dayId: string) {
     const firstStop = filteredModel.stops.find((stop) => stop.dayId === dayId);
     setExpandedMapAreaId(null);
-    onStateChange({
-      ...state,
-      viewMode: "STOP",
-      selectedDayId: dayId,
-      selectedStopId: firstStop?.id ?? null,
-      selectedMomentId: null,
-      selectedMediaId: null,
-      mapControlMode: "STORY_CONTROLLED",
-    });
+    if (dayStopTransitionTimerRef.current !== null) {
+      window.clearTimeout(dayStopTransitionTimerRef.current);
+      dayStopTransitionTimerRef.current = null;
+    }
+    if (!firstStop) {
+      onStateChange(selectStoryDay(state, dayId));
+      return;
+    }
+    onStateChange(selectStoryDay(state, dayId));
+    dayStopTransitionTimerRef.current = window.setTimeout(() => {
+      const currentState = storyStateRef.current;
+      if (
+        currentState.viewMode === "DAY" &&
+        currentState.selectedDayId === dayId &&
+        !currentState.selectedStopId
+      ) {
+        onStateChange(selectStoryStop(currentState, firstStop.id, dayId));
+      }
+      dayStopTransitionTimerRef.current = null;
+    }, 1000);
   }
 
   function displayStopTitle(
