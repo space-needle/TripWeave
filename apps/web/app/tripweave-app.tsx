@@ -5910,6 +5910,12 @@ function TripStoryExplorer({
           areaVisitsByDay={areaVisitsByDay}
           expandedAreaId={expandedMapAreaId}
           activeDayLabel={activeDay ? storyDayLabel(activeDay) : null}
+          activeDayPhotoLabel={
+            activeDay
+              ? (formatMapPhotoDateLabel(activeDay.date) ??
+                storyDayLabel(activeDay))
+              : null
+          }
           canOpenActiveDayPhotos={
             Boolean(onOpenPhotos) &&
             Boolean(
@@ -7969,6 +7975,7 @@ function StoryMapCanvas({
   areaVisitsByDay,
   expandedAreaId,
   activeDayLabel,
+  activeDayPhotoLabel,
   canOpenActiveDayPhotos,
   onOpenActiveDayPhotos,
   onStateChange,
@@ -7982,6 +7989,7 @@ function StoryMapCanvas({
   areaVisitsByDay: Record<string, AreaVisitsResponse>;
   expandedAreaId: string | null;
   activeDayLabel: string | null;
+  activeDayPhotoLabel: string | null;
   canOpenActiveDayPhotos?: boolean;
   onOpenActiveDayPhotos?: () => void;
   onStateChange: (state: StoryMapState) => void;
@@ -8936,36 +8944,61 @@ function StoryMapCanvas({
       {activeDayLabel ? (
         <div className="map-active-day" aria-live="polite">
           {canReturnToDayMode && state.selectedDayId ? (
-            <button
-              type="button"
-              className="map-active-day-back"
-              aria-label="Back to day view"
-              title="Back to day view"
-              onClick={() =>
-                onStateChange(
-                  selectStoryDay(state, state.selectedDayId as string),
-                )
-              }
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </button>
-          ) : null}
-          <div>
-            <strong>{activeDayLabel}</strong>
-          </div>
-          {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
-            <button
-              type="button"
-              className="map-active-day-photos"
-              aria-label="Browse selected day photos"
-              title="Browse selected day photos"
-              onClick={onOpenActiveDayPhotos}
-            >
-              <StoryHeaderIcon action="photos" />
-            </button>
-          ) : null}
+            <div className="map-active-day-stop-controls">
+              <button
+                type="button"
+                className="map-active-day-back"
+                aria-label="Show all days"
+                title="Show all days"
+                onClick={() => {
+                  onExpandedAreaChange(null);
+                  onStateChange({
+                    ...state,
+                    viewMode: "TRIP_OVERVIEW",
+                    selectedDayId: null,
+                    selectedStopId: null,
+                    selectedMomentId: null,
+                    selectedMediaId: null,
+                    mapControlMode: "STORY_CONTROLLED",
+                  });
+                }}
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+                <span>All days</span>
+              </button>
+              {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
+                <button
+                  type="button"
+                  className="map-active-day-photos"
+                  aria-label={`Browse ${activeDayPhotoLabel ?? activeDayLabel} photos`}
+                  title={`Browse ${activeDayPhotoLabel ?? activeDayLabel} photos`}
+                  onClick={onOpenActiveDayPhotos}
+                >
+                  <StoryHeaderIcon action="photos" />
+                  <span>{activeDayPhotoLabel ?? activeDayLabel} photos</span>
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div>
+                <strong>{activeDayLabel}</strong>
+              </div>
+              {canOpenActiveDayPhotos && onOpenActiveDayPhotos ? (
+                <button
+                  type="button"
+                  className="map-active-day-photos"
+                  aria-label="Browse selected day photos"
+                  title="Browse selected day photos"
+                  onClick={onOpenActiveDayPhotos}
+                >
+                  <StoryHeaderIcon action="photos" />
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
       {!hasMapData ? (
@@ -11859,6 +11892,21 @@ function formatShortCalendarDate(value: string | null): string {
   const date = new Date(Number(year), Number(month) - 1, Number(day));
   return new Intl.DateTimeFormat(undefined, {
     month: "numeric",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatMapPhotoDateLabel(
+  value: string | null | undefined,
+): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
     day: "numeric",
   }).format(date);
 }

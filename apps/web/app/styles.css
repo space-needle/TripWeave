@@ -2882,6 +2882,11 @@ button.is-updating {
   box-shadow: 0 10px 24px rgb(33 48 39 / 14%);
 }
 
+.map-active-day-stop-controls {
+  display: grid;
+  gap: 4px;
+}
+
 .map-active-day > div {
   min-width: 0;
   display: grid;
@@ -2911,6 +2916,30 @@ button.is-updating {
   color: var(--text);
   cursor: pointer;
   padding: 0;
+}
+
+.map-active-day-stop-controls button {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.map-active-day-stop-controls .map-active-day-back {
+  border: 0;
+  background: transparent;
+  padding-left: 3px;
+}
+
+.map-active-day-stop-controls .map-active-day-photos {
+  border-color: transparent;
+  background: #f1f7f4;
 }
 
 .map-active-day button:hover,
