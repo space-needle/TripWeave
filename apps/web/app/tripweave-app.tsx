@@ -9361,7 +9361,10 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
           </span>
           <p>
             <strong>Explore the map</strong>
-            <span>Select a day or stop to follow the route.</span>
+            <span>
+              Tap a day photo marker to jump into its stops, or select a stop to
+              follow the route.
+            </span>
           </p>
         </div>
         <div>
