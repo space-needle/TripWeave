@@ -116,6 +116,18 @@ label {
   font-weight: 700;
 }
 
+.field-label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.field-label small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 h1,
 h2,
 p {
@@ -4318,7 +4330,8 @@ button.is-updating {
 }
 
 .timeline-stop-note {
-  border-left: 2px solid color-mix(in srgb, var(--timeline-day-color, var(--accent)) 55%, #fff);
+  border-left: 2px solid
+    color-mix(in srgb, var(--timeline-day-color, var(--accent)) 55%, #fff);
   padding-left: 9px;
 }
 
@@ -5181,13 +5194,14 @@ button.thumb-frame:focus-visible {
     background: #f1f7f4;
   }
 
-  .mobile-overflow-menu .mobile-overflow-create-trip {
+  .mobile-overflow-menu .mobile-overflow-create-trip.active {
     background: var(--accent);
     color: #fff;
   }
 
-  .mobile-overflow-menu .mobile-overflow-create-trip:hover:not(:disabled),
-  .mobile-overflow-menu .mobile-overflow-create-trip:focus-visible {
+  .mobile-overflow-menu
+    .mobile-overflow-create-trip.active:hover:not(:disabled),
+  .mobile-overflow-menu .mobile-overflow-create-trip.active:focus-visible {
     background: var(--accent-strong);
   }
 

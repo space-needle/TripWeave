@@ -1938,7 +1938,12 @@ function OwnerWorkspace() {
           >
             <button
               type="button"
-              className="mobile-overflow-create-trip"
+              aria-pressed={mobileTab === "createTrip"}
+              className={
+                mobileTab === "createTrip"
+                  ? "mobile-overflow-create-trip active"
+                  : "mobile-overflow-create-trip"
+              }
               aria-label="Create a new trip"
               disabled={isBusy || tripQuotaReached}
               onClick={openCreateTripForm}
@@ -2124,49 +2129,52 @@ function OwnerWorkspace() {
           data-mobile-tab-panel="story"
         >
           {mobileTab === "createTrip" ? (
-            <section className="panel create-trip-page">
-              <div className="section-heading">
-                <p className="eyebrow">New trip</p>
-                <h2 id="create-trip-title">Create a new trip</h2>
-                <p>Start with the details you know. You can add photos next.</p>
-              </div>
-              <form className="stack" onSubmit={createTrip}>
-                <TripFields
-                  form={createForm}
-                  onChange={setCreateForm}
-                  showDayCutoffHour={false}
-                />
-                {tripQuota ? (
-                  <p
-                    className={
-                      tripQuotaReached
-                        ? "quota-message quota-reached"
-                        : "quota-message"
-                    }
-                    role="status"
-                  >
-                    {tripQuotaMessage(tripQuota)}
-                  </p>
-                ) : null}
-                {tripError ? (
-                  <p className="error" role="alert">
-                    {tripError}
-                  </p>
-                ) : null}
-                <div className="button-row">
-                  <button type="submit" disabled={isBusy || tripQuotaReached}>
-                    {isBusy ? "Creating trip..." : "Create trip"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setMobileTab("trips")}
-                  >
-                    Cancel
-                  </button>
+            <>
+              <div className="trip-stage-header">
+                <div>
+                  <h2 id="create-trip-title">Create a new trip</h2>
                 </div>
-              </form>
-            </section>
+              </div>
+              <section className="panel create-trip-page">
+                <p>Start with the details you know. You can add photos next.</p>
+                <form className="stack" onSubmit={createTrip}>
+                  <TripFields
+                    form={createForm}
+                    onChange={setCreateForm}
+                    showDayCutoffHour={false}
+                  />
+                  {tripQuota ? (
+                    <p
+                      className={
+                        tripQuotaReached
+                          ? "quota-message quota-reached"
+                          : "quota-message"
+                      }
+                      role="status"
+                    >
+                      {tripQuotaMessage(tripQuota)}
+                    </p>
+                  ) : null}
+                  {tripError ? (
+                    <p className="error" role="alert">
+                      {tripError}
+                    </p>
+                  ) : null}
+                  <div className="button-row">
+                    <button type="submit" disabled={isBusy || tripQuotaReached}>
+                      {isBusy ? "Creating trip..." : "Create trip"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setMobileTab("trips")}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </>
           ) : mobileTab === "tripBrowse" ? (
             <TripBrowserPanel
               data={tripMapPoints}
@@ -9701,7 +9709,9 @@ function TripFields({
         />
       </label>
       <label>
-        Description
+        <span className="field-label">
+          Description <small>Optional</small>
+        </span>
         <textarea
           value={form.description}
           onChange={(event) => setField("description", event.target.value)}
