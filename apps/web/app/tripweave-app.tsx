@@ -4267,8 +4267,6 @@ function TripStoryExplorer({
       dayId: string;
       previousSelectedDayId: string | null;
     } | null>(null);
-  const dayStopTransitionTimerRef = useRef<number | null>(null);
-  const storyStateRef = useRef(state);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteError, setNoteError] = useState("");
   const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
@@ -4604,19 +4602,6 @@ function TripStoryExplorer({
     };
   }, [displayMobilePane, reducedMotion, state.selectedStopId]);
 
-  useEffect(
-    () => () => {
-      if (dayStopTransitionTimerRef.current !== null) {
-        window.clearTimeout(dayStopTransitionTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    storyStateRef.current = state;
-  }, [state]);
-
   useEffect(() => {
     if (!isPhotoRollVisible) {
       return;
@@ -4769,26 +4754,15 @@ function TripStoryExplorer({
   function showDayStops(dayId: string) {
     const firstStop = filteredModel.stops.find((stop) => stop.dayId === dayId);
     setExpandedMapAreaId(null);
-    if (dayStopTransitionTimerRef.current !== null) {
-      window.clearTimeout(dayStopTransitionTimerRef.current);
-      dayStopTransitionTimerRef.current = null;
-    }
-    if (!firstStop) {
-      onStateChange(selectStoryDay(state, dayId));
-      return;
-    }
-    onStateChange(selectStoryDay(state, dayId));
-    dayStopTransitionTimerRef.current = window.setTimeout(() => {
-      const currentState = storyStateRef.current;
-      if (
-        currentState.viewMode === "DAY" &&
-        currentState.selectedDayId === dayId &&
-        !currentState.selectedStopId
-      ) {
-        onStateChange(selectStoryStop(currentState, firstStop.id, dayId));
-      }
-      dayStopTransitionTimerRef.current = null;
-    }, 1000);
+    onStateChange({
+      ...state,
+      viewMode: "STOP",
+      selectedDayId: dayId,
+      selectedStopId: firstStop?.id ?? null,
+      selectedMomentId: null,
+      selectedMediaId: null,
+      mapControlMode: "STORY_CONTROLLED",
+    });
   }
 
   function displayStopTitle(
@@ -7870,10 +7844,7 @@ function StoryMapCanvas({
       ? (areaVisitsByDay[state.selectedDayId] ?? null)
       : null;
   const visibleStopIdSet = useMemo(() => {
-    if (
-      !["DAY", "STOP", "MOMENT"].includes(state.viewMode) ||
-      !state.selectedDayId
-    ) {
+    if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
       return null;
     }
     const visibleStopIds = new Set<string>();
@@ -8047,7 +8018,7 @@ function StoryMapCanvas({
       model.stops
         .filter(
           (stop) =>
-            state.viewMode === "TRIP_OVERVIEW" ||
+            !["STOP", "MOMENT"].includes(state.viewMode) ||
             !state.selectedDayId ||
             stop.dayId === state.selectedDayId,
         )
@@ -8149,7 +8120,8 @@ function StoryMapCanvas({
       ),
     [areaMarkerData],
   );
-  const showDayMarkers = state.viewMode === "TRIP_OVERVIEW";
+  const showDayMarkers =
+    state.viewMode === "DAY" || state.viewMode === "TRIP_OVERVIEW";
 
   useEffect(() => {
     if (!["STOP", "MOMENT"].includes(state.viewMode) || !state.selectedDayId) {
@@ -9124,26 +9096,13 @@ function focusCoordinates(
   areaVisitsByDay: Record<string, AreaVisitsResponse>,
   expandedAreaId: string | null,
 ): [number, number][] {
-  if (state.viewMode === "TRIP_OVERVIEW") {
+  if (state.viewMode === "TRIP_OVERVIEW" || state.viewMode === "DAY") {
     return [
       ...model.stops
         .map((item) => stopCoordinates.get(item.id) ?? null)
         .filter((coordinate) => coordinate !== null),
       ...model.media
         .filter((item) => item.coordinates)
-        .map((item) => item.coordinates as [number, number]),
-    ];
-  }
-  if (state.viewMode === "DAY" && state.selectedDayId) {
-    return [
-      ...model.stops
-        .filter((item) => item.dayId === state.selectedDayId)
-        .map((item) => stopCoordinates.get(item.id) ?? null)
-        .filter((coordinate) => coordinate !== null),
-      ...model.media
-        .filter(
-          (item) => item.dayId === state.selectedDayId && item.coordinates,
-        )
         .map((item) => item.coordinates as [number, number]),
     ];
   }
