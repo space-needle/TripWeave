@@ -99,6 +99,7 @@ type GalleryPhoto = {
 
 type AuthMode = "login" | "register";
 type LoadState = "loading" | "ready";
+type UnauthenticatedView = "landing" | "auth";
 type OnboardingView = "hidden" | "welcome" | "example";
 type MobileWorkspaceTab =
   | "story"
@@ -285,6 +286,79 @@ export default function TripWeaveApp() {
   return <OwnerWorkspace />;
 }
 
+function LandingPage({
+  onCreateAccount,
+  onSignIn,
+}: {
+  onCreateAccount: () => void;
+  onSignIn: () => void;
+}) {
+  return (
+    <main className="landing-shell">
+      <header className="landing-header">
+        <strong>TripWeave</strong>
+        <button className="secondary-button" type="button" onClick={onSignIn}>
+          Sign in
+        </button>
+      </header>
+
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-copy">
+          <p className="eyebrow">One journey, woven together</p>
+          <h1 id="landing-title">
+            Turn everyone&apos;s travel photos into one story worth revisiting.
+          </h1>
+          <p className="landing-lede">
+            TripWeave brings scattered camera rolls into a shared map and
+            timeline, so the moments of a trip can live together in one place.
+          </p>
+          <div className="landing-actions">
+            <button type="button" onClick={onCreateAccount}>
+              Start a trip
+            </button>
+            <a className="landing-example-link" href="#example-trip">
+              Explore the example
+            </a>
+          </div>
+          <p className="landing-privacy-note">
+            Your original photos stay private. Shared stories use selected,
+            privacy-conscious derivatives.
+          </p>
+        </div>
+
+        <section
+          className="landing-example"
+          id="example-trip"
+          aria-labelledby="landing-example-title"
+        >
+          <div className="landing-example-heading">
+            <div>
+              <p className="eyebrow">See a real TripWeave story</p>
+              <h2 id="landing-example-title">
+                An example trip, ready to explore
+              </h2>
+            </div>
+            <a href={sampleTripUrl} target="_blank" rel="noreferrer">
+              Open full story <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <div className="landing-example-frame">
+            <iframe
+              title="Example TripWeave story"
+              src={sampleTripUrl}
+              allow="fullscreen"
+            />
+          </div>
+          <p className="landing-example-caption">
+            Browse the map, timeline, and shared moments before creating a trip
+            of your own.
+          </p>
+        </section>
+      </section>
+    </main>
+  );
+}
+
 function AdminWorkspace() {
   return (
     <main className="app-shell admin-shell">
@@ -302,6 +376,8 @@ function OwnerWorkspace() {
   const selectedTripIdRef = useRef<string | null>(null);
   const deletedMediaIdsRef = useRef(new Set<string>());
   const [mode, setMode] = useState<AuthMode>("login");
+  const [unauthenticatedView, setUnauthenticatedView] =
+    useState<UnauthenticatedView>("landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -1609,6 +1685,22 @@ function OwnerWorkspace() {
   }
 
   if (!user) {
+    if (unauthenticatedView === "landing") {
+      return (
+        <LandingPage
+          onCreateAccount={() => {
+            setAuthError("");
+            setMode("register");
+            setUnauthenticatedView("auth");
+          }}
+          onSignIn={() => {
+            setAuthError("");
+            setMode("login");
+            setUnauthenticatedView("auth");
+          }}
+        />
+      );
+    }
     return (
       <main className="auth-shell">
         <section className="auth-panel" aria-labelledby="auth-title">
@@ -1672,6 +1764,16 @@ function OwnerWorkspace() {
             {mode === "register"
               ? "Already have an account?"
               : "Create an owner account"}
+          </button>
+          <button
+            className="link-button auth-back-link"
+            type="button"
+            onClick={() => {
+              setAuthError("");
+              setUnauthenticatedView("landing");
+            }}
+          >
+            Back to TripWeave
           </button>
         </section>
       </main>
