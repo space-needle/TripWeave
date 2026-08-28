@@ -6178,7 +6178,10 @@ function TripStoryExplorer({
                       {noteError ? <p className="error">{noteError}</p> : null}
                     </form>
                   ) : day.note ? (
-                    <p className="timeline-note-preview">{day.note}</p>
+                    <div className="timeline-note-preview timeline-day-note">
+                      <span>Day note</span>
+                      <p>{day.note}</p>
+                    </div>
                   ) : null}
                   {areaSelectionDayId === day.id ? (
                     <div className="timeline-area-selection-row">
@@ -6817,7 +6820,7 @@ function TripStoryExplorer({
                               </div>
                             </div>
                             {stop.note && !isEditingPanel ? (
-                              <p className="timeline-note-preview">
+                              <p className="timeline-note-preview timeline-stop-note">
                                 {stop.note}
                               </p>
                             ) : null}

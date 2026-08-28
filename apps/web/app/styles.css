@@ -4289,11 +4289,37 @@ button.is-updating {
 
 .timeline-note-preview {
   margin: -4px 0 0;
-  color: var(--text);
-  font-size: 0.86rem;
-  font-weight: 650;
-  line-height: 1.45;
+  color: var(--muted);
+  font-size: 0.83rem;
+  font-weight: 500;
+  line-height: 1.42;
   white-space: pre-wrap;
+}
+
+.timeline-day-note {
+  display: grid;
+  gap: 3px;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 72%, #fff);
+  background: color-mix(in srgb, var(--accent) 7%, #fff);
+  padding: 8px 10px;
+}
+
+.timeline-day-note > span {
+  color: var(--accent-strong);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.timeline-day-note p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.timeline-stop-note {
+  border-left: 2px solid color-mix(in srgb, var(--timeline-day-color, var(--accent)) 55%, #fff);
+  padding-left: 9px;
 }
 
 .timeline-note-preview.empty {
