@@ -104,6 +104,20 @@ class Settings(BaseSettings):
     nominatim_min_interval_seconds: float = Field(
         default=1.0, ge=0.0, alias="TRIPWEAVE_NOMINATIM_MIN_INTERVAL_SECONDS"
     )
+    google_geocoding_api_key: str = Field(default="", alias="TRIPWEAVE_GOOGLE_GEOCODING_API_KEY")
+    google_geocoding_endpoint: str = Field(
+        default="https://maps.googleapis.com/maps/api/geocode/json",
+        alias="TRIPWEAVE_GOOGLE_GEOCODING_ENDPOINT",
+    )
+    google_geocoding_language: str = Field(
+        default="en", alias="TRIPWEAVE_GOOGLE_GEOCODING_LANGUAGE"
+    )
+    google_geocoding_timeout_seconds: float = Field(
+        default=2.0, ge=0.1, alias="TRIPWEAVE_GOOGLE_GEOCODING_TIMEOUT_SECONDS"
+    )
+    google_geocoding_min_interval_seconds: float = Field(
+        default=0.0, ge=0.0, alias="TRIPWEAVE_GOOGLE_GEOCODING_MIN_INTERVAL_SECONDS"
+    )
     oci_auth_mode: str = Field(default="instance_principal", alias="TRIPWEAVE_OCI_AUTH_MODE")
     oci_region: str = Field(default="", alias="TRIPWEAVE_OCI_REGION")
     oci_namespace: str = Field(default="", alias="TRIPWEAVE_OCI_NAMESPACE")

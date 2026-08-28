@@ -2,9 +2,11 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from urllib.request import Request
 from uuid import uuid4
 
 from tripweave.adapters import orm
+from tripweave.adapters.google_geocoder import GoogleGeocoder, geocode_result_from_google
 from tripweave.adapters.manual_geocoder import ManualGeocoder, ManualPlaceName
 from tripweave.adapters.nominatim_geocoder import NominatimGeocoder, geocode_result_from_nominatim
 from tripweave.adapters.reconstruction import (
@@ -346,3 +348,63 @@ def test_nominatim_geocoder_serializes_requests_in_one_process() -> None:
 
     assert [result.name for result in results] == ["Hanok Cafe", "Hanok Cafe"]
     assert max_active_requests == 1
+
+
+def test_google_result_prefers_poi_component_over_area() -> None:
+    result = geocode_result_from_google(
+        {
+            "status": "OK",
+            "results": [
+                {
+                    "address_components": [
+                        {"long_name": "N Seoul Tower", "types": ["point_of_interest"]},
+                        {"long_name": "Yongsan-gu", "types": ["sublocality", "political"]},
+                    ]
+                }
+            ],
+        }
+    )
+
+    assert result.name == "N Seoul Tower"
+    assert result.confidence == 0.85
+    assert result.source == "google"
+
+
+def test_google_result_falls_back_to_area_and_handles_empty_results() -> None:
+    area_result = geocode_result_from_google(
+        {
+            "status": "OK",
+            "results": [
+                {
+                    "address_components": [
+                        {"long_name": "Myeong-dong", "types": ["neighborhood", "political"]},
+                    ],
+                    "partial_match": True,
+                }
+            ],
+        }
+    )
+    empty_result = geocode_result_from_google({"status": "OVER_QUERY_LIMIT", "results": []})
+
+    assert area_result.name == "Myeong-dong"
+    assert area_result.confidence == 0.5
+    assert empty_result.name is None
+    assert empty_result.source == "google"
+
+
+def test_google_geocoder_encodes_coordinates_language_and_key() -> None:
+    requested_url = ""
+
+    def opener(request: Request, _timeout_seconds: float) -> bytes:
+        nonlocal requested_url
+        requested_url = request.full_url
+        return b'{"status":"ZERO_RESULTS","results":[]}'
+
+    geocoder = GoogleGeocoder(api_key="test key", language="ko", opener=opener)
+
+    result = geocoder.reverse_geocode(latitude=37.5665, longitude=126.9780)
+
+    assert "latlng=37.5665000%2C126.9780000" in requested_url
+    assert "language=ko" in requested_url
+    assert "key=test+key" in requested_url
+    assert result.name is None
