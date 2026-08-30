@@ -1708,6 +1708,39 @@ button.is-updating {
   display: none;
 }
 
+.saved-stories-list {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-story-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0 12px;
+}
+
+.saved-story-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.saved-story-open {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 8px;
+  text-align: left;
+}
+
+.saved-story-open small {
+  color: var(--muted);
+}
+
 .slideshow-shell {
   position: fixed;
   inset: 0;

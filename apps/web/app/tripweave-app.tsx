@@ -43,6 +43,7 @@ import type {
   MemberResponse,
   PublicationsListResponse,
   PublicStoryResponse,
+  SavedStoryResponse,
   ReconstructionResponse,
   ReconstructionStopResponse,
   SimilarityGroupResponse,
@@ -110,7 +111,8 @@ type MobileWorkspaceTab =
   | "appSettings"
   | "createTrip"
   | "trips"
-  | "tripBrowse";
+  | "tripBrowse"
+  | "savedStories";
 type StoryMobilePane = "map" | "timeline" | "photos";
 type StoryHeaderIconAction =
   | StoryMobilePane
@@ -372,6 +374,7 @@ function OwnerWorkspace() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
+  const [savedStories, setSavedStories] = useState<SavedStoryResponse[]>([]);
   const [tripQuota, setTripQuota] = useState<TripQuotaResponse | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const selectedTripIdRef = useRef<string | null>(null);
@@ -559,6 +562,11 @@ function OwnerWorkspace() {
     [setSelectedTripSelection],
   );
 
+  const loadSavedStories = useCallback(async () => {
+    const result = await api.savedStories();
+    setSavedStories(result.stories);
+  }, []);
+
   const loadUploadSessions = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setUploadSessions([]);
@@ -725,6 +733,7 @@ function OwnerWorkspace() {
             ? null
             : new URLSearchParams(window.location.search).get("tripId");
         await loadTrips(preferredTripId);
+        await loadSavedStories();
       } catch {
         if (!cancelled) {
           setUser(null);
@@ -739,7 +748,7 @@ function OwnerWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [loadTrips]);
+  }, [loadSavedStories, loadTrips]);
 
   useEffect(() => {
     if (selectedTrip?.id) {
@@ -889,6 +898,7 @@ function OwnerWorkspace() {
       setUser(result.user);
       setOnboardingView("hidden");
       await loadTrips();
+      await loadSavedStories();
       setPassword("");
       const pendingSave = window.sessionStorage.getItem(
         "tripweave-pending-save",
@@ -915,6 +925,7 @@ function OwnerWorkspace() {
       await api.logout();
       setUser(null);
       setTrips([]);
+      setSavedStories([]);
       setTripQuota(null);
       setSelectedTripSelection(null);
       setUploadSessions([]);
@@ -2084,6 +2095,22 @@ function OwnerWorkspace() {
             </button>
             <button
               type="button"
+              aria-label="Saved Stories"
+              aria-pressed={mobileTab === "savedStories"}
+              className={mobileTab === "savedStories" ? "active" : ""}
+              onClick={() => {
+                setOwnerStoryPhotosOpen(false);
+                closeMobileMenus();
+                void loadSavedStories();
+                setMobileTab("savedStories");
+              }}
+              title="Saved Stories"
+            >
+              <StoryHeaderIcon action="save" />
+              <span className="mobile-menu-label">Saved Stories</span>
+            </button>
+            <button
+              type="button"
               aria-label="Trip Map"
               aria-pressed={mobileTab === "tripBrowse"}
               className={mobileTab === "tripBrowse" ? "active" : ""}
@@ -2168,6 +2195,16 @@ function OwnerWorkspace() {
               Trip Map
             </button>
             <a href="#add-photos-panel">Photos</a>
+            <button
+              type="button"
+              className={mobileTab === "savedStories" ? "active" : ""}
+              onClick={() => {
+                void loadSavedStories();
+                setMobileTab("savedStories");
+              }}
+            >
+              Saved Stories
+            </button>
             <a href="#settings-panel">Manage trip</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
@@ -2290,6 +2327,17 @@ function OwnerWorkspace() {
                 </form>
               </section>
             </>
+          ) : mobileTab === "savedStories" ? (
+            <SavedStoriesPanel
+              stories={savedStories}
+              onOpen={(saved) => window.location.assign(`/story/${saved.slug}`)}
+              onRemove={async (saved) => {
+                await api.unsaveStory(saved.slug);
+                setSavedStories((current) =>
+                  current.filter((candidate) => candidate.slug !== saved.slug),
+                );
+              }}
+            />
           ) : mobileTab === "tripBrowse" ? (
             <TripBrowserPanel
               data={tripMapPoints}
@@ -4040,6 +4088,69 @@ function clusterTripMapPoints(
     });
   }
   return clusters;
+}
+
+function SavedStoriesPanel({
+  stories,
+  onOpen,
+  onRemove,
+}: {
+  stories: SavedStoryResponse[];
+  onOpen: (story: SavedStoryResponse) => void;
+  onRemove: (story: SavedStoryResponse) => Promise<void>;
+}) {
+  return (
+    <>
+      <div className="trip-stage-header">
+        <div>
+          <p className="eyebrow">Your library</p>
+          <h2 id="trip-stage-title">Saved Stories</h2>
+        </div>
+      </div>
+      {stories.length === 0 ? (
+        <section className="panel stack">
+          <h3>No saved stories yet</h3>
+          <p>Save a published story to keep it here.</p>
+        </section>
+      ) : (
+        <section
+          className="panel saved-stories-list"
+          aria-label="Saved stories"
+        >
+          {stories.map((story) => (
+            <article className="saved-story-row" key={story.slug}>
+              <button
+                className="saved-story-open"
+                type="button"
+                disabled={!story.available}
+                onClick={() => onOpen(story)}
+              >
+                <span>
+                  {story.available
+                    ? (story.title ?? "Trip story")
+                    : "No longer available"}
+                </span>
+                <small>
+                  {story.available
+                    ? "Published story"
+                    : "This story is no longer shared."}
+                </small>
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                aria-label={`Remove ${story.title ?? "story"} from saved stories`}
+                onClick={() => void onRemove(story)}
+                title="Remove from saved stories"
+              >
+                <StoryHeaderIcon action="save" />
+              </button>
+            </article>
+          ))}
+        </section>
+      )}
+    </>
+  );
 }
 
 function TripBrowserPanel({
