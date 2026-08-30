@@ -375,6 +375,8 @@ function OwnerWorkspace() {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
   const [savedStories, setSavedStories] = useState<SavedStoryResponse[]>([]);
+  const [recentlyRemovedStory, setRecentlyRemovedStory] =
+    useState<SavedStoryResponse | null>(null);
   const [tripQuota, setTripQuota] = useState<TripQuotaResponse | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const selectedTripIdRef = useRef<string | null>(null);
@@ -566,6 +568,17 @@ function OwnerWorkspace() {
     const result = await api.savedStories();
     setSavedStories(result.stories);
   }, []);
+
+  useEffect(() => {
+    if (!recentlyRemovedStory) {
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setRecentlyRemovedStory(null),
+      8000,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [recentlyRemovedStory]);
 
   const loadUploadSessions = useCallback(async (tripId: string | null) => {
     if (!tripId) {
@@ -926,6 +939,7 @@ function OwnerWorkspace() {
       setUser(null);
       setTrips([]);
       setSavedStories([]);
+      setRecentlyRemovedStory(null);
       setTripQuota(null);
       setSelectedTripSelection(null);
       setUploadSessions([]);
@@ -2330,12 +2344,25 @@ function OwnerWorkspace() {
           ) : mobileTab === "savedStories" ? (
             <SavedStoriesPanel
               stories={savedStories}
+              recentlyRemovedStory={recentlyRemovedStory}
               onOpen={(saved) => window.location.assign(`/story/${saved.slug}`)}
               onRemove={async (saved) => {
                 await api.unsaveStory(saved.slug);
                 setSavedStories((current) =>
                   current.filter((candidate) => candidate.slug !== saved.slug),
                 );
+                setRecentlyRemovedStory(saved);
+              }}
+              onUndo={async () => {
+                if (!recentlyRemovedStory) {
+                  return;
+                }
+                await api.saveStory(recentlyRemovedStory.slug);
+                setSavedStories((current) => [
+                  recentlyRemovedStory,
+                  ...current,
+                ]);
+                setRecentlyRemovedStory(null);
               }}
             />
           ) : mobileTab === "tripBrowse" ? (
@@ -4092,12 +4119,16 @@ function clusterTripMapPoints(
 
 function SavedStoriesPanel({
   stories,
+  recentlyRemovedStory,
   onOpen,
   onRemove,
+  onUndo,
 }: {
   stories: SavedStoryResponse[];
+  recentlyRemovedStory: SavedStoryResponse | null;
   onOpen: (story: SavedStoryResponse) => void;
   onRemove: (story: SavedStoryResponse) => Promise<void>;
+  onUndo: () => Promise<void>;
 }) {
   return (
     <>
@@ -4149,6 +4180,18 @@ function SavedStoriesPanel({
           ))}
         </section>
       )}
+      {recentlyRemovedStory ? (
+        <div className="saved-story-undo" role="status">
+          <span>Removed from Saved Stories</span>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void onUndo()}
+          >
+            Undo
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -1741,6 +1741,21 @@ button.is-updating {
   color: var(--muted);
 }
 
+.saved-story-undo {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(23 32 42 / 18%);
+  padding: 10px 12px;
+}
+
 .slideshow-shell {
   position: fixed;
   inset: 0;
