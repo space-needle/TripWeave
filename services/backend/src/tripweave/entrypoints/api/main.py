@@ -1948,7 +1948,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             db.commit()
             db.refresh(saved)
         return SavedStoryResponse(
-            tripId=trip.id, slug=public_slug, title=version.title, savedAt=saved.created_at, available=True
+            tripId=trip.id,
+            slug=public_slug,
+            title=version.title,
+            savedAt=saved.created_at,
+            available=True,
         )
 
     @app.delete("/saved-stories/{public_slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1983,9 +1987,24 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 continue
             try:
                 _trip, _link, version = active_share_link_for_version(db, trip.public_story_slug)
-                stories.append(SavedStoryResponse(tripId=trip.id, slug=trip.public_story_slug, title=version.title, savedAt=saved.created_at, available=True))
+                stories.append(
+                    SavedStoryResponse(
+                        tripId=trip.id,
+                        slug=trip.public_story_slug,
+                        title=version.title,
+                        savedAt=saved.created_at,
+                        available=True,
+                    )
+                )
             except HTTPException:
-                stories.append(SavedStoryResponse(tripId=trip.id, slug=trip.public_story_slug, savedAt=saved.created_at, available=False))
+                stories.append(
+                    SavedStoryResponse(
+                        tripId=trip.id,
+                        slug=trip.public_story_slug,
+                        savedAt=saved.created_at,
+                        available=False,
+                    )
+                )
         return SavedStoriesResponse(stories=stories)
 
     @app.get("/trips/map-points", response_model=TripsMapPointsResponse)

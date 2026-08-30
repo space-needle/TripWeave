@@ -65,6 +65,7 @@ def test_schema_has_expected_domain_tables() -> None:
         "processing_jobs",
         "reconstruction_runs",
         "review_items",
+        "saved_stories",
         "sessions",
         "similarity_group_members",
         "similarity_groups",
