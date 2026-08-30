@@ -327,6 +327,18 @@ export type ReviewItemResponse = {
   resolvedAt?: string | null;
 };
 
+export type SavedStoriesResponse = {
+  stories: SavedStoryResponse[];
+};
+
+export type SavedStoryResponse = {
+  tripId: string;
+  slug: string;
+  title?: string | null;
+  savedAt: string;
+  available: boolean;
+};
+
 export type ShareLinkResponse = {
   id: string;
   tripId: string;

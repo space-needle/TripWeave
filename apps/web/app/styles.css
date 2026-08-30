@@ -5801,6 +5801,12 @@ button.thumb-frame:focus-visible {
     color: #fff;
   }
 
+  .public-story-action-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
   .slideshow-topbar {
     align-items: center;
     flex-direction: row;

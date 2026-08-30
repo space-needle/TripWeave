@@ -125,7 +125,8 @@ type StoryHeaderIconAction =
   | "trips"
   | "browse"
   | "settings"
-  | "help";
+  | "help"
+  | "save";
 type TimelineMetricIconName = "stops" | "camera" | "travelers";
 
 type TripForm = {
@@ -889,6 +890,18 @@ function OwnerWorkspace() {
       setOnboardingView("hidden");
       await loadTrips();
       setPassword("");
+      const pendingSave = window.sessionStorage.getItem(
+        "tripweave-pending-save",
+      );
+      if (pendingSave) {
+        window.sessionStorage.removeItem("tripweave-pending-save");
+        const { slug, returnTo } = JSON.parse(pendingSave) as {
+          slug: string;
+          returnTo: string;
+        };
+        await api.saveStory(slug);
+        window.location.assign(returnTo);
+      }
     } catch (error) {
       setAuthError(messageFrom(error));
     } finally {
@@ -10274,6 +10287,8 @@ function PublicStoryViewer({
   const [publicView, setPublicView] = useState<"story" | "slideshow">(
     initialView,
   );
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaveBusy, setIsSaveBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -10299,6 +10314,46 @@ function PublicStoryViewer({
       cancelled = true;
     };
   }, [slug, versionNumber]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .savedStories()
+      .then(({ stories }) => {
+        if (!cancelled) {
+          setIsSaved(stories.some((saved) => saved.slug === slug));
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  async function toggleSavedStory() {
+    setIsSaveBusy(true);
+    try {
+      if (isSaved) {
+        await api.unsaveStory(slug);
+        setIsSaved(false);
+      } else {
+        await api.saveStory(slug);
+        setIsSaved(true);
+      }
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) {
+        window.sessionStorage.setItem(
+          "tripweave-pending-save",
+          JSON.stringify({ slug, returnTo: window.location.href }),
+        );
+        window.location.assign("/");
+        return;
+      }
+      setError(messageFrom(reason));
+    } finally {
+      setIsSaveBusy(false);
+    }
+  }
 
   if (loadState === "loading") {
     return (
@@ -10384,6 +10439,18 @@ function PublicStoryViewer({
             title="Slideshow"
           >
             <StoryHeaderIcon action="slideshow" />
+          </button>
+          <span className="public-story-action-divider" aria-hidden="true" />
+          <button
+            type="button"
+            aria-label={isSaved ? "Remove from saved stories" : "Save story"}
+            aria-pressed={isSaved}
+            className={isSaved ? "active" : ""}
+            disabled={isSaveBusy}
+            onClick={() => void toggleSavedStory()}
+            title={isSaved ? "Saved" : "Save"}
+          >
+            <StoryHeaderIcon action="save" />
           </button>
         </nav>
       </header>
@@ -11079,6 +11146,14 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
         <path d="M12 3v12" />
         <path d="m7.5 7.5 4.5-4.5 4.5 4.5" />
         <path d="M6 11v8h12v-8" />
+      </svg>
+    );
+  }
+
+  if (action === "save") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M6 4.5h12v15l-6-3.8-6 3.8z" />
       </svg>
     );
   }

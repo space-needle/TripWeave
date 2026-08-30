@@ -25,6 +25,8 @@ import type {
   StoryPhotoProjectionResponse,
   TripCreateRequest,
   TripsMapPointsResponse,
+  SavedStoriesResponse,
+  SavedStoryResponse,
   TripResponse,
   TripsListResponse,
   TripUpdateRequest,
@@ -182,6 +184,22 @@ export const api = {
   },
   trips(): Promise<TripsListResponse> {
     return apiRequest<TripsListResponse>("/trips");
+  },
+  savedStories(): Promise<SavedStoriesResponse> {
+    return apiRequest<SavedStoriesResponse>("/saved-stories");
+  },
+  saveStory(slug: string): Promise<SavedStoryResponse> {
+    return apiRequest<SavedStoryResponse>(
+      `/saved-stories/${encodeURIComponent(slug)}`,
+      {
+        method: "PUT",
+      },
+    );
+  },
+  unsaveStory(slug: string): Promise<void> {
+    return apiRequest<void>(`/saved-stories/${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+    });
   },
   adminDashboard(): Promise<AdminDashboardResponse> {
     return apiRequest<AdminDashboardResponse>("/admin/dashboard");
