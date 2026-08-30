@@ -1077,6 +1077,21 @@ class StoryVersion(Base, TimestampMixin):
     )
 
 
+class SavedStory(Base, TimestampMixin):
+    __tablename__ = "saved_stories"
+    __table_args__ = (UniqueConstraint("user_id", "trip_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False
+    )
+
+
 class StoryDraftProjection(Base, TimestampMixin):
     __tablename__ = "story_draft_projections"
     __table_args__ = (UniqueConstraint("trip_id"),)

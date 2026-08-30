@@ -686,3 +686,15 @@ class PublicStoryResponse(BaseModel):
     area_visits_by_day: dict[str, AreaVisitsResponse] = Field(
         default_factory=dict, alias="areaVisitsByDay"
     )
+
+
+class SavedStoryResponse(BaseModel):
+    trip_id: UUID = Field(alias="tripId")
+    slug: str
+    title: str | None = None
+    saved_at: datetime = Field(alias="savedAt")
+    available: bool
+
+
+class SavedStoriesResponse(BaseModel):
+    stories: list[SavedStoryResponse]

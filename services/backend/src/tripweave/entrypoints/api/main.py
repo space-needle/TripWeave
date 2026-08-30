@@ -124,6 +124,8 @@ from tripweave.entrypoints.api.schemas import (
     ReconstructionStopResponse,
     RegisterRequest,
     ReviewItemResponse,
+    SavedStoriesResponse,
+    SavedStoryResponse,
     ShareLinkResponse,
     SimilarityGroupResponse,
     SimilarityGroupsResponse,
@@ -1927,6 +1929,64 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             trips=[trip_response(trip, role, member_id) for trip, role, member_id in rows],
             quota=trip_quota(db, auth.user.id),
         )
+
+    @app.put("/saved-stories/{public_slug}", response_model=SavedStoryResponse)
+    def save_story(
+        public_slug: str,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> SavedStoryResponse:
+        trip, _link, version = active_share_link_for_version(db, public_slug)
+        saved = db.scalar(
+            select(orm.SavedStory).where(
+                orm.SavedStory.user_id == auth.user.id, orm.SavedStory.trip_id == trip.id
+            )
+        )
+        if saved is None:
+            saved = orm.SavedStory(user_id=auth.user.id, trip_id=trip.id)
+            db.add(saved)
+            db.commit()
+            db.refresh(saved)
+        return SavedStoryResponse(
+            tripId=trip.id, slug=public_slug, title=version.title, savedAt=saved.created_at, available=True
+        )
+
+    @app.delete("/saved-stories/{public_slug}", status_code=status.HTTP_204_NO_CONTENT)
+    def unsave_story(
+        public_slug: str,
+        auth: AuthenticatedUser = Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ) -> Response:
+        trip = db.scalar(select(orm.Trip).where(orm.Trip.public_story_slug == public_slug))
+        if trip is not None:
+            db.execute(
+                delete(orm.SavedStory).where(
+                    orm.SavedStory.user_id == auth.user.id, orm.SavedStory.trip_id == trip.id
+                )
+            )
+            db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/saved-stories", response_model=SavedStoriesResponse)
+    def list_saved_stories(
+        auth: AuthenticatedUser = Depends(current_user), db: DbSession = Depends(db_session)
+    ) -> SavedStoriesResponse:
+        rows = db.execute(
+            select(orm.SavedStory, orm.Trip)
+            .join(orm.Trip, orm.Trip.id == orm.SavedStory.trip_id)
+            .where(orm.SavedStory.user_id == auth.user.id)
+            .order_by(orm.SavedStory.created_at.desc())
+        ).all()
+        stories: list[SavedStoryResponse] = []
+        for saved, trip in rows:
+            if trip.public_story_slug is None:
+                continue
+            try:
+                _trip, _link, version = active_share_link_for_version(db, trip.public_story_slug)
+                stories.append(SavedStoryResponse(tripId=trip.id, slug=trip.public_story_slug, title=version.title, savedAt=saved.created_at, available=True))
+            except HTTPException:
+                stories.append(SavedStoryResponse(tripId=trip.id, slug=trip.public_story_slug, savedAt=saved.created_at, available=False))
+        return SavedStoriesResponse(stories=stories)
 
     @app.get("/trips/map-points", response_model=TripsMapPointsResponse)
     def list_trip_map_points(
