@@ -445,6 +445,8 @@ function OwnerWorkspace() {
   >({});
   const localFiles = useRef<Map<string, File>>(new Map());
   const abortUpload = useRef<Map<string, () => void>>(new Map());
+  const mobileMenuTriggerRef = useRef<HTMLElement | null>(null);
+  const mobileOverflowMenuRef = useRef<HTMLElement | null>(null);
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0] ?? null,
@@ -683,6 +685,36 @@ function OwnerWorkspace() {
   function closeMobileMenus() {
     setMobileOverflowMenuOpen(false);
   }
+
+  useEffect(() => {
+    if (!mobileOverflowMenuOpen) {
+      return;
+    }
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (
+        mobileMenuTriggerRef.current?.contains(target) ||
+        mobileOverflowMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setMobileOverflowMenuOpen(false);
+    }
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMobileOverflowMenuOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileOverflowMenuOpen]);
 
   function selectTrip(trip: TripResponse) {
     deletedMediaIdsRef.current.clear();
@@ -1952,7 +1984,11 @@ function OwnerWorkspace() {
 
       {tripError ? <p className="error">{tripError}</p> : null}
 
-      <nav className="mobile-trip-actions" aria-label="Trip sections">
+      <nav
+        className="mobile-trip-actions"
+        aria-label="Trip sections"
+        ref={mobileMenuTriggerRef}
+      >
         {(
           [
             ["story", "Map", "story"],
@@ -2004,7 +2040,11 @@ function OwnerWorkspace() {
         </button>
       </nav>
       {mobileOverflowMenuOpen ? (
-        <nav className="mobile-overflow-menu" aria-label="More options">
+        <nav
+          className="mobile-overflow-menu"
+          aria-label="More options"
+          ref={mobileOverflowMenuRef}
+        >
           <div className="mobile-overflow-trip">
             <span className="mobile-overflow-trip-label">Current trip</span>
             <span className="mobile-overflow-trip-title">
