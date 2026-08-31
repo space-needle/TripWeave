@@ -1741,6 +1741,24 @@ button.is-updating {
   color: var(--muted);
 }
 
+.saved-story-row .secondary-button {
+  display: grid;
+  width: 36px;
+  min-height: 36px;
+  place-items: center;
+  padding: 0;
+}
+
+.saved-story-row .secondary-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .saved-story-undo {
   position: fixed;
   right: 20px;
