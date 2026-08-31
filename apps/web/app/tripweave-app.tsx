@@ -10379,9 +10379,35 @@ function PublicationList({
       .filter((version) => version.state === "published")
       .map((version) => version.versionNumber),
   );
+  const latestStoryLink = publications.shareLinks.find((link) => {
+    const version = link.storyVersionId
+      ? versionsById.get(link.storyVersionId)
+      : undefined;
+    return (
+      version?.versionNumber === latestPublishedVersionNumber &&
+      Boolean(link.latestStoryUrl)
+    );
+  });
   return (
     <div className="publication-list">
       <h3>Published versions</h3>
+      {latestStoryLink?.latestStoryUrl ? (
+        <article className="publication-card publication-card-latest">
+          <div className="publication-card-status">
+            <strong>Latest Story</strong>
+            <span>Always opens the newest published version</span>
+          </div>
+          <div className="publication-card-link">
+            <code>{latestStoryLink.latestStoryUrl}</code>
+            <button
+              type="button"
+              onClick={() => onCopyUrl(latestStoryLink.latestStoryUrl!)}
+            >
+              Copy latest link
+            </button>
+          </div>
+        </article>
+      ) : null}
       {publications.shareLinks.length === 0 ? (
         <p>No versions yet.</p>
       ) : (
@@ -10413,19 +10439,6 @@ function PublicationList({
                       onClick={() => onCopyUrl(link.versionStoryUrl!)}
                     >
                       Copy version link
-                    </button>
-                  </div>
-                ) : null}
-                {version?.versionNumber === latestPublishedVersionNumber &&
-                link.latestStoryUrl ? (
-                  <div className="publication-card-link">
-                    <small>Latest story</small>
-                    <code>{link.latestStoryUrl}</code>
-                    <button
-                      type="button"
-                      onClick={() => onCopyUrl(link.latestStoryUrl!)}
-                    >
-                      Copy latest link
                     </button>
                   </div>
                 ) : null}
