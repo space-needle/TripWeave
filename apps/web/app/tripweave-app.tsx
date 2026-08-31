@@ -10693,12 +10693,16 @@ function PublicStoryViewer({
             type="button"
             aria-label={isSaved ? "Remove from saved stories" : "Save story"}
             aria-pressed={isSaved}
-            className={isSaved ? "active" : ""}
+            className={
+              isSaved
+                ? "active public-story-save-button"
+                : "public-story-save-button"
+            }
             disabled={isSaveBusy}
             onClick={() => void toggleSavedStory()}
             title={isSaved ? "Saved" : "Save"}
           >
-            <StoryHeaderIcon action="save" />
+            {isSaved ? "Saved" : "Save"}
           </button>
         </nav>
       </header>
