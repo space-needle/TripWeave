@@ -10478,6 +10478,7 @@ function PublicStoryViewer({
     initialView,
   );
   const [isSaved, setIsSaved] = useState(false);
+  const [hasAccount, setHasAccount] = useState(false);
   const [isSaveBusy, setIsSaveBusy] = useState(false);
 
   useEffect(() => {
@@ -10511,6 +10512,7 @@ function PublicStoryViewer({
       .savedStories()
       .then(({ stories }) => {
         if (!cancelled) {
+          setHasAccount(true);
           setIsSaved(stories.some((saved) => saved.slug === slug));
         }
       })
@@ -10642,6 +10644,16 @@ function PublicStoryViewer({
           >
             <StoryHeaderIcon action="save" />
           </button>
+          {hasAccount ? (
+            <button
+              type="button"
+              aria-label="My Trips"
+              onClick={() => window.location.assign("/")}
+              title="My Trips"
+            >
+              <StoryHeaderIcon action="trips" />
+            </button>
+          ) : null}
         </nav>
       </header>
       <TripStoryExplorer
