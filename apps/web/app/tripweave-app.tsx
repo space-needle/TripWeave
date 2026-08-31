@@ -4138,8 +4138,10 @@ function SavedStoriesPanel({
     <>
       <div className="trip-stage-header">
         <div>
-          <p className="eyebrow">Your library</p>
           <h2 id="trip-stage-title">Saved stories</h2>
+          <p>
+            {stories.length} saved stor{stories.length === 1 ? "y" : "ies"}
+          </p>
         </div>
       </div>
       {stories.length === 0 ? (
