@@ -2281,9 +2281,13 @@ function OwnerWorkspace() {
 
         <section
           className={`trip-stage ${
-            ["story", "timeline", "tripBrowse", "createTrip"].includes(
-              mobileTab,
-            )
+            [
+              "story",
+              "timeline",
+              "tripBrowse",
+              "createTrip",
+              "savedStories",
+            ].includes(mobileTab)
               ? "mobile-tab-active"
               : ""
           }`}
