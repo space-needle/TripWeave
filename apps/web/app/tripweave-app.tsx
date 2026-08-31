@@ -128,7 +128,8 @@ type StoryHeaderIconAction =
   | "browse"
   | "settings"
   | "help"
-  | "save";
+  | "save"
+  | "home";
 type TimelineMetricIconName = "stops" | "camera" | "travelers";
 
 type TripForm = {
@@ -10639,21 +10640,15 @@ function PublicStoryViewer({
       <header className="app-header">
         <div className="public-story-title">
           <div className="public-story-heading">
-            {hasAccount ? (
-              <button
-                className="public-story-home-mark"
-                type="button"
-                aria-label="My trips"
-                onClick={() => window.location.assign("/")}
-                title="My trips"
-              >
-                <TripWeaveMark />
-              </button>
-            ) : (
-              <span className="public-story-home-mark" aria-hidden="true">
-                <TripWeaveMark />
-              </span>
-            )}
+            <button
+              className="public-story-home-button"
+              type="button"
+              aria-label={hasAccount ? "My trips" : "TripWeave home"}
+              onClick={() => window.location.assign("/")}
+              title={hasAccount ? "My trips" : "TripWeave home"}
+            >
+              <StoryHeaderIcon action="home" />
+            </button>
             <div>
               <p className="eyebrow">TripWeave story</p>
               <h1>{title}</h1>
@@ -11329,17 +11324,16 @@ function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
   );
 }
 
-function TripWeaveMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M4 7c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
-      <path d="M4 12c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
-      <path d="M4 17c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
-    </svg>
-  );
-}
-
 function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
+  if (action === "home") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="m4 11 8-7 8 7v8.5H4z" />
+        <path d="M9.5 19.5v-5h5v5" />
+      </svg>
+    );
+  }
+
   if (action === "create") {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
