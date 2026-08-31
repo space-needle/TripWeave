@@ -10638,13 +10638,32 @@ function PublicStoryViewer({
     <main className="app-shell public-story-shell">
       <header className="app-header">
         <div className="public-story-title">
-          <p className="eyebrow">TripWeave story</p>
-          <h1>{title}</h1>
-          <p>
-            {description
-              ? description
-              : `Published version ${story.version.versionNumber}`}
-          </p>
+          <div className="public-story-heading">
+            {hasAccount ? (
+              <button
+                className="public-story-home-mark"
+                type="button"
+                aria-label="My trips"
+                onClick={() => window.location.assign("/")}
+                title="My trips"
+              >
+                <TripWeaveMark />
+              </button>
+            ) : (
+              <span className="public-story-home-mark" aria-hidden="true">
+                <TripWeaveMark />
+              </span>
+            )}
+            <div>
+              <p className="eyebrow">TripWeave story</p>
+              <h1>{title}</h1>
+              <p>
+                {description
+                  ? description
+                  : `Published version ${story.version.versionNumber}`}
+              </p>
+            </div>
+          </div>
         </div>
         <nav className="public-story-view-toggle" aria-label="Story view">
           {(
@@ -10686,16 +10705,6 @@ function PublicStoryViewer({
           >
             <StoryHeaderIcon action="save" />
           </button>
-          {hasAccount ? (
-            <button
-              type="button"
-              aria-label="My trips"
-              onClick={() => window.location.assign("/")}
-              title="My trips"
-            >
-              <StoryHeaderIcon action="trips" />
-            </button>
-          ) : null}
         </nav>
       </header>
       <TripStoryExplorer
@@ -11316,6 +11325,16 @@ function TimelineMetricIcon({ name }: { name: TimelineMetricIconName }) {
       <path d="M17 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
       <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
       <path d="M14 18.5a4.2 4.2 0 0 1 6.5.5" />
+    </svg>
+  );
+}
+
+function TripWeaveMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4 7c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
+      <path d="M4 12c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
+      <path d="M4 17c3.1-3 6.5-3 10.2 0s5.4 3 5.8 3" />
     </svg>
   );
 }
