@@ -10373,6 +10373,12 @@ function PublicationList({
   const versionsById = new Map(
     publications.versions.map((version) => [version.id, version]),
   );
+  const latestPublishedVersionNumber = Math.max(
+    0,
+    ...publications.versions
+      .filter((version) => version.state === "published")
+      .map((version) => version.versionNumber),
+  );
   return (
     <div className="publication-list">
       <h3>Published versions</h3>
@@ -10407,6 +10413,19 @@ function PublicationList({
                       onClick={() => onCopyUrl(link.versionStoryUrl!)}
                     >
                       Copy version link
+                    </button>
+                  </div>
+                ) : null}
+                {version?.versionNumber === latestPublishedVersionNumber &&
+                link.latestStoryUrl ? (
+                  <div className="publication-card-link">
+                    <small>Latest story</small>
+                    <code>{link.latestStoryUrl}</code>
+                    <button
+                      type="button"
+                      onClick={() => onCopyUrl(link.latestStoryUrl!)}
+                    >
+                      Copy latest link
                     </button>
                   </div>
                 ) : null}
