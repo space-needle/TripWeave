@@ -129,7 +129,8 @@ type StoryHeaderIconAction =
   | "settings"
   | "help"
   | "save"
-  | "home";
+  | "home"
+  | "delete";
 type TimelineMetricIconName = "stops" | "camera" | "travelers";
 
 type TripForm = {
@@ -4221,7 +4222,7 @@ function SavedStoriesPanel({
                 onClick={() => void onRemove(story)}
                 title="Remove from saved stories"
               >
-                <StoryHeaderIcon action="save" />
+                <StoryHeaderIcon action="delete" />
               </button>
             </article>
           ))}
