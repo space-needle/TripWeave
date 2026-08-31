@@ -1782,6 +1782,32 @@ button.public-story-home-button {
   color: var(--muted);
 }
 
+.saved-story-metadata {
+  display: grid;
+  gap: 2px;
+}
+
+.saved-story-metadata > span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.saved-story-metadata-label {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.saved-story-metadata strong,
+.saved-story-metadata time {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .saved-story-row .secondary-button {
   display: grid;
   width: 36px;

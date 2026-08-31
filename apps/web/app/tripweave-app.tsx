@@ -4209,11 +4209,26 @@ function SavedStoriesPanel({
                     ? (story.title ?? "Trip story")
                     : "No longer available"}
                 </span>
-                <small>
-                  {story.available
-                    ? `${story.publisherDisplayName ? `Published by ${story.publisherDisplayName} · ` : ""}Saved ${formatSavedStoryDate(story.savedAt)}`
-                    : "This story is no longer shared."}
-                </small>
+                {story.available ? (
+                  <span className="saved-story-metadata">
+                    {story.publisherDisplayName ? (
+                      <span>
+                        <span className="saved-story-metadata-label">
+                          Published by
+                        </span>
+                        <strong>{story.publisherDisplayName}</strong>
+                      </span>
+                    ) : null}
+                    <span>
+                      <span className="saved-story-metadata-label">Saved</span>
+                      <time dateTime={story.savedAt}>
+                        {formatSavedStoryDate(story.savedAt)}
+                      </time>
+                    </span>
+                  </span>
+                ) : (
+                  <small>This story is no longer shared.</small>
+                )}
               </button>
               <button
                 className="secondary-button"
@@ -11420,6 +11435,14 @@ function StoryHeaderIcon({ action }: { action: StoryHeaderIconAction }) {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M6 4.5h12v15l-6-3.8-6 3.8z" />
+      </svg>
+    );
+  }
+
+  if (action === "delete") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
       </svg>
     );
   }
