@@ -2109,7 +2109,7 @@ function OwnerWorkspace() {
             </button>
             <button
               type="button"
-              aria-label="Saved Stories"
+              aria-label="Saved stories"
               aria-pressed={mobileTab === "savedStories"}
               className={mobileTab === "savedStories" ? "active" : ""}
               onClick={() => {
@@ -2118,14 +2118,14 @@ function OwnerWorkspace() {
                 void loadSavedStories();
                 setMobileTab("savedStories");
               }}
-              title="Saved Stories"
+              title="Saved stories"
             >
               <StoryHeaderIcon action="save" />
-              <span className="mobile-menu-label">Saved Stories</span>
+              <span className="mobile-menu-label">Saved stories</span>
             </button>
             <button
               type="button"
-              aria-label="Trip Map"
+              aria-label="Trip map"
               aria-pressed={mobileTab === "tripBrowse"}
               className={mobileTab === "tripBrowse" ? "active" : ""}
               onClick={() => {
@@ -2133,10 +2133,10 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("tripBrowse");
               }}
-              title="Trip Map"
+              title="Trip map"
             >
               <StoryHeaderIcon action="browse" />
-              <span className="mobile-menu-label">Trip Map</span>
+              <span className="mobile-menu-label">Trip map</span>
             </button>
             <button
               type="button"
@@ -2206,7 +2206,7 @@ function OwnerWorkspace() {
                 setMobileTab("tripBrowse");
               }}
             >
-              Trip Map
+              Trip map
             </button>
             <a href="#add-photos-panel">Photos</a>
             <button
@@ -2217,7 +2217,7 @@ function OwnerWorkspace() {
                 setMobileTab("savedStories");
               }}
             >
-              Saved Stories
+              Saved stories
             </button>
             <a href="#settings-panel">Manage trip</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
@@ -4139,7 +4139,7 @@ function SavedStoriesPanel({
       <div className="trip-stage-header">
         <div>
           <p className="eyebrow">Your library</p>
-          <h2 id="trip-stage-title">Saved Stories</h2>
+          <h2 id="trip-stage-title">Saved stories</h2>
         </div>
       </div>
       {stories.length === 0 ? (
@@ -4186,7 +4186,7 @@ function SavedStoriesPanel({
       )}
       {recentlyRemovedStory ? (
         <div className="saved-story-undo" role="status">
-          <span>Removed from Saved Stories</span>
+          <span>Removed from saved stories</span>
           <button
             type="button"
             className="secondary-button"
@@ -4229,7 +4229,7 @@ function TripBrowserPanel({
     <>
       <div className="trip-stage-header">
         <div>
-          <h2 id="trip-stage-title">Trip Map</h2>
+          <h2 id="trip-stage-title">Trip map</h2>
           <p>
             {data
               ? `${data.trips.length} trip${
@@ -10647,9 +10647,9 @@ function PublicStoryViewer({
           {hasAccount ? (
             <button
               type="button"
-              aria-label="My Trips"
+              aria-label="My trips"
               onClick={() => window.location.assign("/")}
-              title="My Trips"
+              title="My trips"
             >
               <StoryHeaderIcon action="trips" />
             </button>
