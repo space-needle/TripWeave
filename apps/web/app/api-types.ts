@@ -212,6 +212,7 @@ export type PublicStoryResponse = {
   story: ReconstructionResponse;
   trip: Record<string, unknown>;
   participants: Record<string, unknown>[];
+  publisherDisplayName?: string | null;
   areaVisitsByDay?: Record<string, unknown>;
 };
 
@@ -335,6 +336,7 @@ export type SavedStoryResponse = {
   tripId: string;
   slug: string;
   title?: string | null;
+  publisherDisplayName?: string | null;
   savedAt: string;
   available: boolean;
 };

@@ -4210,7 +4210,7 @@ function SavedStoriesPanel({
                 </span>
                 <small>
                   {story.available
-                    ? "Published story"
+                    ? `${story.publisherDisplayName ? `Published by ${story.publisherDisplayName} · ` : ""}Saved ${formatSavedStoryDate(story.savedAt)}`
                     : "This story is no longer shared."}
                 </small>
               </button>
@@ -10623,6 +10623,7 @@ function PublicStoryViewer({
     typeof trip.timezoneId === "string" ? trip.timezoneId : "UTC";
   const areaVisitsByDay = areaVisitsByDayRecord(story.areaVisitsByDay);
   const slideshowScenes = buildPublicStorySlideshowScenes(story);
+  const publisherDisplayName = story.publisherDisplayName;
 
   if (publicView === "slideshow") {
     return (
@@ -10657,6 +10658,9 @@ function PublicStoryViewer({
                   ? description
                   : `Published version ${story.version.versionNumber}`}
               </p>
+              {publisherDisplayName ? (
+                <small>Published by {publisherDisplayName}</small>
+              ) : null}
             </div>
           </div>
         </div>
@@ -12240,6 +12244,12 @@ function formatDate(value: string | null, timezoneId?: string): string {
     }
     throw error;
   }
+}
+
+function formatSavedStoryDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    new Date(value),
+  );
 }
 
 function formatReconstructionTime(

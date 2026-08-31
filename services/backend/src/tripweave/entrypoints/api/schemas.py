@@ -683,6 +683,7 @@ class PublicStoryResponse(BaseModel):
     story: ReconstructionResponse
     trip: dict[str, object]
     participants: list[dict[str, object]]
+    publisher_display_name: str | None = Field(default=None, alias="publisherDisplayName")
     area_visits_by_day: dict[str, AreaVisitsResponse] = Field(
         default_factory=dict, alias="areaVisitsByDay"
     )
@@ -692,6 +693,7 @@ class SavedStoryResponse(BaseModel):
     trip_id: UUID = Field(alias="tripId")
     slug: str
     title: str | None = None
+    publisher_display_name: str | None = Field(default=None, alias="publisherDisplayName")
     saved_at: datetime = Field(alias="savedAt")
     available: bool
 

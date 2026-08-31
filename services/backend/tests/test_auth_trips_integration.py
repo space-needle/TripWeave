@@ -2383,6 +2383,7 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
 
     run_one_worker_job(client, engine)
     first_manifest = published_manifest(client, engine, trip_id, 1)
+    assert first_manifest["publisher"] == {"displayName": "Owner"}
     first_asset_keys = published_asset_keys(first_manifest)
     assert first_asset_keys
     assert all("/story/assets/sha256/" in key for key in first_asset_keys)
@@ -2403,7 +2404,9 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     assert "sourceBlobRef" not in body
     assert "private-original-name.jpg" not in body
     assert "rawExif" not in body
-    story_day = public_story.json()["story"]["days"][0]
+    public_story_body = public_story.json()
+    assert public_story_body["publisherDisplayName"] == "Owner"
+    story_day = public_story_body["story"]["days"][0]
     assert story_day["note"] == "Start with temple photos."
     assert story_day["stops"][0]["note"] == "Golden hour by the river."
     area_visits = public_story.json()["areaVisitsByDay"][day_id]
@@ -2413,6 +2416,11 @@ def test_publication_creates_immutable_public_story_and_revokes_access(
     ]
     assert area_visits["sourceReconstructionRunId"] == reconstructed_body["latestRun"]["id"]
     assert area_visits["standaloneStops"] == []
+
+    saved_story = client.put(f"/saved-stories/{public_slug}", headers={"x-csrf-token": csrf_token})
+    assert saved_story.status_code == 200
+    assert saved_story.json()["publisherDisplayName"] == "Owner"
+    assert client.get("/saved-stories").json()["stories"][0]["publisherDisplayName"] == "Owner"
 
     thumbnail_url = story_day["stops"][0]["moments"][0]["media"][0]["thumbnailUrl"]
     preview_url = story_day["stops"][0]["moments"][0]["media"][0]["previewUrl"]

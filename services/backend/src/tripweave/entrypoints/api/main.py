@@ -1241,6 +1241,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return trip, link, version
 
     def public_story_response(
+        db: DbSession,
         request: Request,
         asset_route: str,
         link: orm.ShareLink,
@@ -1250,11 +1251,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         asset_urls = public_asset_urls(request, asset_route, manifest)
         story = reconstruction_from_manifest(manifest, asset_urls)
         trip = dict_or_empty(manifest.get("trip"))
+        publisher = dict_or_empty(manifest.get("publisher"))
+        publisher_name = publisher.get("displayName")
+        if not isinstance(publisher_name, str) and version.created_by_user_id is not None:
+            publisher_user = db.get(orm.User, version.created_by_user_id)
+            publisher_name = publisher_user.display_name if publisher_user is not None else None
         return PublicStoryResponse(
             version=story_version_response(version),
             story=story,
             trip=trip,
             participants=list_of_dicts(manifest.get("participants")),
+            publisherDisplayName=publisher_name if isinstance(publisher_name, str) else None,
             areaVisitsByDay=area_visits_by_day_from_manifest(manifest, story),
         )
 
@@ -1987,11 +1994,19 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 continue
             try:
                 _trip, _link, version = active_share_link_for_version(db, trip.public_story_slug)
+                publisher = (
+                    db.get(orm.User, version.created_by_user_id)
+                    if version.created_by_user_id is not None
+                    else None
+                )
                 stories.append(
                     SavedStoryResponse(
                         tripId=trip.id,
                         slug=trip.public_story_slug,
                         title=version.title,
+                        publisherDisplayName=publisher.display_name
+                        if publisher is not None
+                        else None,
                         savedAt=saved.created_at,
                         available=True,
                     )
@@ -6615,7 +6630,9 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             ) from exc
         db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
         db.commit()
-        return public_story_response(request, f"/public/shares/{token}", link, version, manifest)
+        return public_story_response(
+            db, request, f"/public/shares/{token}", link, version, manifest
+        )
 
     @app.get("/public/shares/{token}/assets/{asset_id}")
     def get_public_story_asset(
@@ -6683,7 +6700,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             db.add(orm.TripViewEvent(trip_id=link.trip_id, share_link_id=link.id))
             db.commit()
             return public_story_response(
-                request, f"/public/shares/{public_slug}", link, legacy_version, manifest
+                db, request, f"/public/shares/{public_slug}", link, legacy_version, manifest
             )
         try:
             manifest = cached_public_manifest(version)
@@ -6694,6 +6711,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.add(orm.TripViewEvent(trip_id=trip.id, share_link_id=link.id))
         db.commit()
         return public_story_response(
+            db,
             request,
             f"/public/stories/{public_slug}/versions/{version.version_number}",
             link,
@@ -6721,6 +6739,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         db.add(orm.TripViewEvent(trip_id=trip.id, share_link_id=link.id))
         db.commit()
         return public_story_response(
+            db,
             request,
             f"/public/stories/{public_slug}/versions/{version.version_number}",
             link,

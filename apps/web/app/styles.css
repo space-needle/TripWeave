@@ -1739,6 +1739,11 @@ button.public-story-home-button {
   overflow-wrap: anywhere;
 }
 
+.public-story-heading small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .public-story-view-toggle,
 .public-story-mobile-tabs {
   display: none;

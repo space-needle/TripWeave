@@ -125,6 +125,11 @@ def build_manifest(
     run = latest_reconstruction_run(db, trip.id)
     if run is None:
         raise PublicationError("not_publishable", "Run reconstruction before publishing")
+    publisher = (
+        db.get(orm.User, story_version.created_by_user_id)
+        if story_version.created_by_user_id is not None
+        else None
+    )
 
     publishable_media_ids = publishable_media_ids_for_trip(db, trip.id)
     if not publishable_media_ids:
@@ -426,6 +431,7 @@ def build_manifest(
             "dayCutoffHour": trip.day_cutoff_hour,
         },
         "participants": sorted(participants.values(), key=lambda item: str(item["displayName"])),
+        "publisher": {"displayName": publisher.display_name} if publisher is not None else None,
         "assets": assets,
         "days": manifest_days,
     }
