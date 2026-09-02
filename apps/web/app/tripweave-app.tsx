@@ -12455,6 +12455,9 @@ function formatShortCalendarDate(value: string | null): string {
     return "";
   }
   const [, year, month, day] = match;
+  if (uiLocale() === "ko-KR") {
+    return `${Number(month)}/${Number(day)}`;
+  }
   const date = new Date(Number(year), Number(month) - 1, Number(day));
   return new Intl.DateTimeFormat(uiLocale(), {
     month: "numeric",
@@ -12470,6 +12473,9 @@ function formatMapPhotoDateLabel(
     return null;
   }
   const [, year, month, day] = match;
+  if (uiLocale() === "ko-KR") {
+    return `${Number(month)}/${Number(day)}`;
+  }
   const date = new Date(Number(year), Number(month) - 1, Number(day));
   return new Intl.DateTimeFormat(uiLocale(), {
     month: "short",
