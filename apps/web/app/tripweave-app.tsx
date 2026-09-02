@@ -2816,12 +2816,14 @@ function OwnerWorkspace() {
               >
                 <summary>
                   <span className="management-summary-copy">
-                    <strong>Invite travelers</strong>
-                    <span>Invite friends to add photos</span>
+                    <strong>{t("collaboration.inviteTravelers")}</strong>
+                    <span>{t("collaboration.inviteDescription")}</span>
                   </span>
                   <small>
-                    {activeMemberCount} member
-                    {activeMemberCount === 1 ? "" : "s"}
+                    {t("collaboration.memberCount", {
+                      count: activeMemberCount,
+                      suffix: activeMemberCount === 1 ? "" : "s",
+                    })}
                   </small>
                 </summary>
                 <div className="stack">
@@ -2834,7 +2836,7 @@ function OwnerWorkspace() {
                       onClick={createInvite}
                       disabled={isBusy}
                     >
-                      Create shared invite link
+                      {t("collaboration.createInvite")}
                     </button>
                   </div>
                   <InvitationList
@@ -2858,18 +2860,20 @@ function OwnerWorkspace() {
             >
               <summary>
                 <span className="management-summary-copy">
-                  <strong>Publish story</strong>
-                  <span>Share a read-only story with anyone</span>
+                  <strong>{t("publication.title")}</strong>
+                  <span>{t("publication.description")}</span>
                 </span>
                 <small>
-                  {activeShareCount} active link
-                  {activeShareCount === 1 ? "" : "s"}
+                  {t("publication.activeLinks", {
+                    count: activeShareCount,
+                    suffix: activeShareCount === 1 ? "" : "s",
+                  })}
                 </small>
               </summary>
               <div className="stack">
                 <div className="button-row">
                   <button type="button" onClick={publishTrip} disabled={isBusy}>
-                    Publish
+                    {t("publication.publish")}
                   </button>
                   <button
                     className="danger"
@@ -2877,7 +2881,7 @@ function OwnerWorkspace() {
                     onClick={unpublishTrip}
                     disabled={isBusy}
                   >
-                    Unpublish
+                    {t("publication.unpublish")}
                   </button>
                 </div>
                 {publicationError ? (
@@ -2885,10 +2889,10 @@ function OwnerWorkspace() {
                 ) : null}
                 {latestShareUrl ? (
                   <div className="invite-card">
-                    <small>Latest published story</small>
+                    <small>{t("publication.latest")}</small>
                     <code>{latestShareUrl}</code>
                     <button type="button" onClick={copyLatestShareUrl}>
-                      Copy link
+                      {t("publication.copyLink")}
                     </button>
                   </div>
                 ) : null}
@@ -2910,8 +2914,8 @@ function OwnerWorkspace() {
           >
             <summary>
               <span className="management-summary-copy">
-                <strong>Manage trip</strong>
-                <span>Edit trip info or update its story</span>
+                <strong>{t("workspace.manageTrip")}</strong>
+                <span>{t("settings.description")}</span>
               </span>
             </summary>
             <form className="stack" onSubmit={updateTrip}>
@@ -2920,10 +2924,8 @@ function OwnerWorkspace() {
                   {canOrganizeSelectedTrip ? (
                     <div className="stack manage-trip-manual-update">
                       <div>
-                        <strong>Update story</strong>
-                        <p>
-                          Rebuild the map and timeline from your latest photos.
-                        </p>
+                        <strong>{t("settings.updateStory")}</strong>
+                        <p>{t("settings.updateDescription")}</p>
                       </div>
                       <div className="story-action-stack">
                         <button
@@ -2967,7 +2969,7 @@ function OwnerWorkspace() {
                   <TripFields form={settingsForm} onChange={setSettingsForm} />
                   <div className="button-row">
                     <button type="submit" disabled={isBusy}>
-                      Save changes
+                      {t("settings.save")}
                     </button>
                     <button
                       className="danger"
@@ -2975,12 +2977,12 @@ function OwnerWorkspace() {
                       onClick={deleteTrip}
                       disabled={isBusy}
                     >
-                      Delete trip
+                      {t("settings.deleteTrip")}
                     </button>
                   </div>
                 </>
               ) : (
-                <p>Select a trip to edit its settings.</p>
+                <p>{t("settings.selectTrip")}</p>
               )}
             </form>
           </details>
@@ -3000,11 +3002,14 @@ function OwnerWorkspace() {
             >
               <summary>
                 <span className="management-summary-copy">
-                  <strong>Review</strong>
-                  <span>Resolve questions in your trip</span>
+                  <strong>{t("workspace.review")}</strong>
+                  <span>{t("review.description")}</span>
                 </span>
                 <small>
-                  {openReviewCount} issue{openReviewCount === 1 ? "" : "s"}
+                  {t("review.issueCount", {
+                    count: openReviewCount,
+                    suffix: openReviewCount === 1 ? "" : "s",
+                  })}
                 </small>
               </summary>
               <div className="stack">
@@ -3033,8 +3038,8 @@ function OwnerWorkspace() {
           data-mobile-tab-panel="appSettings"
         >
           <div>
-            <h2 id="app-settings-title">Settings</h2>
-            <p>Account and workspace preferences</p>
+            <h2 id="app-settings-title">{t("workspace.settings")}</h2>
+            <p>{t("appSettings.description")}</p>
           </div>
         </div>
         <section
@@ -3046,11 +3051,11 @@ function OwnerWorkspace() {
         >
           <div className="mobile-account-card">
             <div>
-              <span>Signed in</span>
+              <span>{t("appSettings.signedIn")}</span>
               <strong>{user.display_name}</strong>
             </div>
             <button type="button" onClick={logout} disabled={isBusy}>
-              Logout
+              {t("common.logout")}
             </button>
           </div>
         </section>
@@ -10332,8 +10337,9 @@ function InvitationList({
   onRevoke: (invitation: InvitationResponse) => void;
   onCopyUrl: (url: string) => void;
 }) {
+  const { t } = useI18n();
   if (invitations.length === 0) {
-    return <p>No invitations yet.</p>;
+    return <p>{t("collaboration.noInvitations")}</p>;
   }
   return (
     <div className="simple-list" role="list">
@@ -10358,6 +10364,7 @@ function InvitationCard({
   onRevoke: (invitation: InvitationResponse) => void;
   onCopyUrl: (url: string) => void;
 }) {
+  const { t } = useI18n();
   const [qrUrl, setQrUrl] = useState("");
 
   useEffect(() => {
@@ -10388,12 +10395,12 @@ function InvitationCard({
           <strong>{invitation.role}</strong>
           <small>
             {invitation.status} · {invitation.useCount}/{invitation.maxUses}{" "}
-            joined
+            {t("collaboration.joined")}
           </small>
         </div>
         {invitation.status !== "revoked" ? (
           <button type="button" onClick={() => onRevoke(invitation)}>
-            Revoke
+            {t("collaboration.revoke")}
           </button>
         ) : null}
       </div>
@@ -10405,11 +10412,15 @@ function InvitationCard({
               type="button"
               onClick={() => onCopyUrl(invitation.inviteUrl!)}
             >
-              Copy link
+              {t("collaboration.copyLink")}
             </button>
           </div>
           {qrUrl ? (
-            <img className="qr-block" src={qrUrl} alt="Invitation QR code" />
+            <img
+              className="qr-block"
+              src={qrUrl}
+              alt={t("collaboration.invitationQr")}
+            />
           ) : null}
         </div>
       ) : null}
@@ -10424,8 +10435,9 @@ function MemberRoster({
   members: MemberResponse[];
   onRemove: (member: MemberResponse) => void;
 }) {
+  const { t } = useI18n();
   if (members.length === 0) {
-    return <p>No members yet.</p>;
+    return <p>{t("collaboration.noMembers")}</p>;
   }
   return (
     <div className="simple-list" role="list">
@@ -10435,13 +10447,13 @@ function MemberRoster({
             <strong>{member.displayName}</strong>
             <small>
               {member.role}
-              {member.isGuest ? " · guest" : ""}{" "}
-              {member.removedAt ? " · removed" : ""}
+              {member.isGuest ? ` · ${t("collaboration.guest")}` : ""}{" "}
+              {member.removedAt ? ` · ${t("collaboration.removed")}` : ""}
             </small>
           </div>
           {!member.removedAt && member.role !== "owner" ? (
             <button type="button" onClick={() => onRemove(member)}>
-              Remove
+              {t("collaboration.remove")}
             </button>
           ) : null}
         </div>
@@ -10459,8 +10471,9 @@ function PublicationList({
   onRevoke: (id: string) => void;
   onCopyUrl: (url: string) => void;
 }) {
+  const { t } = useI18n();
   if (!publications) {
-    return <p>No publication data loaded.</p>;
+    return <p>{t("publication.noData")}</p>;
   }
   const versionsById = new Map(
     publications.versions.map((version) => [version.id, version]),
@@ -10482,12 +10495,12 @@ function PublicationList({
   });
   return (
     <div className="publication-list">
-      <h3>Published versions</h3>
+      <h3>{t("publication.versions")}</h3>
       {latestStoryLink?.latestStoryUrl ? (
         <article className="publication-card publication-card-latest">
           <div className="publication-card-status">
-            <strong>Latest Story</strong>
-            <span>Always opens the newest published version</span>
+            <strong>{t("publication.latestStory")}</strong>
+            <span>{t("publication.latestDescription")}</span>
           </div>
           <div className="publication-card-link">
             <code>{latestStoryLink.latestStoryUrl}</code>
@@ -10495,13 +10508,13 @@ function PublicationList({
               type="button"
               onClick={() => onCopyUrl(latestStoryLink.latestStoryUrl!)}
             >
-              Copy latest link
+              {t("publication.copyLatest")}
             </button>
           </div>
         </article>
       ) : null}
       {publications.shareLinks.length === 0 ? (
-        <p>No versions yet.</p>
+        <p>{t("publication.noVersions")}</p>
       ) : (
         <div className="compact-list">
           {publications.shareLinks.map((link) => {
@@ -10513,13 +10526,15 @@ function PublicationList({
                 <div className="publication-card-status">
                   <strong>
                     {version
-                      ? `Version ${version.versionNumber}`
-                      : "Publishing"}
+                      ? t("publication.version", {
+                          number: version.versionNumber,
+                        })
+                      : t("publication.publishing")}
                   </strong>
                   <span>{version?.state ?? link.status}</span>
                   {link.status === "active" ? (
                     <button type="button" onClick={() => onRevoke(link.id)}>
-                      Revoke
+                      {t("collaboration.revoke")}
                     </button>
                   ) : null}
                 </div>
@@ -10530,7 +10545,7 @@ function PublicationList({
                       type="button"
                       onClick={() => onCopyUrl(link.versionStoryUrl!)}
                     >
-                      Copy version link
+                      {t("publication.copyVersion")}
                     </button>
                   </div>
                 ) : null}
@@ -10555,6 +10570,7 @@ function PublicStoryViewer({
   versionNumber?: number;
   initialView?: "story" | "slideshow";
 }) {
+  const { t } = useI18n();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [story, setStory] = useState<PublicStoryResponse | null>(null);
   const [error, setError] = useState("");
@@ -10638,8 +10654,8 @@ function PublicStoryViewer({
   if (loadState === "loading") {
     return (
       <main className="app-shell">
-        <p className="eyebrow">Published story</p>
-        <h1>Loading story</h1>
+        <p className="eyebrow">{t("publicStory.eyebrow")}</p>
+        <h1>{t("publicStory.loading")}</h1>
       </main>
     );
   }
@@ -10648,9 +10664,9 @@ function PublicStoryViewer({
     return (
       <main className="app-shell">
         <section className="panel stack">
-          <p className="eyebrow">Published story</p>
-          <h1>Story unavailable</h1>
-          <p>{error || "This story is not available."}</p>
+          <p className="eyebrow">{t("publicStory.eyebrow")}</p>
+          <h1>{t("publicStory.unavailable")}</h1>
+          <p>{error || t("publicStory.notAvailable")}</p>
         </section>
       </main>
     );
@@ -10661,7 +10677,8 @@ function PublicStoryViewer({
     description?: unknown;
     timezoneId?: unknown;
   };
-  const title = typeof trip.title === "string" ? trip.title : "Trip story";
+  const title =
+    typeof trip.title === "string" ? trip.title : t("publicStory.defaultTitle");
   const description =
     typeof trip.description === "string" ? trip.description : null;
   const timezoneId =
@@ -10689,31 +10706,44 @@ function PublicStoryViewer({
             <button
               className="public-story-home-button"
               type="button"
-              aria-label={hasAccount ? "My trips" : "TripWeave home"}
+              aria-label={
+                hasAccount ? t("publicStory.myTrips") : t("publicStory.home")
+              }
               onClick={() => window.location.assign("/")}
-              title={hasAccount ? "My trips" : "TripWeave home"}
+              title={
+                hasAccount ? t("publicStory.myTrips") : t("publicStory.home")
+              }
             >
               <StoryHeaderIcon action="home" />
             </button>
             <div>
-              <p className="eyebrow">TripWeave story</p>
+              <p className="eyebrow">{t("publicStory.title")}</p>
               <h1>{title}</h1>
               <p>
                 {description
                   ? description
-                  : `Published version ${story.version.versionNumber}`}
+                  : t("publicStory.version", {
+                      number: story.version.versionNumber,
+                    })}
               </p>
               {publisherDisplayName ? (
-                <small>Published by {publisherDisplayName}</small>
+                <small>
+                  {t("publicStory.publishedBy", {
+                    name: publisherDisplayName,
+                  })}
+                </small>
               ) : null}
             </div>
           </div>
         </div>
-        <nav className="public-story-view-toggle" aria-label="Story view">
+        <nav
+          className="public-story-view-toggle"
+          aria-label={t("publicStory.view")}
+        >
           {(
             [
-              ["map", "Map"],
-              ["timeline", "Timeline"],
+              ["map", t("workspace.map")],
+              ["timeline", t("workspace.timeline")],
             ] as Array<[StoryMobilePane, string]>
           ).map(([action, label]) => (
             <button
@@ -10730,17 +10760,21 @@ function PublicStoryViewer({
           ))}
           <button
             type="button"
-            aria-label="Slideshow"
+            aria-label={t("publicStory.slideshow")}
             aria-pressed={false}
             onClick={() => setPublicView("slideshow")}
-            title="Slideshow"
+            title={t("publicStory.slideshow")}
           >
             <StoryHeaderIcon action="slideshow" />
           </button>
           <span className="public-story-action-divider" aria-hidden="true" />
           <button
             type="button"
-            aria-label={isSaved ? "Remove from saved stories" : "Save story"}
+            aria-label={
+              isSaved
+                ? t("publicStory.removeSaved")
+                : t("publicStory.saveStory")
+            }
             aria-pressed={isSaved}
             className={
               isSaved
@@ -10749,9 +10783,9 @@ function PublicStoryViewer({
             }
             disabled={isSaveBusy}
             onClick={() => void toggleSavedStory()}
-            title={isSaved ? "Saved" : "Save"}
+            title={isSaved ? t("publicStory.saved") : t("publicStory.save")}
           >
-            {isSaved ? "Saved" : "Save"}
+            {isSaved ? t("publicStory.saved") : t("publicStory.save")}
           </button>
         </nav>
       </header>
