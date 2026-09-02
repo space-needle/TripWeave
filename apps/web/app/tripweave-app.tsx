@@ -307,7 +307,8 @@ function LandingPage({
   onCreateAccount: () => void;
   onSignIn: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const sampleTripUrl = sampleTripUrls[locale];
   return (
     <main className="landing-shell">
       <header className="landing-header">
@@ -9907,11 +9908,14 @@ const exampleTripStops: ExampleTripStop[] = [
   },
 ];
 
-const sampleTripUrl =
-  "https://tripweave.chronotrailai.com/story/korea-aef41b9bcda5/v/2";
+const sampleTripUrls = {
+  en: "https://tripweave.chronotrailai.com/story/korea-aef41b9bcda5/v/2",
+  ko: "https://tripweave.chronotrailai.com/story/trip-ff2eff",
+} as const;
 
 function ExampleTripPreview({ onBack }: { onBack: () => void }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const sampleTripUrl = sampleTripUrls[locale];
   return (
     <section className="example-trip" aria-labelledby="example-trip-title">
       <header className="example-trip-header">
