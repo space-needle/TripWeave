@@ -10894,6 +10894,7 @@ function PublicStorySlideshow({
   timezoneId: string;
   onExit: () => void;
 }) {
+  const { t } = useI18n();
   const [requestedActiveIndex, setRequestedActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const shellRef = useRef<HTMLElement | null>(null);
@@ -10985,7 +10986,7 @@ function PublicStorySlideshow({
     <main
       className="slideshow-shell"
       ref={shellRef}
-      aria-label={`${title} slideshow`}
+      aria-label={t("publicStory.slideshowLabel", { title })}
     >
       {visibleMapScene ? <SlideshowMapScene scene={visibleMapScene} /> : null}
       {activePhoto ? (
@@ -10997,7 +10998,7 @@ function PublicStorySlideshow({
       ) : !visibleMapScene ? (
         <div className="slideshow-stage">
           <div className="slideshow-empty">
-            <p>No published photos are available for slideshow.</p>
+            <p>{t("publicStory.noPublishedPhotos")}</p>
           </div>
         </div>
       ) : null}
@@ -11005,13 +11006,24 @@ function PublicStorySlideshow({
         {activeScene?.type === "trip" ? (
           <span className="slideshow-trip-overview-title">{title}</span>
         ) : null}
-        <div className="slideshow-controls" aria-label="Slideshow controls">
+        <div
+          className="slideshow-controls"
+          aria-label={t("publicStory.slideshowControls")}
+        >
           <button
             type="button"
             onClick={() => setIsPaused((value) => !value)}
             disabled={!hasMultipleScenes}
-            aria-label={isPaused || reducedMotion ? "Play" : "Pause"}
-            title={isPaused || reducedMotion ? "Play" : "Pause"}
+            aria-label={
+              isPaused || reducedMotion
+                ? t("publicStory.play")
+                : t("publicStory.pause")
+            }
+            title={
+              isPaused || reducedMotion
+                ? t("publicStory.play")
+                : t("publicStory.pause")
+            }
           >
             <SlideshowControlIcon
               action={isPaused || reducedMotion ? "play" : "pause"}
@@ -11020,16 +11032,16 @@ function PublicStorySlideshow({
           <button
             type="button"
             onClick={() => void requestFullscreen()}
-            aria-label="Full screen"
-            title="Full screen"
+            aria-label={t("publicStory.fullScreen")}
+            title={t("publicStory.fullScreen")}
           >
             <SlideshowControlIcon action="fullscreen" />
           </button>
           <button
             type="button"
             onClick={onExit}
-            aria-label="Back to story"
-            title="Back to story"
+            aria-label={t("publicStory.backToStory")}
+            title={t("publicStory.backToStory")}
           >
             <SlideshowControlIcon action="close" />
           </button>
@@ -11051,9 +11063,9 @@ function PublicStorySlideshow({
             <span className="slideshow-trip-title">{title}</span>
             <span className="slideshow-caption-kicker">
               {activeScene.type === "trip"
-                ? "Trip overview"
+                ? t("publicStory.tripOverview")
                 : activeScene.type === "day"
-                  ? "Day overview"
+                  ? t("publicStory.dayOverview")
                   : activeScene.dayLabel}
             </span>
             <strong>{activeScene.title}</strong>
@@ -11091,7 +11103,7 @@ function PublicStorySlideshow({
           <button
             type="button"
             className="slideshow-nav previous"
-            aria-label="Previous photo"
+            aria-label={t("story.previousPhoto")}
             onClick={goToPrevious}
           >
             {"<"}
@@ -11099,7 +11111,7 @@ function PublicStorySlideshow({
           <button
             type="button"
             className="slideshow-nav next"
-            aria-label="Next photo"
+            aria-label={t("story.nextPhoto")}
             onClick={goToNext}
           >
             {">"}
@@ -11119,6 +11131,7 @@ function SlideshowPhotoStage({
   title: string;
   reducedMotion: boolean;
 }) {
+  const { t } = useI18n();
   const [displayedPhoto, setDisplayedPhoto] = useState(photo);
   const [previousPhoto, setPreviousPhoto] = useState<SlideshowPhoto | null>(
     null,
@@ -11180,7 +11193,9 @@ function SlideshowPhotoStage({
           key={displayedPhoto.id}
         >
           <div
-            aria-label={displayedPhoto.filename ?? `${title} travel photo`}
+            aria-label={
+              displayedPhoto.filename ?? t("publicStory.travelPhoto", { title })
+            }
             className={`slideshow-photo-frame ${
               previousPhoto ? "slideshow-photo-frame-current" : ""
             }`}
