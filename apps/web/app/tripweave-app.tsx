@@ -3776,8 +3776,8 @@ function AdminDashboard() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <h3>Tier management</h3>
-            <p>Review plan limits and update individual accounts.</p>
+            <h3>{t("admin.tiers")}</h3>
+            <p>{t("admin.tiersDescription")}</p>
           </div>
         </div>
         <div className="admin-tier-list">
@@ -3785,9 +3785,11 @@ function AdminDashboard() {
             <div className="admin-tier-item" key={tier.id}>
               <strong>{tier.name}</strong>
               <span>
-                {tier.maxTripsPerUser ?? "unlimited"} trips /{" "}
-                {tier.maxFilesPerTrip ?? "unlimited"} photos /{" "}
-                {formatBytes(tier.monthlyUploadBytes)} monthly
+                {tier.maxTripsPerUser ?? t("admin.unlimited")}{" "}
+                {t("workspace.trips")} /{" "}
+                {tier.maxFilesPerTrip ?? t("admin.unlimited")}{" "}
+                {t("workspace.photos")} / {formatBytes(tier.monthlyUploadBytes)}{" "}
+                {t("admin.monthly")}
               </span>
             </div>
           ))}
@@ -3796,11 +3798,8 @@ function AdminDashboard() {
       <section className="admin-section admin-users-section">
         <div className="admin-section-heading">
           <div>
-            <h3>User management</h3>
-            <p>
-              Find an account, review its usage, and explicitly save tier
-              changes.
-            </p>
+            <h3>{t("admin.userManagement")}</h3>
+            <p>{t("admin.userManagementDescription")}</p>
           </div>
         </div>
         <form
@@ -3820,27 +3819,27 @@ function AdminDashboard() {
           }}
         >
           <div>
-            <h4>Find a user</h4>
-            <p>Search by email to review usage and change a tier.</p>
+            <h4>{t("admin.findUser")}</h4>
+            <p>{t("admin.findUserDescription")}</p>
           </div>
           <label>
-            Email
+            {t("auth.email")}
             <input
               value={userQuery}
               onChange={(event) => setUserQuery(event.target.value)}
-              placeholder="Search by email"
+              placeholder={t("admin.searchEmail")}
             />
           </label>
-          <button type="submit">Search users</button>
+          <button type="submit">{t("admin.searchUsers")}</button>
         </form>
         {adminUsers.length > 0 ? (
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Usage</th>
-                  <th>Tier</th>
+                  <th>{t("admin.user")}</th>
+                  <th>{t("admin.usage")}</th>
+                  <th>{t("admin.tier")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3853,21 +3852,24 @@ function AdminDashboard() {
                     <td>
                       <div>
                         {user.tripCount} /{" "}
-                        {user.tier.maxTripsPerUser ?? "unlimited"} trips
+                        {user.tier.maxTripsPerUser ?? t("admin.unlimited")}{" "}
+                        {t("workspace.trips")}
                       </div>
                       <div>
                         {user.photoCount} /{" "}
-                        {user.tier.maxFilesPerTrip ?? "unlimited"} photos
+                        {user.tier.maxFilesPerTrip ?? t("admin.unlimited")}{" "}
+                        {t("workspace.photos")}
                       </div>
                       <div>
                         {formatBytes(user.monthlyUploadedBytes)} /{" "}
-                        {formatBytes(user.tier.monthlyUploadBytes)} this month
+                        {formatBytes(user.tier.monthlyUploadBytes)}{" "}
+                        {t("admin.monthly")}
                       </div>
                     </td>
                     <td>
                       <select
                         value={pendingTierIds[user.id] ?? user.tier.id}
-                        aria-label={`Tier for ${user.email}`}
+                        aria-label={t("admin.tierFor", { email: user.email })}
                         onChange={(event) =>
                           setPendingTierIds((current) => ({
                             ...current,
@@ -3923,8 +3925,8 @@ function AdminDashboard() {
                         }}
                       >
                         {updatingUserId === user.id
-                          ? "Updating..."
-                          : "Update tier"}
+                          ? t("admin.updating")
+                          : t("admin.updateTier")}
                       </button>
                     </td>
                   </tr>
@@ -3936,7 +3938,7 @@ function AdminDashboard() {
         {adminError ? <p className="error">{adminError}</p> : null}
       </section>
       <details className="admin-create">
-        <summary>Create tier</summary>
+        <summary>{t("admin.createTier")}</summary>
         <form
           className="stack"
           onSubmit={async (event) => {
@@ -3970,7 +3972,7 @@ function AdminDashboard() {
           }}
         >
           <label>
-            Internal ID (slug)
+            {t("admin.internalId")}
             <input
               placeholder="e.g. partner-2026"
               value={tierForm.slug}
@@ -3979,13 +3981,10 @@ function AdminDashboard() {
               }
               required
             />
-            <small>
-              Stable machine-readable identifier. Use lowercase letters,
-              numbers, and hyphens.
-            </small>
+            <small>{t("admin.internalIdHint")}</small>
           </label>
           <label>
-            Display name
+            {t("admin.displayName")}
             <input
               placeholder="e.g. Partner"
               value={tierForm.name}
@@ -3996,7 +3995,7 @@ function AdminDashboard() {
             />
           </label>
           <input
-            placeholder="max trips (blank = unlimited)"
+            placeholder={t("admin.maxTrips")}
             type="number"
             value={tierForm.trips}
             onChange={(event) =>
@@ -4004,7 +4003,7 @@ function AdminDashboard() {
             }
           />
           <input
-            placeholder="max photos (blank = unlimited)"
+            placeholder={t("admin.maxPhotos")}
             type="number"
             value={tierForm.photos}
             onChange={(event) =>
@@ -4012,7 +4011,7 @@ function AdminDashboard() {
             }
           />
           <input
-            placeholder="monthly upload bytes"
+            placeholder={t("admin.monthlyBytes")}
             type="number"
             value={tierForm.bytes}
             onChange={(event) =>
@@ -4020,7 +4019,7 @@ function AdminDashboard() {
             }
             required
           />
-          <button type="submit">Create tier</button>
+          <button type="submit">{t("admin.createTier")}</button>
         </form>
       </details>
     </section>

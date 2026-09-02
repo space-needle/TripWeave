@@ -294,6 +294,33 @@ const messages = {
     "admin.userPhotos": "User photos",
     "admin.photosPerTrip": "Photos per trip",
     "admin.average": "Average {value}",
+    "admin.tiers": "Tier management",
+    "admin.tiersDescription":
+      "Review plan limits and update individual accounts.",
+    "admin.unlimited": "unlimited",
+    "admin.monthly": "monthly",
+    "admin.userManagement": "User management",
+    "admin.userManagementDescription":
+      "Find an account, review its usage, and explicitly save tier changes.",
+    "admin.findUser": "Find a user",
+    "admin.findUserDescription":
+      "Search by email to review usage and change a tier.",
+    "admin.searchEmail": "Search by email",
+    "admin.searchUsers": "Search users",
+    "admin.user": "User",
+    "admin.usage": "Usage",
+    "admin.tier": "Tier",
+    "admin.tierFor": "Tier for {email}",
+    "admin.updating": "Updating...",
+    "admin.updateTier": "Update tier",
+    "admin.createTier": "Create tier",
+    "admin.internalId": "Internal ID (slug)",
+    "admin.internalIdHint":
+      "Stable machine-readable identifier. Use lowercase letters, numbers, and hyphens.",
+    "admin.displayName": "Display name",
+    "admin.maxTrips": "max trips (blank = unlimited)",
+    "admin.maxPhotos": "max photos (blank = unlimited)",
+    "admin.monthlyBytes": "monthly upload bytes",
   },
   ko: {
     "language.label": "언어",
@@ -570,6 +597,33 @@ const messages = {
     "admin.userPhotos": "사용자별 사진",
     "admin.photosPerTrip": "여행별 사진",
     "admin.average": "평균 {value}",
+    "admin.tiers": "티어 관리",
+    "admin.tiersDescription":
+      "요금제 한도를 검토하고 개별 계정을 업데이트합니다.",
+    "admin.unlimited": "무제한",
+    "admin.monthly": "월간",
+    "admin.userManagement": "사용자 관리",
+    "admin.userManagementDescription":
+      "계정을 찾아 사용량을 확인하고 티어 변경을 저장합니다.",
+    "admin.findUser": "사용자 찾기",
+    "admin.findUserDescription":
+      "이메일로 검색해 사용량을 확인하고 티어를 변경하세요.",
+    "admin.searchEmail": "이메일로 검색",
+    "admin.searchUsers": "사용자 검색",
+    "admin.user": "사용자",
+    "admin.usage": "사용량",
+    "admin.tier": "티어",
+    "admin.tierFor": "{email}의 티어",
+    "admin.updating": "업데이트 중...",
+    "admin.updateTier": "티어 업데이트",
+    "admin.createTier": "티어 만들기",
+    "admin.internalId": "내부 ID(슬러그)",
+    "admin.internalIdHint":
+      "안정적인 기계 판독용 식별자입니다. 영문 소문자, 숫자, 하이픈을 사용하세요.",
+    "admin.displayName": "표시 이름",
+    "admin.maxTrips": "최대 여행 수(비워 두면 무제한)",
+    "admin.maxPhotos": "최대 사진 수(비워 두면 무제한)",
+    "admin.monthlyBytes": "월간 업로드 바이트",
   },
 } as const;
 
