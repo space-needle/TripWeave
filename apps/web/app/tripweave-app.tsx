@@ -4822,7 +4822,12 @@ function TripStoryExplorer({
                     (item) => item.stopId === stop.id && item.thumbnailUrl,
                   )
                   .map((item) =>
-                    galleryPhotoFromStoryMedia(item, displayStopTitle(stop)),
+                    galleryPhotoFromStoryMedia(
+                      item,
+                      stop.title ??
+                        stop.placeName ??
+                        t("story.stopFallback", { position: stop.position }),
+                    ),
                   ),
               }))
               .filter((section) => section.photos.length > 0),
@@ -4855,6 +4860,7 @@ function TripStoryExplorer({
     filteredModel.media,
     reconstruction?.days,
     state.selectedDayId,
+    t,
     tripId,
   ]);
   const photoRollPhotoCount = useMemo(
@@ -5219,7 +5225,11 @@ function TripStoryExplorer({
       "placeName" | "position" | "title"
     >,
   ): string {
-    return stop.title ?? stop.placeName ?? `Stop ${stop.position}`;
+    return (
+      stop.title ??
+      stop.placeName ??
+      t("story.stopFallback", { position: stop.position })
+    );
   }
 
   function displayStopPosition(
@@ -5232,7 +5242,7 @@ function TripStoryExplorer({
   }
 
   function displayAreaTitle(area: AreaVisitResponse): string {
-    return area.title ?? `Area ${area.sortOrder}`;
+    return area.title ?? t("story.areaFallback", { position: area.sortOrder });
   }
 
   function areaVisitStopFromReconstructionStop(
@@ -5955,7 +5965,7 @@ function TripStoryExplorer({
     }
     setMergingStopKey(key);
     setMergeStopError("");
-    setPendingTimelineAction("Merging stops...");
+    setPendingTimelineAction(t("story.mergingStops"));
     try {
       await onMergeStops(mergeCandidateStopId, selectedTargetStopId);
       onStateChange(selectStoryStop(state, selectedTargetStopId, dayId));
@@ -5964,7 +5974,9 @@ function TripStoryExplorer({
       setEditToolsStopId(null);
       setEditingNoteKey(null);
     } catch (error) {
-      setMergeStopError(`Could not merge stops. ${messageFrom(error)}`);
+      setMergeStopError(
+        t("story.couldNotMergeStops", { error: messageFrom(error) }),
+      );
     } finally {
       setMergingStopKey(null);
       setPendingTimelineAction(null);
@@ -6011,7 +6023,7 @@ function TripStoryExplorer({
     }
     setSplittingStopKey(key);
     setSplitStopError("");
-    setPendingTimelineAction("Splitting stop...");
+    setPendingTimelineAction(t("story.splittingStop"));
     try {
       await onSplitStop(stopId, afterMediaItemId);
       onStateChange(selectStoryStop(state, stopId, dayId));
@@ -6019,7 +6031,9 @@ function TripStoryExplorer({
       setEditToolsStopId(null);
       setPendingSplitKey(null);
     } catch (error) {
-      setSplitStopError(`Could not split stop. ${messageFrom(error)}`);
+      setSplitStopError(
+        t("story.couldNotSplitStop", { error: messageFrom(error) }),
+      );
     } finally {
       setSplittingStopKey(null);
       setPendingTimelineAction(null);
@@ -6058,7 +6072,7 @@ function TripStoryExplorer({
   }
 
   const selectedLabel =
-    selectedMedia?.filename ?? selectedStop?.label ?? "Trip overview";
+    selectedMedia?.filename ?? selectedStop?.label ?? t("story.tripOverview");
   const activeDay = story.days.find((day) => day.id === state.selectedDayId);
   const activeDayIndex = activeDay
     ? story.days.findIndex((day) => day.id === activeDay.id)
@@ -6112,7 +6126,8 @@ function TripStoryExplorer({
       }
       return {
         type: "stop" as const,
-        label: currentIndex >= 0 ? `${currentIndex + 1}/${total}` : "All",
+        label:
+          currentIndex >= 0 ? `${currentIndex + 1}/${total}` : t("story.all"),
         previousDisabled: currentIndex <= 0,
         nextDisabled: currentIndex >= total - 1,
         previousIndex: currentIndex - 1,
@@ -6263,12 +6278,18 @@ function TripStoryExplorer({
             </strong>
             {selectedStopMetrics ? (
               <div className="story-selected-stop-metrics">
-                <span aria-label={`${selectedStopMetrics.photoCount} photos`}>
+                <span
+                  aria-label={t("story.photoCount", {
+                    count: selectedStopMetrics.photoCount,
+                  })}
+                >
                   <TimelineMetricIcon name="camera" />
                   {selectedStopMetrics.photoCount}
                 </span>
                 <span
-                  aria-label={`${selectedStopMetrics.travelerCount} travelers`}
+                  aria-label={t("story.travelerCount", {
+                    count: selectedStopMetrics.travelerCount,
+                  })}
                 >
                   <TimelineMetricIcon name="travelers" />
                   {selectedStopMetrics.travelerCount}
@@ -6276,11 +6297,19 @@ function TripStoryExplorer({
               </div>
             ) : selectedDayMetrics ? (
               <div className="story-selected-stop-metrics">
-                <span aria-label={`${selectedDayMetrics.stopCount} stops`}>
+                <span
+                  aria-label={t("story.stopCount", {
+                    count: selectedDayMetrics.stopCount,
+                  })}
+                >
                   <TimelineMetricIcon name="stops" />
                   {selectedDayMetrics.stopCount}
                 </span>
-                <span aria-label={`${selectedDayMetrics.photoCount} photos`}>
+                <span
+                  aria-label={t("story.photoCount", {
+                    count: selectedDayMetrics.photoCount,
+                  })}
+                >
                   <TimelineMetricIcon name="camera" />
                   {selectedDayMetrics.photoCount}
                 </span>
@@ -6303,16 +6332,16 @@ function TripStoryExplorer({
                 className="story-summary-pager"
                 aria-label={
                   summaryNavigator.type === "stop"
-                    ? "Navigate stops"
-                    : "Navigate days"
+                    ? t("story.navigateStops")
+                    : t("story.navigateDays")
                 }
               >
                 <button
                   type="button"
                   aria-label={
                     summaryNavigator.type === "stop"
-                      ? "Previous stop"
-                      : "Previous day"
+                      ? t("story.previousStop")
+                      : t("story.previousDay")
                   }
                   disabled={summaryNavigator.previousDisabled}
                   onClick={() => navigateStorySummary("previous")}
@@ -6323,7 +6352,9 @@ function TripStoryExplorer({
                 <button
                   type="button"
                   aria-label={
-                    summaryNavigator.type === "stop" ? "Next stop" : "Next day"
+                    summaryNavigator.type === "stop"
+                      ? t("story.nextStop")
+                      : t("story.nextDay")
                   }
                   disabled={summaryNavigator.nextDisabled}
                   onClick={() => navigateStorySummary("next")}
@@ -6383,8 +6414,10 @@ function TripStoryExplorer({
               {activeDay?.title ?? activeDay?.date ?? t("story.wholeTrip")}
             </span>
             <small>
-              {filteredModel.stops.length} stops · {filteredModel.media.length}{" "}
-              photos
+              {t("story.tripStats", {
+                stops: filteredModel.stops.length,
+                photos: filteredModel.media.length,
+              })}
             </small>
           </div>
           <div
@@ -6429,7 +6462,7 @@ function TripStoryExplorer({
                   type="button"
                   onClick={() => setViewMode(viewMode)}
                 >
-                  {storyViewLabel(viewMode)}
+                  {storyViewLabel(viewMode, t)}
                 </button>
               ),
             )}
@@ -8227,18 +8260,21 @@ function PhotoBrowser({
   );
 }
 
-function storyViewLabel(viewMode: ViewMode): string {
+function storyViewLabel(
+  viewMode: ViewMode,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   switch (viewMode) {
     case "DAY":
-      return "Day";
+      return t("story.day");
     case "STOP":
-      return "Stops";
+      return t("story.stops");
     case "MOMENT":
-      return "Photos";
+      return t("story.photos");
     case "PLAYBACK":
-      return "Time";
+      return t("story.time");
     case "TRIP_OVERVIEW":
-      return "All";
+      return t("story.all");
   }
 }
 
