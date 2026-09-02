@@ -2676,6 +2676,18 @@ def test_review_edit_operations_authorization_undo_and_rerun(
     )
     assert refreshed_manual_leg["geometry"]["coordinates"][0] == [127.03, 35.03]
 
+    reconstructed_after_location_correction = client.post(
+        f"/trips/{trip_id}/reconstruction-runs", headers={"x-csrf-token": csrf_token}
+    )
+    assert reconstructed_after_location_correction.status_code == 200
+    rerun_stop_one = next(
+        stop
+        for stop in reconstructed_after_location_correction.json()["days"][0]["stops"]
+        if stop["id"] == stop_one["id"]
+    )
+    assert rerun_stop_one["latitude"] == 35.03
+    assert rerun_stop_one["longitude"] == 127.03
+
     with engine.connect() as connection:
         stale_updated_at = connection.execute(
             text("SELECT updated_at FROM stops WHERE id = CAST(:id AS uuid)"),

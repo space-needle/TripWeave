@@ -16,6 +16,8 @@ from tripweave.adapters.area_visit_persistence import persist_area_visits_for_tr
 from tripweave.adapters.collaboration_intelligence import analyze_collaboration
 from tripweave.application.timezone_lookup import timezone_for_coordinates
 from tripweave.domain.enums import (
+    EditOperationStatus,
+    EditOperationType,
     ProcessingState,
     ReconstructionRunState,
     ReconstructionSource,
@@ -173,11 +175,12 @@ def reconstruct_trip(
     created = persist_clusters(db, run, trip, clusters, geocoder)
     review_count += assign_missing_gps(db, run, trip.id, rebuild_usable, gps_points)
     restored_days = restore_locked_stop_moments(db, run, locked_snapshots, media_points)
+    refreshed_locked_stop_days = refresh_locked_stop_centroids_from_media(db, trip.id)
     moments = persist_moments(db, run, created, rebuild_usable)
     legs = persist_legs(db, run, created, rebuild_usable)
     merge_visible_trip_days_by_date(db, trip.id, run)
     merge_empty_locked_stops_with_generated_media(db, trip.id, run)
-    for day_id in restored_days:
+    for day_id in restored_days | refreshed_locked_stop_days:
         rebuild_day_legs(db, run, day_id)
     intelligence = analyze_collaboration(db=db, trip_id=trip.id, run=run)
     review_count += intelligence.review_items
@@ -616,6 +619,47 @@ def update_stop_centroid_from_media(db: Session, stop: orm.Stop) -> None:
     latitude = sum(item[0] for item in coordinates) / len(coordinates)
     longitude = sum(item[1] for item in coordinates) / len(coordinates)
     stop.centroid = point_wkt(latitude, longitude)
+
+
+def refresh_locked_stop_centroids_from_media(db: Session, trip_id: UUID) -> set[UUID]:
+    """Refresh inferred centroids retained with user-edited stop structure.
+
+    A split, rename, or note locks a stop's membership so reconstruction keeps
+    that human grouping.  It must not freeze the derived centroid: photo GPS
+    corrections remain the source of truth unless the organizer explicitly
+    placed the stop pin on the map.
+    """
+    refreshed_day_ids: set[UUID] = set()
+    locked_stops = db.scalars(
+        select(orm.Stop).where(
+            orm.Stop.trip_id == trip_id,
+            orm.Stop.user_locked.is_(True),
+        )
+    )
+    for stop in locked_stops:
+        if stop_has_active_manual_location_edit(db, trip_id=trip_id, stop_id=stop.id):
+            continue
+        update_stop_centroid_from_media(db, stop)
+        refreshed_day_ids.add(stop.trip_day_id)
+    return refreshed_day_ids
+
+
+def stop_has_active_manual_location_edit(db: Session, *, trip_id: UUID, stop_id: UUID) -> bool:
+    return (
+        db.scalar(
+            select(orm.EditOperation.id)
+            .where(
+                orm.EditOperation.trip_id == trip_id,
+                orm.EditOperation.target_type == "stop",
+                orm.EditOperation.target_id == stop_id,
+                orm.EditOperation.operation_type == EditOperationType.MOVE_STOP_ON_MAP.value,
+                orm.EditOperation.status == EditOperationStatus.APPLIED.value,
+                orm.EditOperation.undo_of_operation_id.is_(None),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def create_incremental_stop(
