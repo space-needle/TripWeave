@@ -7320,7 +7320,7 @@ function TripStoryExplorer({
                                             setPendingDeleteStopId(null);
                                           }}
                                         >
-                                          Manage stop
+                                          {t("story.manageStop")}
                                         </button>
                                       </div>
                                     ) : null}
@@ -7338,7 +7338,9 @@ function TripStoryExplorer({
                                 {isManagingStop ? (
                                   <div className="timeline-edit-context">
                                     <strong>
-                                      Manage {displayStopTitle(stop)}
+                                      {t("story.manageNamedStop", {
+                                        name: displayStopTitle(stop),
+                                      })}
                                     </strong>
                                   </div>
                                 ) : null}
@@ -7466,13 +7468,13 @@ function TripStoryExplorer({
                                         className="timeline-tool-button"
                                         aria-label={
                                           mergePickerStopId === stop.id
-                                            ? "Cancel merge"
-                                            : "Merge with another stop"
+                                            ? t("story.cancelMerge")
+                                            : t("story.mergeWithAnotherStop")
                                         }
                                         title={
                                           mergePickerStopId === stop.id
-                                            ? "Cancel merge"
-                                            : "Merge"
+                                            ? t("story.cancelMerge")
+                                            : t("story.merge")
                                         }
                                         onClick={() => {
                                           const nextMergeSourceId =
@@ -7491,8 +7493,8 @@ function TripStoryExplorer({
                                         }}
                                       >
                                         {mergePickerStopId === stop.id
-                                          ? "Cancel merge"
-                                          : "Merge"}
+                                          ? t("story.cancelMerge")
+                                          : t("story.merge")}
                                       </button>
                                     ) : null}
                                     {onSplitStop && stopMedia.length > 1 ? (
@@ -7501,13 +7503,13 @@ function TripStoryExplorer({
                                         className="timeline-tool-button"
                                         aria-label={
                                           splitStopId === stop.id
-                                            ? "Cancel split"
-                                            : "Split stop"
+                                            ? t("story.cancelSplit")
+                                            : t("story.splitStop")
                                         }
                                         title={
                                           splitStopId === stop.id
-                                            ? "Cancel split"
-                                            : "Split stop"
+                                            ? t("story.cancelSplit")
+                                            : t("story.splitStop")
                                         }
                                         onClick={() => {
                                           setSplitStopId(
@@ -7520,8 +7522,8 @@ function TripStoryExplorer({
                                         }}
                                       >
                                         {splitStopId === stop.id
-                                          ? "Cancel split"
-                                          : "Split"}
+                                          ? t("story.cancelSplit")
+                                          : t("story.split")}
                                       </button>
                                     ) : null}
                                     {onDeleteStop ? (
@@ -7538,13 +7540,13 @@ function TripStoryExplorer({
                                         }
                                       >
                                         {pendingDeleteStopId === stop.id
-                                          ? "Confirm remove"
-                                          : "Remove stop"}
+                                          ? t("story.confirmRemove")
+                                          : t("story.removeStopAction")}
                                       </button>
                                     ) : null}
                                     {pendingMergeKey ? (
                                       <p className="timeline-stop-edit-hint">
-                                        Click the same stop again to confirm.
+                                        {t("story.confirmSameStop")}
                                       </p>
                                     ) : null}
                                     {mergeStopError ? (
@@ -7557,9 +7559,11 @@ function TripStoryExplorer({
                                 mergeSourceStop ? (
                                   <div className="timeline-merge-target">
                                     <p>
-                                      Merge{" "}
-                                      {displayStopPosition(mergeSourceStop)}{" "}
-                                      into {displayStopPosition(stop)}
+                                      {t("story.mergeInto", {
+                                        source:
+                                          displayStopPosition(mergeSourceStop),
+                                        target: displayStopPosition(stop),
+                                      })}
                                     </p>
                                     <div className="timeline-inline-actions">
                                       <button
@@ -7582,8 +7586,8 @@ function TripStoryExplorer({
                                         }
                                       >
                                         {isPendingMergeHere
-                                          ? "Confirm merge"
-                                          : "Merge here"}
+                                          ? t("story.confirmMerge")
+                                          : t("story.mergeHere")}
                                       </button>
                                       <button
                                         type="button"
@@ -7594,7 +7598,7 @@ function TripStoryExplorer({
                                           setMergeStopError("");
                                         }}
                                       >
-                                        Cancel
+                                        {t("common.cancel")}
                                       </button>
                                     </div>
                                   </div>
@@ -7604,7 +7608,11 @@ function TripStoryExplorer({
                                 mergePickerStopId === stop.id &&
                                 mergeCandidates.length > 0 ? (
                                   <div className="timeline-stop-merge-picker">
-                                    <p>Merge {displayStopTitle(stop)} with:</p>
+                                    <p>
+                                      {t("story.mergeStopWith", {
+                                        stop: displayStopTitle(stop),
+                                      })}
+                                    </p>
                                     <div className="timeline-stop-merge-options">
                                       {mergeCandidates.map((candidate) => {
                                         const mergeKey = `${candidate.id}:${stop.id}`;
@@ -7631,7 +7639,11 @@ function TripStoryExplorer({
                                             }
                                           >
                                             {pending
-                                              ? `Confirm ${candidate.displayPosition}`
+                                              ? t("story.confirmPosition", {
+                                                  position:
+                                                    candidate.displayPosition ??
+                                                    "",
+                                                })
                                               : candidate.displayPosition}
                                           </button>
                                         );
@@ -7645,10 +7657,7 @@ function TripStoryExplorer({
                                 splitStopId === stop.id ? (
                                   <div className="timeline-stop-split">
                                     <div className="timeline-stop-split-panel">
-                                      <p>
-                                        Choose the photo boundary where this
-                                        stop should split.
-                                      </p>
+                                      <p>{t("story.chooseSplitBoundary")}</p>
                                       <div className="timeline-split-boundary-row">
                                         {stopMedia.map((media, index) => {
                                           const splitKey = `${stop.id}:${media.id}`;
@@ -7688,8 +7697,11 @@ function TripStoryExplorer({
                                                       ? "timeline-split-boundary pending"
                                                       : "timeline-split-boundary"
                                                   }
-                                                  aria-label={`Split after photo ${index + 1}`}
-                                                  title="Split here"
+                                                  aria-label={t(
+                                                    "story.splitAfterPhoto",
+                                                    { position: index + 1 },
+                                                  )}
+                                                  title={t("story.splitHere")}
                                                   disabled={
                                                     splittingStopKey ===
                                                     splitKey
@@ -7703,8 +7715,8 @@ function TripStoryExplorer({
                                                   }
                                                 >
                                                   {isPendingSplit
-                                                    ? "Confirm"
-                                                    : "Split"}
+                                                    ? t("story.confirm")
+                                                    : t("story.split")}
                                                 </button>
                                               ) : null}
                                             </Fragment>
