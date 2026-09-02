@@ -1874,11 +1874,11 @@ function OwnerWorkspace() {
                 type="button"
                 onClick={() => setOnboardingView("hidden")}
               >
-                Back to my trips
+                {t("onboarding.backToTrips")}
               </button>
             ) : null}
             <button type="button" onClick={logout} disabled={isBusy}>
-              Logout
+              {t("common.logout")}
             </button>
           </div>
         </header>
@@ -1888,52 +1888,46 @@ function OwnerWorkspace() {
         ) : (
           <section className="onboarding" aria-labelledby="onboarding-title">
             <div className="onboarding-intro">
-              <p className="eyebrow">Your shared travel story starts here</p>
-              <h1 id="onboarding-title">
-                Turn scattered travel photos into one shared story.
-              </h1>
-              <p className="onboarding-lede">
-                Create a trip, invite the people who were there, and weave
-                everyone&apos;s moments into a journey you can revisit.
-              </p>
+              <p className="eyebrow">{t("onboarding.eyebrow")}</p>
+              <h1 id="onboarding-title">{t("onboarding.title")}</h1>
+              <p className="onboarding-lede">{t("onboarding.description")}</p>
 
-              <ol className="onboarding-steps" aria-label="How TripWeave works">
+              <ol
+                className="onboarding-steps"
+                aria-label={t("onboarding.stepsLabel")}
+              >
                 <li>
                   <span>01</span>
                   <div>
-                    <strong>Create a trip</strong>
-                    <p>Give the journey a home before the photos arrive.</p>
+                    <strong>{t("onboarding.step1Title")}</strong>
+                    <p>{t("onboarding.step1Description")}</p>
                   </div>
                 </li>
                 <li>
                   <span>02</span>
                   <div>
-                    <strong>Add photos together</strong>
-                    <p>Invite fellow travelers to contribute their moments.</p>
+                    <strong>{t("onboarding.step2Title")}</strong>
+                    <p>{t("onboarding.step2Description")}</p>
                   </div>
                 </li>
                 <li>
                   <span>03</span>
                   <div>
-                    <strong>Revisit the story</strong>
-                    <p>See the trip take shape as a map and timeline.</p>
+                    <strong>{t("onboarding.step3Title")}</strong>
+                    <p>{t("onboarding.step3Description")}</p>
                   </div>
                 </li>
               </ol>
               <aside className="onboarding-location-tip">
-                <strong>Turn on photo location</strong>
-                <p>
-                  Enable Location in your camera settings. GPS helps TripWeave
-                  place photos on the map and build your route. Photos without
-                  GPS can still be included, but may not appear on the map.
-                </p>
+                <strong>{t("onboarding.locationTitle")}</strong>
+                <p>{t("onboarding.locationDescription")}</p>
               </aside>
               <button
                 className="secondary-button onboarding-example-button"
                 type="button"
                 onClick={() => setOnboardingView("example")}
               >
-                Explore an example trip
+                {t("onboarding.exploreExample")}
               </button>
             </div>
 
@@ -1942,9 +1936,11 @@ function OwnerWorkspace() {
               aria-labelledby="create-first-trip-title"
             >
               <div>
-                <p className="eyebrow">Step 1</p>
-                <h2 id="create-first-trip-title">Create your first trip</h2>
-                <p>Give it a name and add any details you already know.</p>
+                <p className="eyebrow">{t("onboarding.stepOne")}</p>
+                <h2 id="create-first-trip-title">
+                  {t("onboarding.createTitle")}
+                </h2>
+                <p>{t("onboarding.createDescription")}</p>
               </div>
               <form className="stack" onSubmit={createTrip}>
                 <TripFields
@@ -1970,7 +1966,7 @@ function OwnerWorkspace() {
                   </p>
                 ) : null}
                 <button type="submit" disabled={isBusy || tripQuotaReached}>
-                  {isBusy ? "Creating trip..." : "Create your first trip"}
+                  {isBusy ? t("trip.creating") : t("onboarding.createTitle")}
                 </button>
               </form>
             </section>
@@ -1988,7 +1984,7 @@ function OwnerWorkspace() {
           <span>{user.display_name}</span>
         </div>
         <button type="button" onClick={logout} disabled={isBusy}>
-          Logout
+          {t("common.logout")}
         </button>
       </header>
 
@@ -2352,11 +2348,11 @@ function OwnerWorkspace() {
             <>
               <div className="trip-stage-header">
                 <div>
-                  <h2 id="create-trip-title">Create a new trip</h2>
+                  <h2 id="create-trip-title">{t("trip.createNew")}</h2>
                 </div>
               </div>
               <section className="panel create-trip-page">
-                <p>Start with the details you know. You can add photos next.</p>
+                <p>{t("trip.createDescription")}</p>
                 <form className="stack" onSubmit={createTrip}>
                   <TripFields
                     form={createForm}
@@ -2382,14 +2378,14 @@ function OwnerWorkspace() {
                   ) : null}
                   <div className="button-row">
                     <button type="submit" disabled={isBusy || tripQuotaReached}>
-                      {isBusy ? "Creating trip..." : "Create trip"}
+                      {isBusy ? t("trip.creating") : t("trip.create")}
                     </button>
                     <button
                       type="button"
                       className="secondary-button"
                       onClick={() => setMobileTab("trips")}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </button>
                   </div>
                 </form>
@@ -10037,6 +10033,8 @@ function TripFields({
   onChange: (form: TripForm) => void;
   showDayCutoffHour?: boolean;
 }) {
+  const { t } = useI18n();
+
   function setField(field: keyof TripForm, value: string) {
     onChange({ ...form, [field]: value });
   }
@@ -10044,7 +10042,7 @@ function TripFields({
   return (
     <>
       <label>
-        Title
+        {t("trip.title")}
         <input
           value={form.title}
           onChange={(event) => setField("title", event.target.value)}
@@ -10053,7 +10051,7 @@ function TripFields({
       </label>
       <label>
         <span className="field-label">
-          Description <small>Optional</small>
+          {t("trip.description")} <small>{t("trip.optional")}</small>
         </span>
         <textarea
           value={form.description}
@@ -10063,7 +10061,7 @@ function TripFields({
       </label>
       <div className="field-grid">
         <label>
-          Start date
+          {t("trip.startDate")}
           <input
             type="date"
             value={form.startDate}
@@ -10071,7 +10069,7 @@ function TripFields({
           />
         </label>
         <label>
-          End date
+          {t("trip.endDate")}
           <input
             type="date"
             value={form.endDate}
@@ -10081,7 +10079,7 @@ function TripFields({
       </div>
       {showDayCutoffHour ? (
         <label>
-          New day starts at
+          {t("trip.dayCutoff")}
           <input
             max={23}
             min={0}
@@ -10090,9 +10088,7 @@ function TripFields({
             onChange={(event) => setField("dayCutoffHour", event.target.value)}
             required
           />
-          <small>
-            Photos before this hour are grouped with the previous day.
-          </small>
+          <small>{t("trip.dayCutoffDescription")}</small>
         </label>
       ) : null}
     </>

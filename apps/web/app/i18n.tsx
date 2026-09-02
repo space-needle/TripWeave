@@ -44,6 +44,44 @@ const messages = {
     "auth.alreadyHaveAccount": "Already have an account?",
     "auth.createAccount": "Create an owner account",
     "auth.back": "Back to TripWeave",
+    "common.cancel": "Cancel",
+    "common.logout": "Logout",
+    "onboarding.backToTrips": "Back to my trips",
+    "onboarding.eyebrow": "Your shared travel story starts here",
+    "onboarding.title": "Turn scattered travel photos into one shared story.",
+    "onboarding.description":
+      "Create a trip, invite the people who were there, and weave everyone's moments into a journey you can revisit.",
+    "onboarding.stepsLabel": "How TripWeave works",
+    "onboarding.step1Title": "Create a trip",
+    "onboarding.step1Description":
+      "Give the journey a home before the photos arrive.",
+    "onboarding.step2Title": "Add photos together",
+    "onboarding.step2Description":
+      "Invite fellow travelers to contribute their moments.",
+    "onboarding.step3Title": "Revisit the story",
+    "onboarding.step3Description":
+      "See the trip take shape as a map and timeline.",
+    "onboarding.locationTitle": "Turn on photo location",
+    "onboarding.locationDescription":
+      "Enable Location in your camera settings. GPS helps TripWeave place photos on the map and build your route. Photos without GPS can still be included, but may not appear on the map.",
+    "onboarding.exploreExample": "Explore an example trip",
+    "onboarding.stepOne": "Step 1",
+    "onboarding.createTitle": "Create your first trip",
+    "onboarding.createDescription":
+      "Give it a name and add any details you already know.",
+    "trip.creating": "Creating trip...",
+    "trip.create": "Create trip",
+    "trip.createNew": "Create a new trip",
+    "trip.createDescription":
+      "Start with the details you know. You can add photos next.",
+    "trip.title": "Title",
+    "trip.description": "Description",
+    "trip.optional": "Optional",
+    "trip.startDate": "Start date",
+    "trip.endDate": "End date",
+    "trip.dayCutoff": "New day starts at",
+    "trip.dayCutoffDescription":
+      "Photos before this hour are grouped with the previous day.",
   },
   ko: {
     "language.label": "언어",
@@ -73,6 +111,43 @@ const messages = {
     "auth.alreadyHaveAccount": "이미 계정이 있으신가요?",
     "auth.createAccount": "소유자 계정 만들기",
     "auth.back": "TripWeave로 돌아가기",
+    "common.cancel": "취소",
+    "common.logout": "로그아웃",
+    "onboarding.backToTrips": "내 여행으로 돌아가기",
+    "onboarding.eyebrow": "함께한 여행 이야기가 여기서 시작됩니다",
+    "onboarding.title": "흩어진 여행 사진을 하나의 이야기로 만들어 보세요.",
+    "onboarding.description":
+      "여행을 만들고 함께한 사람을 초대해, 모두의 순간을 다시 찾아볼 수 있는 여정으로 엮어 보세요.",
+    "onboarding.stepsLabel": "TripWeave 이용 방법",
+    "onboarding.step1Title": "여행 만들기",
+    "onboarding.step1Description":
+      "사진이 도착하기 전에 여행을 담을 공간을 만드세요.",
+    "onboarding.step2Title": "함께 사진 추가하기",
+    "onboarding.step2Description":
+      "함께 여행한 사람을 초대해 각자의 순간을 더하세요.",
+    "onboarding.step3Title": "이야기 다시 보기",
+    "onboarding.step3Description":
+      "지도와 타임라인으로 완성되는 여행을 살펴보세요.",
+    "onboarding.locationTitle": "사진 위치 정보 켜기",
+    "onboarding.locationDescription":
+      "카메라 설정에서 위치 정보를 켜세요. GPS는 TripWeave가 사진을 지도에 표시하고 이동 경로를 만드는 데 도움이 됩니다. GPS가 없는 사진도 추가할 수 있지만 지도에는 표시되지 않을 수 있습니다.",
+    "onboarding.exploreExample": "예시 여행 둘러보기",
+    "onboarding.stepOne": "1단계",
+    "onboarding.createTitle": "첫 여행 만들기",
+    "onboarding.createDescription":
+      "여행 이름을 정하고 알고 있는 정보를 추가하세요.",
+    "trip.creating": "여행 만드는 중...",
+    "trip.create": "여행 만들기",
+    "trip.createNew": "새 여행 만들기",
+    "trip.createDescription":
+      "알고 있는 정보부터 입력하세요. 사진은 다음에 추가할 수 있습니다.",
+    "trip.title": "제목",
+    "trip.description": "설명",
+    "trip.optional": "선택 사항",
+    "trip.startDate": "시작일",
+    "trip.endDate": "종료일",
+    "trip.dayCutoff": "하루가 시작되는 시각",
+    "trip.dayCutoffDescription": "이 시각 이전의 사진은 전날에 포함됩니다.",
   },
 } as const;
 
