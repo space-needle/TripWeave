@@ -7234,7 +7234,9 @@ function TripStoryExplorer({
                                       toggleAreaSelectionStop(day, stop)
                                     }
                                   >
-                                    {isAreaStopSelected ? "Selected" : "Select"}
+                                    {isAreaStopSelected
+                                      ? t("story.selected")
+                                      : t("story.select")}
                                   </button>
                                 ) : null}
                                 {canEditStop ? (
@@ -7244,8 +7246,10 @@ function TripStoryExplorer({
                                       className="timeline-icon-button"
                                       aria-expanded={isStopActionsOpen}
                                       aria-haspopup="menu"
-                                      aria-label={`Actions for ${displayStopTitle(stop)}`}
-                                      title="Stop actions"
+                                      aria-label={t("story.actionsFor", {
+                                        name: displayStopTitle(stop),
+                                      })}
+                                      title={t("story.stopActions")}
                                       onClick={() => {
                                         if (openStopActionsId === stop.id) {
                                           setOpenStopActionsId(null);
@@ -7274,7 +7278,7 @@ function TripStoryExplorer({
                                             startRenamingStop(stop);
                                           }}
                                         >
-                                          Rename stop
+                                          {t("story.renameStop")}
                                         </button>
                                         <button
                                           type="button"
@@ -7292,7 +7296,7 @@ function TripStoryExplorer({
                                             );
                                           }}
                                         >
-                                          Add note
+                                          {t("story.addNote")}
                                         </button>
                                         <button
                                           type="button"
@@ -7347,7 +7351,7 @@ function TripStoryExplorer({
                                     }}
                                   >
                                     <label>
-                                      Stop name
+                                      {t("story.stopName")}
                                       <input
                                         autoFocus
                                         value={stopTitleDraft}
@@ -7365,8 +7369,8 @@ function TripStoryExplorer({
                                       <button
                                         type="submit"
                                         className="timeline-icon-button"
-                                        aria-label="Save stop name"
-                                        title="Save"
+                                        aria-label={t("story.saveStopName")}
+                                        title={t("settings.save")}
                                         disabled={
                                           savingStopId === stop.id ||
                                           !stopTitleDraft.trim()
@@ -7377,8 +7381,8 @@ function TripStoryExplorer({
                                       <button
                                         type="button"
                                         className="timeline-icon-button"
-                                        aria-label="Cancel renaming"
-                                        title="Cancel"
+                                        aria-label={t("story.cancelStopRename")}
+                                        title={t("common.cancel")}
                                         onClick={() => {
                                           setEditingStopId(null);
                                           setStopTitleDraft("");
@@ -7407,7 +7411,7 @@ function TripStoryExplorer({
                                     }}
                                   >
                                     <label>
-                                      Stop note
+                                      {t("story.stopNote")}
                                       <textarea
                                         value={noteDraft}
                                         onChange={(event) =>
@@ -7421,8 +7425,8 @@ function TripStoryExplorer({
                                       <button
                                         type="submit"
                                         className="timeline-icon-button"
-                                        aria-label="Save stop note"
-                                        title="Save note"
+                                        aria-label={t("story.saveStopNote")}
+                                        title={t("story.saveStopNote")}
                                         disabled={
                                           savingNoteKey === `stop:${stop.id}`
                                         }
@@ -7432,8 +7436,10 @@ function TripStoryExplorer({
                                       <button
                                         type="button"
                                         className="timeline-icon-button"
-                                        aria-label="Cancel note editing"
-                                        title="Cancel"
+                                        aria-label={t(
+                                          "story.cancelNoteEditing",
+                                        )}
+                                        title={t("common.cancel")}
                                         onClick={() => {
                                           setEditingNoteKey(null);
                                           setNoteDraft("");
