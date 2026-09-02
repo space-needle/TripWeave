@@ -962,6 +962,10 @@ p {
   gap: 10px;
 }
 
+.workspace-header > .workspace-header-actions {
+  align-items: center;
+}
+
 .workspace-header strong {
   color: var(--text);
   font-size: 1rem;

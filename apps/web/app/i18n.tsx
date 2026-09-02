@@ -82,6 +82,45 @@ const messages = {
     "trip.dayCutoff": "New day starts at",
     "trip.dayCutoffDescription":
       "Photos before this hour are grouped with the previous day.",
+    "workspace.tripNavigation": "Trip navigation",
+    "workspace.sections": "Workspace sections",
+    "workspace.map": "Map",
+    "workspace.timeline": "Timeline",
+    "workspace.slideshow": "Play slideshow",
+    "workspace.moreOptions": "More options",
+    "workspace.currentTrip": "Current trip",
+    "workspace.currentTripActions": "Current trip actions",
+    "workspace.appActions": "App-wide actions",
+    "workspace.shareTrip": "Share trip",
+    "workspace.createNewTrip": "Create a new trip",
+    "workspace.settings": "Settings",
+    "workspace.trips": "Trips",
+    "workspace.story": "Story",
+    "workspace.tripMap": "Trip map",
+    "workspace.photos": "Photos",
+    "workspace.savedStories": "Saved stories",
+    "workspace.manageTrip": "Manage trip",
+    "workspace.review": "Review",
+    "workspace.noTrips": "No trips yet.",
+    "workspace.guide": "How TripWeave works",
+    "workspace.viewOnboarding": "View onboarding",
+    "workspace.tripCount": "{count} trip{suffix}",
+    "upload.addPhotos": "Add photos",
+    "upload.description": "Upload JPEG or HEIC photos to this trip",
+    "upload.fileTypes": "JPEG and HEIC",
+    "upload.locationTitle": "Turn on photo location",
+    "upload.locationDescription":
+      "Enable Location in your camera settings. GPS helps TripWeave place photos on the map and build your route. Photos without GPS can still be included, but may not appear on the map.",
+    "upload.selectTrip": "Select a trip before uploading photos.",
+    "upload.status": "Upload status",
+    "upload.uploading": "Uploading {count}",
+    "upload.needsAttention": "Uploads need attention",
+    "upload.failed": "Failed {count}",
+    "upload.complete": "{percent}% complete",
+    "upload.progress": "Upload progress",
+    "upload.unknownType": "unknown type",
+    "upload.cancel": "Cancel",
+    "upload.retry": "Retry",
   },
   ko: {
     "language.label": "언어",
@@ -148,6 +187,45 @@ const messages = {
     "trip.endDate": "종료일",
     "trip.dayCutoff": "하루가 시작되는 시각",
     "trip.dayCutoffDescription": "이 시각 이전의 사진은 전날에 포함됩니다.",
+    "workspace.tripNavigation": "여행 탐색",
+    "workspace.sections": "작업 공간 섹션",
+    "workspace.map": "지도",
+    "workspace.timeline": "타임라인",
+    "workspace.slideshow": "슬라이드쇼 재생",
+    "workspace.moreOptions": "더보기",
+    "workspace.currentTrip": "현재 여행",
+    "workspace.currentTripActions": "현재 여행 작업",
+    "workspace.appActions": "앱 전체 작업",
+    "workspace.shareTrip": "여행 공유",
+    "workspace.createNewTrip": "새 여행 만들기",
+    "workspace.settings": "설정",
+    "workspace.trips": "여행",
+    "workspace.story": "이야기",
+    "workspace.tripMap": "여행 지도",
+    "workspace.photos": "사진",
+    "workspace.savedStories": "저장한 이야기",
+    "workspace.manageTrip": "여행 관리",
+    "workspace.review": "검토",
+    "workspace.noTrips": "아직 여행이 없습니다.",
+    "workspace.guide": "TripWeave 이용 방법",
+    "workspace.viewOnboarding": "온보딩 보기",
+    "workspace.tripCount": "여행 {count}개",
+    "upload.addPhotos": "사진 추가",
+    "upload.description": "이 여행에 JPEG 또는 HEIC 사진을 업로드하세요",
+    "upload.fileTypes": "JPEG 및 HEIC",
+    "upload.locationTitle": "사진 위치 정보 켜기",
+    "upload.locationDescription":
+      "카메라 설정에서 위치 정보를 켜세요. GPS는 TripWeave가 사진을 지도에 표시하고 이동 경로를 만드는 데 도움이 됩니다. GPS가 없는 사진도 추가할 수 있지만 지도에는 표시되지 않을 수 있습니다.",
+    "upload.selectTrip": "사진을 업로드할 여행을 선택하세요.",
+    "upload.status": "업로드 상태",
+    "upload.uploading": "{count}개 업로드 중",
+    "upload.needsAttention": "업로드 확인 필요",
+    "upload.failed": "실패 {count}개",
+    "upload.complete": "{percent}% 완료",
+    "upload.progress": "업로드 진행률",
+    "upload.unknownType": "알 수 없는 파일 형식",
+    "upload.cancel": "취소",
+    "upload.retry": "다시 시도",
   },
 } as const;
 
@@ -174,7 +252,7 @@ export function browserLocale(
 type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -205,12 +283,22 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       setLocale,
-      t: (key) => messages[locale][key],
+      t: (key, values) => interpolateMessage(messages[locale][key], values),
     }),
     [locale],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function interpolateMessage(
+  message: string,
+  values: Record<string, string | number> | undefined,
+): string {
+  if (!values) return message;
+  return message.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+    name in values ? String(values[name]) : placeholder,
+  );
 }
 
 export function useI18n(): I18nContextValue {

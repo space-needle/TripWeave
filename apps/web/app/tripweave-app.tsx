@@ -1983,9 +1983,12 @@ function OwnerWorkspace() {
           <strong>TripWeave</strong>
           <span>{user.display_name}</span>
         </div>
-        <button type="button" onClick={logout} disabled={isBusy}>
-          {t("common.logout")}
-        </button>
+        <div className="workspace-header-actions">
+          <LanguageSelector />
+          <button type="button" onClick={logout} disabled={isBusy}>
+            {t("common.logout")}
+          </button>
+        </div>
       </header>
 
       {tripError ? <p className="error">{tripError}</p> : null}
@@ -1997,8 +2000,8 @@ function OwnerWorkspace() {
       >
         {(
           [
-            ["story", "Map", "story"],
-            ["timeline", "Timeline", "timeline"],
+            ["story", t("workspace.map"), "story"],
+            ["timeline", t("workspace.timeline"), "timeline"],
           ] as Array<[MobileWorkspaceTab, string, StoryHeaderIconAction]>
         ).map(([tab, label, icon]) => (
           <button
@@ -2020,27 +2023,27 @@ function OwnerWorkspace() {
         ))}
         <button
           type="button"
-          aria-label="Play slideshow"
+          aria-label={t("workspace.slideshow")}
           disabled={!canOpenOwnerSlideshow}
           onClick={() => {
             setOwnerStoryPhotosOpen(false);
             closeMobileMenus();
             setOwnerSlideshowOpen(true);
           }}
-          title="Play slideshow"
+          title={t("workspace.slideshow")}
         >
           <StoryHeaderIcon action="slideshow" />
         </button>
         <button
           type="button"
-          aria-label="More options"
+          aria-label={t("workspace.moreOptions")}
           aria-expanded={mobileOverflowMenuOpen}
           className={mobileOverflowMenuOpen ? "active" : ""}
           onClick={() => {
             setOwnerStoryPhotosOpen(false);
             setMobileOverflowMenuOpen((current) => !current);
           }}
-          title="More options"
+          title={t("workspace.moreOptions")}
         >
           <StoryHeaderIcon action="more" />
         </button>
@@ -2048,22 +2051,24 @@ function OwnerWorkspace() {
       {mobileOverflowMenuOpen ? (
         <nav
           className="mobile-overflow-menu"
-          aria-label="More options"
+          aria-label={t("workspace.moreOptions")}
           ref={mobileOverflowMenuRef}
         >
           <div className="mobile-overflow-trip">
-            <span className="mobile-overflow-trip-label">Current trip</span>
+            <span className="mobile-overflow-trip-label">
+              {t("workspace.currentTrip")}
+            </span>
             <span className="mobile-overflow-trip-title">
-              {selectedTrip?.title ?? "Current trip"}
+              {selectedTrip?.title ?? t("workspace.currentTrip")}
             </span>
           </div>
           <div
             className="mobile-overflow-trip-actions"
-            aria-label="Current trip actions"
+            aria-label={t("workspace.currentTripActions")}
           >
             <button
               type="button"
-              aria-label="Add photos"
+              aria-label={t("upload.addPhotos")}
               aria-pressed={mobileTab === "photos"}
               className={mobileTab === "photos" ? "active" : ""}
               onClick={() => {
@@ -2071,16 +2076,16 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("photos");
               }}
-              title="Add photos"
+              title={t("upload.addPhotos")}
             >
               <StoryHeaderIcon action="upload" />
-              <span className="mobile-menu-label">Add photos</span>
+              <span className="mobile-menu-label">{t("upload.addPhotos")}</span>
             </button>
             {canManageSelectedTrip ? (
               <>
                 <button
                   type="button"
-                  aria-label="Share trip"
+                  aria-label={t("workspace.shareTrip")}
                   aria-pressed={mobileTab === "share"}
                   className={mobileTab === "share" ? "active" : ""}
                   disabled={
@@ -2091,14 +2096,16 @@ function OwnerWorkspace() {
                     closeMobileMenus();
                     setMobileTab("share");
                   }}
-                  title="Share trip"
+                  title={t("workspace.shareTrip")}
                 >
                   <StoryHeaderIcon action="share" />
-                  <span className="mobile-menu-label">Share trip</span>
+                  <span className="mobile-menu-label">
+                    {t("workspace.shareTrip")}
+                  </span>
                 </button>
                 <button
                   type="button"
-                  aria-label="Manage trip"
+                  aria-label={t("workspace.manageTrip")}
                   aria-pressed={mobileTab === "tripSettings"}
                   className={mobileTab === "tripSettings" ? "active" : ""}
                   disabled={
@@ -2109,10 +2116,12 @@ function OwnerWorkspace() {
                     closeMobileMenus();
                     setMobileTab("tripSettings");
                   }}
-                  title="Manage trip"
+                  title={t("workspace.manageTrip")}
                 >
                   <StoryHeaderIcon action="manage" />
-                  <span className="mobile-menu-label">Manage trip</span>
+                  <span className="mobile-menu-label">
+                    {t("workspace.manageTrip")}
+                  </span>
                 </button>
               </>
             ) : null}
@@ -2120,7 +2129,7 @@ function OwnerWorkspace() {
           <div className="mobile-overflow-divider" aria-hidden="true" />
           <div
             className="mobile-overflow-global-actions"
-            aria-label="App-wide actions"
+            aria-label={t("workspace.appActions")}
           >
             <button
               type="button"
@@ -2130,17 +2139,19 @@ function OwnerWorkspace() {
                   ? "mobile-overflow-create-trip active"
                   : "mobile-overflow-create-trip"
               }
-              aria-label="Create a new trip"
+              aria-label={t("workspace.createNewTrip")}
               disabled={isBusy || tripQuotaReached}
               onClick={openCreateTripForm}
-              title="Create a new trip"
+              title={t("workspace.createNewTrip")}
             >
               <StoryHeaderIcon action="create" />
-              <span className="mobile-menu-label">Create a new trip</span>
+              <span className="mobile-menu-label">
+                {t("workspace.createNewTrip")}
+              </span>
             </button>
             <button
               type="button"
-              aria-label="Trips"
+              aria-label={t("workspace.trips")}
               aria-pressed={mobileTab === "trips"}
               className={mobileTab === "trips" ? "active" : ""}
               onClick={() => {
@@ -2148,14 +2159,14 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("trips");
               }}
-              title="Trips"
+              title={t("workspace.trips")}
             >
               <StoryHeaderIcon action="trips" />
-              <span className="mobile-menu-label">Trips</span>
+              <span className="mobile-menu-label">{t("workspace.trips")}</span>
             </button>
             <button
               type="button"
-              aria-label="Saved stories"
+              aria-label={t("workspace.savedStories")}
               aria-pressed={mobileTab === "savedStories"}
               className={mobileTab === "savedStories" ? "active" : ""}
               onClick={() => {
@@ -2164,14 +2175,16 @@ function OwnerWorkspace() {
                 void loadSavedStories();
                 setMobileTab("savedStories");
               }}
-              title="Saved stories"
+              title={t("workspace.savedStories")}
             >
               <StoryHeaderIcon action="save" />
-              <span className="mobile-menu-label">Saved stories</span>
+              <span className="mobile-menu-label">
+                {t("workspace.savedStories")}
+              </span>
             </button>
             <button
               type="button"
-              aria-label="Trip map"
+              aria-label={t("workspace.tripMap")}
               aria-pressed={mobileTab === "tripBrowse"}
               className={mobileTab === "tripBrowse" ? "active" : ""}
               onClick={() => {
@@ -2179,14 +2192,16 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("tripBrowse");
               }}
-              title="Trip map"
+              title={t("workspace.tripMap")}
             >
               <StoryHeaderIcon action="browse" />
-              <span className="mobile-menu-label">Trip map</span>
+              <span className="mobile-menu-label">
+                {t("workspace.tripMap")}
+              </span>
             </button>
             <button
               type="button"
-              aria-label="Settings"
+              aria-label={t("workspace.settings")}
               aria-pressed={mobileTab === "appSettings"}
               className={mobileTab === "appSettings" ? "active" : ""}
               onClick={() => {
@@ -2194,23 +2209,25 @@ function OwnerWorkspace() {
                 closeMobileMenus();
                 setMobileTab("appSettings");
               }}
-              title="Settings"
+              title={t("workspace.settings")}
             >
               <StoryHeaderIcon action="settings" />
-              <span className="mobile-menu-label">Settings</span>
+              <span className="mobile-menu-label">
+                {t("workspace.settings")}
+              </span>
             </button>
             <button
               type="button"
-              aria-label="How TripWeave works"
+              aria-label={t("workspace.guide")}
               onClick={() => {
                 setOwnerStoryPhotosOpen(false);
                 closeMobileMenus();
                 setOnboardingView("welcome");
               }}
-              title="How TripWeave works"
+              title={t("workspace.guide")}
             >
               <StoryHeaderIcon action="help" />
-              <span className="mobile-menu-label">How TripWeave works</span>
+              <span className="mobile-menu-label">{t("workspace.guide")}</span>
             </button>
           </div>
         </nav>
@@ -2224,9 +2241,12 @@ function OwnerWorkspace() {
           data-mobile-tab-panel="trips"
         >
           <div>
-            <h2>Trips</h2>
+            <h2>{t("workspace.trips")}</h2>
             <p>
-              {trips.length} trip{trips.length === 1 ? "" : "s"}
+              {t("workspace.tripCount", {
+                count: trips.length,
+                suffix: trips.length === 1 ? "" : "s",
+              })}
             </p>
           </div>
         </div>
@@ -2234,15 +2254,18 @@ function OwnerWorkspace() {
           className={`trip-nav panel ${
             mobileTab === "trips" ? "mobile-tab-active" : ""
           }`}
-          aria-label="Trip navigation"
+          aria-label={t("workspace.tripNavigation")}
           data-mobile-tab-panel="trips"
         >
-          <nav className="trip-primary-nav" aria-label="Workspace sections">
+          <nav
+            className="trip-primary-nav"
+            aria-label={t("workspace.sections")}
+          >
             <a
               href="#trip-stage-title"
               className={mobileTab === "tripBrowse" ? "" : "active"}
             >
-              Story
+              {t("workspace.story")}
             </a>
             <button
               type="button"
@@ -2252,9 +2275,9 @@ function OwnerWorkspace() {
                 setMobileTab("tripBrowse");
               }}
             >
-              Trip map
+              {t("workspace.tripMap")}
             </button>
-            <a href="#add-photos-panel">Photos</a>
+            <a href="#add-photos-panel">{t("workspace.photos")}</a>
             <button
               type="button"
               className={mobileTab === "savedStories" ? "active" : ""}
@@ -2263,12 +2286,12 @@ function OwnerWorkspace() {
                 setMobileTab("savedStories");
               }}
             >
-              Saved stories
+              {t("workspace.savedStories")}
             </button>
-            <a href="#settings-panel">Manage trip</a>
+            <a href="#settings-panel">{t("workspace.manageTrip")}</a>
             {selectedTrip && ["owner", "editor"].includes(selectedTrip.role) ? (
               <>
-                <a href="#review-panel">Review</a>
+                <a href="#review-panel">{t("workspace.review")}</a>
               </>
             ) : null}
           </nav>
@@ -2277,13 +2300,16 @@ function OwnerWorkspace() {
             aria-labelledby="trip-list-title"
           >
             <div className="nav-section-heading">
-              <h2 id="trip-list-title">Trips</h2>
+              <h2 id="trip-list-title">{t("workspace.trips")}</h2>
               <span>
-                {trips.length} trip{trips.length === 1 ? "" : "s"}
+                {t("workspace.tripCount", {
+                  count: trips.length,
+                  suffix: trips.length === 1 ? "" : "s",
+                })}
               </span>
             </div>
             {trips.length === 0 ? (
-              <p>No trips yet.</p>
+              <p>{t("workspace.noTrips")}</p>
             ) : (
               <div className="trip-list">
                 {tripYearGroups.map((group) => (
@@ -2320,8 +2346,8 @@ function OwnerWorkspace() {
             type="button"
             onClick={() => setOnboardingView("welcome")}
           >
-            <span>How TripWeave works</span>
-            <small>View onboarding</small>
+            <span>{t("workspace.guide")}</span>
+            <small>{t("workspace.viewOnboarding")}</small>
           </button>
         </aside>
 
@@ -2671,8 +2697,8 @@ function OwnerWorkspace() {
           >
             <div className="management-panel-static-heading">
               <span className="management-summary-copy">
-                <strong>Add photos</strong>
-                <span>Upload JPEG or HEIC photos to this trip</span>
+                <strong>{t("upload.addPhotos")}</strong>
+                <span>{t("upload.description")}</span>
               </span>
             </div>
             {selectedTrip ? (
@@ -2683,7 +2709,7 @@ function OwnerWorkspace() {
                   onDrop={onDrop}
                 >
                   <label>
-                    Add photos
+                    {t("upload.addPhotos")}
                     <input
                       accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
                       disabled={uploadQuotaReached}
@@ -2695,16 +2721,12 @@ function OwnerWorkspace() {
                   <p>
                     {uploadQuota
                       ? uploadQuotaMessage(uploadQuota)
-                      : "JPEG and HEIC"}
+                      : t("upload.fileTypes")}
                   </p>
                 </div>
                 <aside className="photo-location-tip">
-                  <strong>Turn on photo location</strong>
-                  <p>
-                    Enable Location in your camera settings. GPS helps TripWeave
-                    place photos on the map and build your route. Photos without
-                    GPS can still be included, but may not appear on the map.
-                  </p>
+                  <strong>{t("upload.locationTitle")}</strong>
+                  <p>{t("upload.locationDescription")}</p>
                 </aside>
                 {uploadError ? <p className="error">{uploadError}</p> : null}
                 <StoryAutoUpdateNotice
@@ -2722,7 +2744,7 @@ function OwnerWorkspace() {
                 />
               </div>
             ) : (
-              <p>Select a trip before uploading photos.</p>
+              <p>{t("upload.selectTrip")}</p>
             )}
           </section>
           <details
@@ -10181,6 +10203,7 @@ function UploadFileList({
   onCancel: (file: UploadFileResponse) => void;
   onRetry: (file: UploadFileResponse, selectedFile?: File) => void;
 }) {
+  const { t } = useI18n();
   const visibleFiles = files
     .map((file) => {
       const itemProgress = progress[file.id];
@@ -10212,19 +10235,21 @@ function UploadFileList({
   const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
 
   return (
-    <section className="upload-status" aria-label="Upload status">
+    <section className="upload-status" aria-label={t("upload.status")}>
       <div className="upload-summary">
         <strong>
           {activeCount > 0
-            ? `Uploading ${activeCount}`
-            : "Uploads need attention"}
+            ? t("upload.uploading", { count: activeCount })
+            : t("upload.needsAttention")}
         </strong>
         <small>
-          {failedCount > 0 ? `Failed ${failedCount}` : `${percent}% complete`}
+          {failedCount > 0
+            ? t("upload.failed", { count: failedCount })
+            : t("upload.complete", { percent })}
         </small>
       </div>
       {activeCount > 0 ? (
-        <progress max={100} value={percent} aria-label="Upload progress" />
+        <progress max={100} value={percent} aria-label={t("upload.progress")} />
       ) : null}
       <div className="upload-list" role="list">
         {visibleFiles.map(({ file, itemProgress, status }) => {
@@ -10236,20 +10261,20 @@ function UploadFileList({
               <div>
                 <strong>{file.filename}</strong>
                 <small>
-                  {status} · {file.mimeType ?? "unknown type"}
+                  {status} · {file.mimeType ?? t("upload.unknownType")}
                 </small>
               </div>
               <progress
                 max={100}
                 value={percent}
-                aria-label={`${file.filename} progress`}
+                aria-label={`${file.filename} ${t("upload.progress")}`}
               />
               <div className="button-row">
                 {["uploading", "pending", "registered", "failed"].includes(
                   status,
                 ) ? (
                   <button type="button" onClick={() => onCancel(file)}>
-                    Cancel
+                    {t("upload.cancel")}
                   </button>
                 ) : null}
                 {file.grant &&
@@ -10257,7 +10282,7 @@ function UploadFileList({
                   file.state === "registered" ||
                   file.state === "transferring") ? (
                   <label className="file-action">
-                    Retry
+                    {t("upload.retry")}
                     <input
                       accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
                       type="file"
