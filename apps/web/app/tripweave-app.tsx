@@ -4666,6 +4666,7 @@ function TripStoryExplorer({
   onMobilePaneChange?: (pane: StoryMobilePane) => void;
   timezoneId: string;
 }) {
+  const { t } = useI18n();
   const model = useMemo(
     () => buildStoryModel(reconstruction),
     [reconstruction],
@@ -5066,7 +5067,7 @@ function TripStoryExplorer({
   if (isLoading) {
     return (
       <div className="story-empty" aria-busy="true">
-        <p>Loading...</p>
+        <p>{t("story.loading")}</p>
       </div>
     );
   }
@@ -5074,9 +5075,7 @@ function TripStoryExplorer({
   if (!reconstruction?.latestRun) {
     return (
       <div className="story-empty">
-        <p>
-          Refresh the story after adding photos to build the map and timeline.
-        </p>
+        <p>{t("story.empty")}</p>
       </div>
     );
   }
@@ -6191,19 +6190,19 @@ function TripStoryExplorer({
       {hasMapContextBar && activeDay && activeDayPhotoLabel ? (
         <div
           className="story-map-context-bar"
-          aria-label="Selected day controls"
+          aria-label={t("story.selectedDayControls")}
         >
           {canReturnToAllDays ? (
             <button
               type="button"
               className="story-map-context-back"
-              aria-label="Show all days"
+              aria-label={t("story.allDays")}
               onClick={() => setViewMode("TRIP_OVERVIEW")}
             >
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="m15 18-6-6 6-6" />
               </svg>
-              <span>All days</span>
+              <span>{t("story.allDays")}</span>
             </button>
           ) : (
             <span aria-hidden="true" />
@@ -6216,14 +6215,16 @@ function TripStoryExplorer({
             <button
               type="button"
               className="story-map-context-photos"
-              aria-label={`Browse ${activeDayPhotoLabel} photos`}
+              aria-label={t("story.browsePhotos", {
+                date: activeDayPhotoLabel,
+              })}
               onClick={onOpenPhotos}
             >
               <StoryHeaderIcon action="photos" />
               <span className="story-map-context-photo-date">
                 {activeDayPhotoLabel}
               </span>
-              <span>photos</span>
+              <span>{t("story.photos")}</span>
             </button>
           ) : (
             <span aria-hidden="true" />
@@ -6246,19 +6247,19 @@ function TripStoryExplorer({
           <div>
             <span>
               {isCollapsedAreaSelected
-                ? "Selected area"
+                ? t("story.selectedArea")
                 : selectedStop
-                  ? "Selected stop"
+                  ? t("story.selectedStop")
                   : activeDay
-                    ? "Selected day"
-                    : "Map note"}
+                    ? t("story.selectedDay")
+                    : t("story.mapNote")}
             </span>
             <strong>
               {selectedStopTitle
                 ? selectedStopTitle
                 : activeDay
                   ? storyDayLabel(activeDay)
-                  : "No stop selected"}
+                  : t("story.noStop")}
             </strong>
             {selectedStopMetrics ? (
               <div className="story-selected-stop-metrics">
@@ -6289,7 +6290,9 @@ function TripStoryExplorer({
             )}
             {selectedNote ? (
               <div className="story-selected-note">
-                <span>{selectedStop ? "Stop note" : "Day note"}</span>
+                <span>
+                  {selectedStop ? t("story.stopNote") : t("story.dayNote")}
+                </span>
                 <p>{selectedNote}</p>
               </div>
             ) : null}
@@ -6337,10 +6340,10 @@ function TripStoryExplorer({
         <div className="story-panel-header">
           <div>
             <p className="eyebrow">
-              {activeDay ? storyDayDateLabel(activeDay) : "Timeline"}
+              {activeDay ? storyDayDateLabel(activeDay) : t("story.timeline")}
             </p>
             <h3>{activeDay?.title ?? activeDay?.date ?? selectedLabel}</h3>
-            <p>Follow the route through days, stops, and photo moments.</p>
+            <p>{t("story.timelineDescription")}</p>
           </div>
           <div className="story-panel-actions">
             <button
@@ -6348,7 +6351,7 @@ function TripStoryExplorer({
               onClick={() => onStateChange(followStory(state))}
               disabled={state.mapControlMode === "STORY_CONTROLLED"}
             >
-              Follow
+              {t("story.follow")}
             </button>
             <button
               type="button"
@@ -6356,7 +6359,7 @@ function TripStoryExplorer({
                 onStateChange(advancePlayback(state, filteredModel))
               }
             >
-              Play
+              {t("story.play")}
             </button>
             {galleryPhotos.length > 0 ? (
               <button
@@ -6369,26 +6372,32 @@ function TripStoryExplorer({
                   );
                 }}
               >
-                Browse photos
+                {t("story.browseAllPhotos")}
               </button>
             ) : null}
           </div>
         </div>
-        <div className="story-toolbar" aria-label="Story controls">
+        <div className="story-toolbar" aria-label={t("story.controls")}>
           <div className="story-scope-summary">
-            <span>{activeDay?.title ?? activeDay?.date ?? "Whole trip"}</span>
+            <span>
+              {activeDay?.title ?? activeDay?.date ?? t("story.wholeTrip")}
+            </span>
             <small>
               {filteredModel.stops.length} stops · {filteredModel.media.length}{" "}
               photos
             </small>
           </div>
-          <div className="story-day-tabs" role="group" aria-label="Story days">
+          <div
+            className="story-day-tabs"
+            role="group"
+            aria-label={t("story.days")}
+          >
             <button
               type="button"
               className={state.viewMode === "TRIP_OVERVIEW" ? "active" : ""}
               onClick={() => setViewMode("TRIP_OVERVIEW")}
             >
-              All
+              {t("story.all")}
             </button>
             {story.days.map((day) => (
               <button
@@ -6409,7 +6418,7 @@ function TripStoryExplorer({
           <div
             className="segmented-control"
             role="group"
-            aria-label="View mode"
+            aria-label={t("story.viewMode")}
           >
             {(["DAY", "STOP", "MOMENT", "PLAYBACK"] as ViewMode[]).map(
               (viewMode) => (
@@ -6426,14 +6435,14 @@ function TripStoryExplorer({
             )}
           </div>
           <label className="compact-field">
-            Traveler
+            {t("story.traveler")}
             <select
               value={state.contributorFilter}
               onChange={(event) =>
                 onStateChange(setContributorFilter(state, event.target.value))
               }
             >
-              <option value={EVERYONE}>Everyone</option>
+              <option value={EVERYONE}>{t("story.everyone")}</option>
               {model.contributors.map((contributor) => (
                 <option key={contributor.id} value={contributor.id}>
                   {contributor.name}
@@ -6449,16 +6458,18 @@ function TripStoryExplorer({
               <strong>
                 {activeDay
                   ? `${storyDayLabel(activeDay)} photos`
-                  : "Trip photos"}
+                  : t("story.tripPhotos")}
               </strong>
               <span>
-                {photoRollPhotoCount ||
-                  activeDay?.stops.reduce(
-                    (total, stop) => total + stop.mediaCount,
+                {t("story.groupedPhotos", {
+                  count:
+                    photoRollPhotoCount ||
+                    activeDay?.stops.reduce(
+                      (total, stop) => total + stop.mediaCount,
+                      0,
+                    ) ||
                     0,
-                  ) ||
-                  0}{" "}
-                photos grouped by stop
+                })}
               </span>
             </div>
             <button
@@ -6470,14 +6481,17 @@ function TripStoryExplorer({
                 }
               }}
             >
-              Browse day photos
+              {t("story.browseDayPhotos")}
             </button>
           </div>
         ) : null}
         {photoProjectionError ? (
           <p className="error">{photoProjectionError}</p>
         ) : null}
-        <section className="story-timeline" aria-label="Chronological timeline">
+        <section
+          className="story-timeline"
+          aria-label={t("story.chronologicalTimeline")}
+        >
           <p className="screen-reader-map-summary">
             Map alternative: {filteredModel.stops.length} stops,{" "}
             {filteredModel.media.length} photos, selected {selectedLabel}.
@@ -6486,7 +6500,7 @@ function TripStoryExplorer({
             <div
               className="timeline-day-strip"
               role="group"
-              aria-label="Timeline days"
+              aria-label={t("story.timelineDays")}
             >
               {story.days.map((day) => {
                 const dateParts = timelineDayDateParts(day);
