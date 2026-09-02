@@ -6846,7 +6846,9 @@ function TripStoryExplorer({
                           >
                             <div className="timeline-area-heading-main">
                               <span className="timeline-area-kicker">
-                                Area {areaContext.area.sortOrder}
+                                {t("story.area", {
+                                  position: areaContext.area.sortOrder,
+                                })}
                               </span>
                               <strong>
                                 {displayAreaTitle(areaContext.area)}
@@ -6883,8 +6885,10 @@ function TripStoryExplorer({
                                     openAreaActionsId === areaContext.area.id
                                   }
                                   aria-haspopup="menu"
-                                  aria-label={`Actions for ${displayAreaTitle(areaContext.area)}`}
-                                  title="Area actions"
+                                  aria-label={t("story.actionsFor", {
+                                    name: displayAreaTitle(areaContext.area),
+                                  })}
+                                  title={t("story.areaActions")}
                                   onClick={() => {
                                     if (
                                       openAreaActionsId === areaContext.area.id
@@ -6914,7 +6918,7 @@ function TripStoryExplorer({
                                         );
                                       }}
                                     >
-                                      Rename area
+                                      {t("story.renameArea")}
                                     </button>
                                     <button
                                       type="button"
@@ -6941,7 +6945,7 @@ function TripStoryExplorer({
                                         }
                                       }}
                                     >
-                                      Manage area
+                                      {t("story.manageArea")}
                                     </button>
                                     <button
                                       type="button"
@@ -6953,7 +6957,7 @@ function TripStoryExplorer({
                                         void deleteArea(areaContext.area);
                                       }}
                                     >
-                                      Delete area
+                                      {t("story.deleteArea")}
                                     </button>
                                   </div>
                                 ) : null}
@@ -6971,7 +6975,7 @@ function TripStoryExplorer({
                                     }}
                                   >
                                     <label>
-                                      Area name
+                                      {t("story.areaName")}
                                       <input
                                         autoFocus
                                         value={areaTitleDraft}
@@ -6989,8 +6993,8 @@ function TripStoryExplorer({
                                       <button
                                         type="submit"
                                         className="timeline-icon-button"
-                                        aria-label="Save area name"
-                                        title="Save"
+                                        aria-label={t("story.saveAreaName")}
+                                        title={t("settings.save")}
                                         disabled={
                                           savingAreaActionKey ===
                                             `rename:${areaContext.area.id}` ||
@@ -7002,8 +7006,8 @@ function TripStoryExplorer({
                                       <button
                                         type="button"
                                         className="timeline-icon-button"
-                                        aria-label="Cancel area renaming"
-                                        title="Cancel"
+                                        aria-label={t("story.cancelAreaRename")}
+                                        title={t("common.cancel")}
                                         onClick={() => {
                                           setEditingAreaId(null);
                                           setAreaEditingMode(null);
@@ -7019,8 +7023,11 @@ function TripStoryExplorer({
                                 {areaEditingMode === "manage" ? (
                                   <div className="timeline-edit-context">
                                     <strong>
-                                      Manage{" "}
-                                      {displayAreaTitle(areaContext.area)}
+                                      {t("story.manageNamedArea", {
+                                        name: displayAreaTitle(
+                                          areaContext.area,
+                                        ),
+                                      })}
                                     </strong>
                                   </div>
                                 ) : null}
@@ -7044,8 +7051,11 @@ function TripStoryExplorer({
                                           )
                                         }
                                       >
-                                        Add before:{" "}
-                                        {displayStopPosition(previousAreaStop)}
+                                        {t("story.addBefore", {
+                                          stop: displayStopPosition(
+                                            previousAreaStop,
+                                          ),
+                                        })}
                                       </button>
                                     ) : null}
                                     {nextAreaStop ? (
@@ -7064,8 +7074,11 @@ function TripStoryExplorer({
                                           )
                                         }
                                       >
-                                        Add after:{" "}
-                                        {displayStopPosition(nextAreaStop)}
+                                        {t("story.addAfter", {
+                                          stop: displayStopPosition(
+                                            nextAreaStop,
+                                          ),
+                                        })}
                                       </button>
                                     ) : null}
                                   </div>
@@ -7098,7 +7111,9 @@ function TripStoryExplorer({
                                             )
                                           }
                                         >
-                                          Remove {displayStopPosition(areaStop)}
+                                          {t("story.removeStop", {
+                                            stop: displayStopPosition(areaStop),
+                                          })}
                                         </button>
                                       ))}
                                   </div>
