@@ -5524,6 +5524,28 @@ button.thumb-frame:focus-visible {
     gap: 2px;
   }
 
+  .mobile-language-selector {
+    display: block;
+    padding: 4px 5px;
+  }
+
+  .mobile-language-selector select {
+    width: 100%;
+    min-height: 40px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.84rem;
+    font-weight: 800;
+    padding: 8px 10px;
+  }
+
+  .mobile-language-selector select:hover,
+  .mobile-language-selector select:focus-visible {
+    background: #f1f7f4;
+  }
+
   .mobile-trip-actions button {
     width: 32px;
     height: 32px;

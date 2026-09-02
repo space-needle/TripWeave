@@ -2216,6 +2216,7 @@ function OwnerWorkspace() {
                 {t("workspace.settings")}
               </span>
             </button>
+            <LanguageSelector className="mobile-language-selector" />
             <button
               type="button"
               aria-label={t("workspace.guide")}
