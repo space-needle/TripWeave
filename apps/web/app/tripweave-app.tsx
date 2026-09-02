@@ -3600,6 +3600,7 @@ function uploadQuotaMessage(quota: UploadQuotaResponse): string {
 }
 
 function AdminDashboard() {
+  const { t } = useI18n();
   const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(
     null,
   );
@@ -3638,49 +3639,49 @@ function AdminDashboard() {
   }, []);
   if (adminLoadState === "loading") {
     return (
-      <section className="panel stack" aria-label="Operations dashboard">
-        <h1>Loading operations dashboard</h1>
+      <section className="panel stack" aria-label={t("admin.dashboard")}>
+        <h1>{t("admin.loading")}</h1>
       </section>
     );
   }
   if (!dashboard) {
     return (
-      <section className="panel stack" aria-label="Operations dashboard">
-        <h1>Operator access required</h1>
-        <p>Sign in with an account configured for operator access.</p>
+      <section className="panel stack" aria-label={t("admin.dashboard")}>
+        <h1>{t("admin.accessRequired")}</h1>
+        <p>{t("admin.accessDescription")}</p>
       </section>
     );
   }
   const latest = dashboard.trend.at(-1);
   return (
-    <section className="admin-dashboard" aria-label="Operations dashboard">
+    <section className="admin-dashboard" aria-label={t("admin.dashboard")}>
       <div className="admin-heading">
-        <h2>Operations overview</h2>
-        <p>Usage, audience activity, and quota controls</p>
-        <span>Last 30 days</span>
+        <h2>{t("admin.overview")}</h2>
+        <p>{t("admin.overviewDescription")}</p>
+        <span>{t("admin.last30Days")}</span>
       </div>
       <section className="admin-section">
-        <h3>Usage summary</h3>
+        <h3>{t("admin.usageSummary")}</h3>
         <div className="admin-metrics">
           <strong className="admin-metric">
             {dashboard.totals.users}
-            <small>Users</small>
+            <small>{t("admin.users")}</small>
           </strong>
           <strong className="admin-metric">
             {dashboard.totals.trips}
-            <small>Trips</small>
+            <small>{t("workspace.trips")}</small>
           </strong>
           <strong className="admin-metric">
             {dashboard.totals.photos}
-            <small>Photos</small>
+            <small>{t("workspace.photos")}</small>
           </strong>
           <strong className="admin-metric">
             {latest?.active_users ?? 0}
-            <small>Signed-in today</small>
+            <small>{t("admin.todaySignedIn")}</small>
           </strong>
           <strong className="admin-metric">
             {latest?.trip_views ?? 0}
-            <small>Story views today</small>
+            <small>{t("admin.todayViews")}</small>
           </strong>
         </div>
         <p className="admin-note">
@@ -3692,22 +3693,22 @@ function AdminDashboard() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <h3>Daily activity</h3>
-            <p>New accounts, content creation, and public story reach.</p>
+            <h3>{t("admin.activity")}</h3>
+            <p>{t("admin.activityDescription")}</p>
           </div>
-          <span>30 days</span>
+          <span>{t("admin.last30Days")}</span>
         </div>
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>New users</th>
-                <th>Signed-in users</th>
-                <th>New trips</th>
-                <th>Photos</th>
-                <th>Story views</th>
-                <th>Trips viewed</th>
+                <th>{t("admin.date")}</th>
+                <th>{t("admin.newUsers")}</th>
+                <th>{t("admin.todaySignedIn")}</th>
+                <th>{t("admin.newTrips")}</th>
+                <th>{t("workspace.photos")}</th>
+                <th>{t("admin.storyViews")}</th>
+                <th>{t("admin.tripsViewed")}</th>
               </tr>
             </thead>
             <tbody>
@@ -3729,30 +3730,42 @@ function AdminDashboard() {
       <section className="admin-section">
         <div className="admin-section-heading">
           <div>
-            <h3>Usage distributions</h3>
-            <p>How usage is spread across users and trips.</p>
+            <h3>{t("admin.distributions")}</h3>
+            <p>{t("admin.distributionsDescription")}</p>
           </div>
         </div>
         <div className="admin-distribution-grid">
           <div className="admin-distribution-card">
-            <strong>User trips</strong>
-            <span>Average {dashboard.distributions.trips_avg ?? 0}</span>
+            <strong>{t("admin.userTrips")}</strong>
+            <span>
+              {t("admin.average", {
+                value: dashboard.distributions.trips_avg ?? 0,
+              })}
+            </span>
             <small>
               p50 {dashboard.distributions.trips_p50 ?? 0} / p90{" "}
               {dashboard.distributions.trips_p90 ?? 0}
             </small>
           </div>
           <div className="admin-distribution-card">
-            <strong>User photos</strong>
-            <span>Average {dashboard.distributions.photos_avg ?? 0}</span>
+            <strong>{t("admin.userPhotos")}</strong>
+            <span>
+              {t("admin.average", {
+                value: dashboard.distributions.photos_avg ?? 0,
+              })}
+            </span>
             <small>
               p50 {dashboard.distributions.photos_p50 ?? 0} / p90{" "}
               {dashboard.distributions.photos_p90 ?? 0}
             </small>
           </div>
           <div className="admin-distribution-card">
-            <strong>Photos per trip</strong>
-            <span>Average {dashboard.distributions.trip_photos_avg ?? 0}</span>
+            <strong>{t("admin.photosPerTrip")}</strong>
+            <span>
+              {t("admin.average", {
+                value: dashboard.distributions.trip_photos_avg ?? 0,
+              })}
+            </span>
             <small>
               p50 {dashboard.distributions.trip_photos_p50 ?? 0} / p90{" "}
               {dashboard.distributions.trip_photos_p90 ?? 0}
