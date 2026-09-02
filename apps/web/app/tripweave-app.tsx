@@ -3065,6 +3065,7 @@ function OwnerWorkspace() {
 }
 
 function InviteAcceptance({ token }: { token: string }) {
+  const { t } = useI18n();
   const [preview, setPreview] = useState<InvitationPreviewResponse | null>(
     null,
   );
@@ -3159,25 +3160,23 @@ function InviteAcceptance({ token }: { token: string }) {
   return (
     <main className="auth-shell">
       <section className="auth-panel stack" aria-labelledby="invite-title">
-        <p className="eyebrow">TripWeave invitation</p>
+        <p className="eyebrow">{t("invite.eyebrow")}</p>
         <h1 id="invite-title">
-          {preview ? preview.title : "Loading invitation"}
+          {preview ? preview.title : t("invite.loading")}
         </h1>
         {preview ? (
-          <p>
-            Sign in or create an account to join this trip as a {preview.role}.
-          </p>
+          <p>{t("invite.description", { role: preview.role })}</p>
         ) : null}
         {user ? (
           <div className="stack">
-            <p>Signed in as {user.display_name}.</p>
+            <p>{t("invite.signedInAs", { name: user.display_name })}</p>
             {error ? <p className="error">{error}</p> : null}
             <button
               type="button"
               onClick={acceptExistingSession}
               disabled={busy || !preview}
             >
-              Join trip
+              {t("invite.join")}
             </button>
           </div>
         ) : (
@@ -3185,25 +3184,25 @@ function InviteAcceptance({ token }: { token: string }) {
             <div
               className="auth-toggle"
               role="tablist"
-              aria-label="Invitation account mode"
+              aria-label={t("invite.accountMode")}
             >
               <button
                 type="button"
                 className={authMode === "login" ? "active" : ""}
                 onClick={() => setAuthMode("login")}
               >
-                Log in
+                {t("invite.login")}
               </button>
               <button
                 type="button"
                 className={authMode === "register" ? "active" : ""}
                 onClick={() => setAuthMode("register")}
               >
-                Create account
+                {t("invite.createAccount")}
               </button>
             </div>
             <label>
-              Email
+              {t("auth.email")}
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -3213,7 +3212,7 @@ function InviteAcceptance({ token }: { token: string }) {
               />
             </label>
             <label>
-              Password
+              {t("auth.password")}
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -3225,7 +3224,7 @@ function InviteAcceptance({ token }: { token: string }) {
             </label>
             {authMode === "register" ? (
               <label>
-                Display name
+                {t("auth.displayName")}
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
@@ -3237,8 +3236,8 @@ function InviteAcceptance({ token }: { token: string }) {
             {error ? <p className="error">{error}</p> : null}
             <button type="submit" disabled={busy || !preview}>
               {authMode === "register"
-                ? "Create account and join"
-                : "Log in and join"}
+                ? t("invite.createAndJoin")
+                : t("invite.loginAndJoin")}
             </button>
           </form>
         )}
@@ -3248,6 +3247,7 @@ function InviteAcceptance({ token }: { token: string }) {
 }
 
 function ContributorWorkspace({ tripId }: { tripId: string }) {
+  const { t } = useI18n();
   const [guest, setGuest] = useState<GuestMemberResponse | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [uploadSessions, setUploadSessions] = useState<UploadSessionResponse[]>(
@@ -3360,7 +3360,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
         loaded: 0,
         total: file.size,
         status: "failed",
-        error: "Upload grant is unavailable",
+        error: t("contributor.uploadGrantUnavailable"),
       });
       return;
     }
@@ -3408,7 +3408,9 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
       files.length > uploadQuota.remainingFileCount
     ) {
       setError(
-        `This trip can hold ${uploadQuota.maxFilesPerTrip} photos. Remove or cancel an upload before adding more.`,
+        t("contributor.tooManyFiles", {
+          max: uploadQuota.maxFilesPerTrip ?? 0,
+        }),
       );
       return;
     }
@@ -3485,7 +3487,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
   if (loadState === "loading") {
     return (
       <main className="app-shell">
-        <h1>Loading contribution page</h1>
+        <h1>{t("contributor.loading")}</h1>
       </main>
     );
   }
@@ -3493,9 +3495,11 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
   return (
     <main className="app-shell">
       <section className="panel stack">
-        <p className="eyebrow">Contributor upload</p>
+        <p className="eyebrow">{t("contributor.eyebrow")}</p>
         <h1>
-          {guest ? `Welcome, ${guest.displayName}` : "Contribution unavailable"}
+          {guest
+            ? t("contributor.welcome", { name: guest.displayName })
+            : t("contributor.unavailable")}
         </h1>
         {error ? <p className="error">{error}</p> : null}
         {guest ? (
@@ -3509,7 +3513,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
               }}
             >
               <label>
-                Add JPEG or HEIC images
+                {t("contributor.addImages")}
                 <input
                   accept=".jpg,.jpeg,.heic,image/jpeg,image/heic,image/heif"
                   disabled={uploadQuotaReached}
@@ -3530,7 +3534,7 @@ function ContributorWorkspace({ tripId }: { tripId: string }) {
               >
                 {uploadQuota
                   ? uploadQuotaMessage(uploadQuota)
-                  : "Only your uploads are shown here."}
+                  : t("contributor.ownUploads")}
               </p>
             </div>
             <UploadFileList
