@@ -7749,30 +7749,36 @@ function TripStoryExplorer({
           className="photo-roll-modal"
           role="dialog"
           aria-modal="true"
-          aria-label="Browse photos by stop"
+          aria-label={t("story.browsePhotosByStop")}
         >
           <button
             className="photo-roll-backdrop"
             type="button"
-            aria-label="Close photo browser"
+            aria-label={t("story.closePhotoBrowser")}
             onClick={closePhotoRoll}
           />
           <div className="photo-roll-panel">
             <div className="photo-roll-toolbar">
               <div>
-                <p className="eyebrow">Photos</p>
+                <p className="eyebrow">{t("story.photos")}</p>
                 <h3>
                   {activeDay
-                    ? `${storyDayLabel(activeDay)} photos`
-                    : "Trip photos"}
+                    ? t("story.dayPhotos", {
+                        date: storyDayLabel(activeDay),
+                      })
+                    : t("story.tripPhotos")}
                 </h3>
-                <span>{photoRollPhotoCount} photos grouped by stop</span>
+                <span>
+                  {t("story.groupedPhotos", {
+                    count: photoRollPhotoCount,
+                  })}
+                </span>
               </div>
               <button
                 type="button"
                 className="modal-icon-button"
-                aria-label="Close photo browser"
-                title="Close"
+                aria-label={t("story.closePhotoBrowser")}
+                title={t("story.closePhotoBrowser")}
                 onClick={closePhotoRoll}
               >
                 <TimelineActionIcon name="x" />
@@ -7781,7 +7787,7 @@ function TripStoryExplorer({
             <div
               ref={photoRollScrollRef}
               className="story-photo-roll"
-              aria-label="Photos by stop"
+              aria-label={t("story.photosByStop")}
               onScroll={(event) => {
                 photoRollScrollTopRef.current = event.currentTarget.scrollTop;
               }}
@@ -7789,8 +7795,8 @@ function TripStoryExplorer({
               {photoRollDays.length === 0 ? (
                 <p>
                   {loadingPhotoProjectionKey
-                    ? "Loading photos..."
-                    : "No photos found."}
+                    ? t("story.loadingPhotos")
+                    : t("story.noPhotosFound")}
                 </p>
               ) : null}
               {photoRollDays.map(({ day, stops }) => (
@@ -7822,7 +7828,11 @@ function TripStoryExplorer({
                               </time>
                             ) : null}
                           </div>
-                          <span aria-label={`${photos.length} photos`}>
+                          <span
+                            aria-label={t("story.photoCount", {
+                              count: photos.length,
+                            })}
+                          >
                             <TimelineMetricIcon name="camera" />
                             {photos.length}
                           </span>
@@ -7832,7 +7842,9 @@ function TripStoryExplorer({
                             <button
                               type="button"
                               key={photo.id}
-                              aria-label={`Open photo from ${displayStopTitle(stop)}`}
+                              aria-label={t("story.openPhotoFromStop", {
+                                stop: displayStopTitle(stop),
+                              })}
                               onClick={() =>
                                 openPhotoRollPhoto(photo.id, dayPhotos)
                               }
@@ -7842,7 +7854,7 @@ function TripStoryExplorer({
                                   src={
                                     photo.thumbnailUrl ?? photo.imageUrl ?? ""
                                   }
-                                  alt={photo.filename ?? "Trip photo"}
+                                  alt={photo.filename ?? t("story.tripPhoto")}
                                   loading="lazy"
                                 />
                               ) : (
@@ -7946,6 +7958,7 @@ function PhotoBrowser({
   onClose: () => void;
   onSelect: (photoId: string) => void;
 }) {
+  const { t } = useI18n();
   const selectedIndex = photos.findIndex(
     (photo) => photo.id === selectedPhotoId,
   );
@@ -8084,12 +8097,12 @@ function PhotoBrowser({
       className="photo-browser"
       role="dialog"
       aria-modal="true"
-      aria-label="Photo browser"
+      aria-label={t("story.photoBrowser")}
     >
       <button
         className="photo-browser-backdrop"
         type="button"
-        aria-label="Close photo browser"
+        aria-label={t("story.closePhotoBrowser")}
         onClick={onClose}
       />
       <div className="photo-browser-panel">
@@ -8107,8 +8120,8 @@ function PhotoBrowser({
           <button
             type="button"
             className="modal-icon-button"
-            aria-label="Close photo browser"
-            title="Close"
+            aria-label={t("story.closePhotoBrowser")}
+            title={t("story.closePhotoBrowser")}
             onClick={onClose}
           >
             <TimelineActionIcon name="x" />
@@ -8125,7 +8138,7 @@ function PhotoBrowser({
             <button
               className="photo-browser-nav previous"
               type="button"
-              aria-label="Previous photo"
+              aria-label={t("story.previousPhoto")}
               onClick={() => moveBy(-1)}
             >
               ‹
@@ -8141,13 +8154,13 @@ function PhotoBrowser({
                 />
               ) : (
                 <div className="photo-browser-missing photo-browser-image-adjacent previous">
-                  Preview unavailable
+                  {t("story.previewUnavailable")}
                 </div>
               )}
               <img
                 className="photo-browser-image current"
                 src={selectedPhoto.imageUrl}
-                alt={selectedPhoto.filename ?? "Trip photo"}
+                alt={selectedPhoto.filename ?? t("story.tripPhoto")}
                 onTransitionEnd={finishSwipe}
               />
               {nextPhoto?.imageUrl ? (
@@ -8158,12 +8171,14 @@ function PhotoBrowser({
                 />
               ) : (
                 <div className="photo-browser-missing photo-browser-image-adjacent next">
-                  Preview unavailable
+                  {t("story.previewUnavailable")}
                 </div>
               )}
             </div>
           ) : (
-            <div className="photo-browser-missing">Preview unavailable</div>
+            <div className="photo-browser-missing">
+              {t("story.previewUnavailable")}
+            </div>
           )}
           {selectedPhoto.contextLabel ? (
             <div className="photo-browser-caption">
@@ -8174,7 +8189,7 @@ function PhotoBrowser({
             <button
               className="photo-browser-nav next"
               type="button"
-              aria-label="Next photo"
+              aria-label={t("story.nextPhoto")}
               onClick={() => moveBy(1)}
             >
               ›
@@ -8185,13 +8200,13 @@ function PhotoBrowser({
           <span>
             {selectedIndex + 1} / {photos.length}
           </span>
-          <div className="photo-browser-strip" aria-label="Photos">
+          <div className="photo-browser-strip" aria-label={t("story.photos")}>
             {photos.map((photo) => (
               <button
                 className={photo.id === selectedPhoto.id ? "active" : ""}
                 key={photo.id}
                 type="button"
-                aria-label={photo.filename ?? "Trip photo"}
+                aria-label={photo.filename ?? t("story.tripPhoto")}
                 onClick={() => onSelect(photo.id)}
               >
                 {(photo.thumbnailUrl ?? photo.imageUrl) ? (
