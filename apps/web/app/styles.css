@@ -178,6 +178,41 @@ p {
   padding-bottom: 22px;
 }
 
+.landing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-selector {
+  display: inline-block;
+}
+
+.language-selector select {
+  width: auto;
+  min-height: 40px;
+  padding: 8px 34px 8px 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.auth-language-selector {
+  display: flex;
+  justify-content: end;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .landing-header strong {
   font-size: 1.18rem;
   letter-spacing: -0.03em;

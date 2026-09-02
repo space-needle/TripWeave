@@ -86,6 +86,7 @@ import {
   startPlayback,
 } from "./story-map-state";
 import { groupTripsByYear } from "./trip-list";
+import { I18nProvider, LanguageSelector, uiLocale, useI18n } from "./i18n";
 
 type GalleryPhoto = {
   id: string;
@@ -248,6 +249,14 @@ function uploadMimeType(file: File): string {
 }
 
 export default function TripWeaveApp() {
+  return (
+    <I18nProvider>
+      <TripWeaveRouter />
+    </I18nProvider>
+  );
+}
+
+function TripWeaveRouter() {
   const [path] = useState(() =>
     typeof window === "undefined" ? "/" : window.location.pathname,
   );
@@ -298,37 +307,33 @@ function LandingPage({
   onCreateAccount: () => void;
   onSignIn: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <main className="landing-shell">
       <header className="landing-header">
         <strong>TripWeave</strong>
-        <button className="secondary-button" type="button" onClick={onSignIn}>
-          Sign in
-        </button>
+        <div className="landing-header-actions">
+          <LanguageSelector />
+          <button className="secondary-button" type="button" onClick={onSignIn}>
+            {t("landing.signIn")}
+          </button>
+        </div>
       </header>
 
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-copy">
-          <p className="eyebrow">One journey, woven together</p>
-          <h1 id="landing-title">
-            Turn everyone&apos;s travel photos into one story worth revisiting.
-          </h1>
-          <p className="landing-lede">
-            TripWeave brings scattered camera rolls into a shared map and
-            timeline, so the moments of a trip can live together in one place.
-          </p>
+          <p className="eyebrow">{t("landing.eyebrow")}</p>
+          <h1 id="landing-title">{t("landing.title")}</h1>
+          <p className="landing-lede">{t("landing.description")}</p>
           <div className="landing-actions">
             <button type="button" onClick={onCreateAccount}>
-              Start a trip
+              {t("landing.startTrip")}
             </button>
             <a className="landing-example-link" href="#example-trip">
-              Explore the example
+              {t("landing.exploreExample")}
             </a>
           </div>
-          <p className="landing-privacy-note">
-            Your original photos stay private. Shared stories use selected,
-            privacy-conscious derivatives.
-          </p>
+          <p className="landing-privacy-note">{t("landing.privacy")}</p>
         </div>
 
         <section
@@ -338,25 +343,22 @@ function LandingPage({
         >
           <div className="landing-example-heading">
             <div>
-              <p className="eyebrow">See a real TripWeave story</p>
-              <h2 id="landing-example-title">
-                An example trip, ready to explore
-              </h2>
+              <p className="eyebrow">{t("landing.exampleEyebrow")}</p>
+              <h2 id="landing-example-title">{t("landing.exampleTitle")}</h2>
             </div>
             <a href={sampleTripUrl} target="_blank" rel="noreferrer">
-              Open full story <span aria-hidden="true">↗</span>
+              {t("landing.openStory")} <span aria-hidden="true">↗</span>
             </a>
           </div>
           <div className="landing-example-frame">
             <iframe
-              title="Example TripWeave story"
+              title={t("landing.exampleFrameTitle")}
               src={sampleTripUrl}
               allow="fullscreen"
             />
           </div>
           <p className="landing-example-caption">
-            Browse the map, timeline, and shared moments before creating a trip
-            of your own.
+            {t("landing.exampleCaption")}
           </p>
         </section>
       </section>
@@ -373,6 +375,7 @@ function AdminWorkspace() {
 }
 
 function OwnerWorkspace() {
+  const { t } = useI18n();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [user, setUser] = useState<UserResponse | null>(null);
   const [trips, setTrips] = useState<TripResponse[]>([]);
@@ -1776,14 +1779,19 @@ function OwnerWorkspace() {
     return (
       <main className="auth-shell">
         <section className="auth-panel" aria-labelledby="auth-title">
+          <div className="auth-language-selector">
+            <LanguageSelector />
+          </div>
           <p className="eyebrow">TripWeave</p>
           <h1 id="auth-title">
-            {mode === "register" ? "Create owner account" : "Sign in"}
+            {mode === "register"
+              ? t("auth.createOwnerAccount")
+              : t("auth.signIn")}
           </h1>
           <form className="stack" onSubmit={submitAuth}>
             {mode === "register" ? (
               <label>
-                Display name
+                {t("auth.displayName")}
                 <input
                   autoComplete="name"
                   value={displayName}
@@ -1793,7 +1801,7 @@ function OwnerWorkspace() {
               </label>
             ) : null}
             <label>
-              Email
+              {t("auth.email")}
               <input
                 autoComplete="email"
                 inputMode="email"
@@ -1804,7 +1812,7 @@ function OwnerWorkspace() {
               />
             </label>
             <label>
-              Password
+              {t("auth.password")}
               <input
                 autoComplete={
                   mode === "register" ? "new-password" : "current-password"
@@ -1819,10 +1827,10 @@ function OwnerWorkspace() {
             {authError ? <p className="error">{authError}</p> : null}
             <button type="submit" disabled={isBusy}>
               {isBusy
-                ? "Working..."
+                ? t("auth.working")
                 : mode === "register"
-                  ? "Register"
-                  : "Sign in"}
+                  ? t("auth.register")
+                  : t("auth.signIn")}
             </button>
           </form>
           <button
@@ -1834,8 +1842,8 @@ function OwnerWorkspace() {
             }}
           >
             {mode === "register"
-              ? "Already have an account?"
-              : "Create an owner account"}
+              ? t("auth.alreadyHaveAccount")
+              : t("auth.createAccount")}
           </button>
           <button
             className="link-button auth-back-link"
@@ -1845,7 +1853,7 @@ function OwnerWorkspace() {
               setUnauthenticatedView("landing");
             }}
           >
-            Back to TripWeave
+            {t("auth.back")}
           </button>
         </section>
       </main>
@@ -4046,7 +4054,7 @@ function formatTripMapDate(value: string | null | undefined): string {
   if (!value) {
     return "No date";
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -12210,7 +12218,7 @@ function timelineDayDateParts(day: StoryDayLabelSource): {
   const [, year, month, dayOfMonth] = match;
   const date = new Date(Number(year), Number(month) - 1, Number(dayOfMonth));
   return {
-    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
+    weekday: new Intl.DateTimeFormat(uiLocale(), { weekday: "short" }).format(
       date,
     ),
     day: String(Number(dayOfMonth)),
@@ -12224,7 +12232,7 @@ function formatShortCalendarDate(value: string | null): string {
   }
   const [, year, month, day] = match;
   const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     month: "numeric",
     day: "numeric",
   }).format(date);
@@ -12239,7 +12247,7 @@ function formatMapPhotoDateLabel(
   }
   const [, year, month, day] = match;
   const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(uiLocale(), {
     month: "short",
     day: "numeric",
   }).format(date);
@@ -12257,10 +12265,10 @@ function formatDate(value: string | null, timezoneId?: string): string {
     options.timeZone = timezoneId;
   }
   try {
-    return new Intl.DateTimeFormat(undefined, options).format(new Date(value));
+    return new Intl.DateTimeFormat(uiLocale(), options).format(new Date(value));
   } catch (error) {
     if (error instanceof RangeError && timezoneId) {
-      return new Intl.DateTimeFormat(undefined, {
+      return new Intl.DateTimeFormat(uiLocale(), {
         dateStyle: "medium",
         timeStyle: "short",
         timeZone: "UTC",
@@ -12271,7 +12279,7 @@ function formatDate(value: string | null, timezoneId?: string): string {
 }
 
 function formatSavedStoryDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+  return new Intl.DateTimeFormat(uiLocale(), { dateStyle: "medium" }).format(
     new Date(value),
   );
 }
@@ -12301,13 +12309,13 @@ function formatTimelineStopTime(
     return "Unknown";
   }
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(uiLocale(), {
       hour: "numeric",
       minute: "2-digit",
       timeZone: "UTC",
     }).format(new Date(utcValue));
   } catch {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(uiLocale(), {
       hour: "numeric",
       minute: "2-digit",
       timeZone: "UTC",
@@ -12328,7 +12336,7 @@ function formatFloatingDate(value: string): string {
     Number(hour),
     Number(minute),
   );
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -12347,7 +12355,7 @@ function formatFloatingTime(value: string): string {
     Number(hour),
     Number(minute),
   );
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);

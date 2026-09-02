@@ -6,6 +6,7 @@ import type {
   ReconstructionResponse,
   ReconstructionStopResponse,
 } from "./api-types";
+import { uiLocale } from "./i18n";
 
 export type SlideshowPhoto = {
   id: string;
@@ -310,7 +311,7 @@ function shortCalendarDate(value: string | null): string {
   }
   const [, year, month, day] = match;
   const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     month: "numeric",
     day: "numeric",
   }).format(date);

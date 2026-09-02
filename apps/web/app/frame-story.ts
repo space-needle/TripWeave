@@ -1,4 +1,5 @@
 import type { PublicStoryResponse } from "./api-types";
+import { uiLocale } from "./i18n";
 import {
   buildPublicStorySlideshowScenes,
   type SlideshowRoute,
@@ -207,7 +208,7 @@ function dateLabel(value: string | null): string {
     return "Trip photo";
   }
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(uiLocale(), {
       month: "short",
       day: "numeric",
       hour: "numeric",
