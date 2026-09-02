@@ -11606,8 +11606,9 @@ function ReconstructionOutline({
   onAcceptClockOffset: (id: string) => void;
   onUndo: () => void;
 }) {
+  const { t } = useI18n();
   if (!reconstruction?.latestRun) {
-    return <p>No reconstruction run yet.</p>;
+    return <p>{t("review.noRun")}</p>;
   }
   const openReviewItems = reconstruction.reviewItems.filter(
     (item) => item.status === "open",
@@ -11632,33 +11633,36 @@ function ReconstructionOutline({
         </div>
         <div>
           <strong>{String(reconstruction.latestRun.summary.days ?? 0)}</strong>
-          <small>days</small>
+          <small>{t("review.days")}</small>
         </div>
         <div>
           <strong>{String(reconstruction.latestRun.summary.stops ?? 0)}</strong>
-          <small>stops</small>
+          <small>{t("review.stops")}</small>
         </div>
         <div>
           <strong>
             {String(reconstruction.latestRun.summary.reviewItems ?? 0)}
           </strong>
-          <small>review items</small>
+          <small>{t("review.items")}</small>
         </div>
       </div>
       <div className="review-inbox">
         <div className="section-heading">
           <div>
-            <h3>Review inbox</h3>
+            <h3>{t("review.inbox")}</h3>
             <p>
-              {openReviewItems.length} open issue
-              {openReviewItems.length === 1 ? "" : "s"} ·{" "}
+              {t("review.openIssues", {
+                count: openReviewItems.length,
+                suffix: openReviewItems.length === 1 ? "" : "s",
+              })}{" "}
+              ·{" "}
               {Object.entries(severityCounts)
                 .map(([severity, count]) => `${severity}: ${count}`)
-                .join(", ") || "clear"}
+                .join(", ") || t("review.clear")}
             </p>
           </div>
           <button type="button" onClick={onUndo}>
-            Undo latest edit
+            {t("review.undo")}
           </button>
         </div>
         {currentReview ? (
@@ -11666,8 +11670,8 @@ function ReconstructionOutline({
             <div>
               <strong>{currentReview.itemType}</strong>
               <small>
-                {currentReview.severity} · confidence{" "}
-                {currentReview.confidence ?? "unknown"} ·{" "}
+                {currentReview.severity} · {t("review.confidence")}{" "}
+                {currentReview.confidence ?? t("media.unknown")} ·{" "}
                 {currentReview.targetType ?? "trip"}
               </small>
             </div>
@@ -11675,15 +11679,15 @@ function ReconstructionOutline({
             {currentReview.itemType === "possible_clock_offset" ? (
               <dl className="compact-facts">
                 <div>
-                  <dt>Offset</dt>
+                  <dt>{t("review.offset")}</dt>
                   <dd>{String(currentReview.payload.offsetSeconds ?? "?")}s</dd>
                 </div>
                 <div>
-                  <dt>Support</dt>
+                  <dt>{t("review.support")}</dt>
                   <dd>{String(currentReview.payload.supportCount ?? "?")}</dd>
                 </div>
                 <div>
-                  <dt>Dispersion</dt>
+                  <dt>{t("review.dispersion")}</dt>
                   <dd>
                     {String(currentReview.payload.dispersionSeconds ?? "?")}s
                   </dd>
@@ -11693,15 +11697,15 @@ function ReconstructionOutline({
             {currentReview.itemType === "possible_area_visit" ? (
               <dl className="compact-facts">
                 <div>
-                  <dt>Stops</dt>
+                  <dt>{t("review.stops")}</dt>
                   <dd>{String(currentReview.payload.stopCount ?? "?")}</dd>
                 </div>
                 <div>
-                  <dt>Threshold</dt>
+                  <dt>{t("review.threshold")}</dt>
                   <dd>{String(currentReview.payload.threshold ?? "?")}</dd>
                 </div>
                 <div>
-                  <dt>Diameter</dt>
+                  <dt>{t("review.diameter")}</dt>
                   <dd>
                     {Math.round(
                       Number(currentReview.payload.diameterMeters ?? 0),
@@ -11717,33 +11721,33 @@ function ReconstructionOutline({
                   type="button"
                   onClick={() => onAcceptClockOffset(currentReview.id)}
                 >
-                  Accept offset
+                  {t("review.acceptOffset")}
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => onResolveReview(currentReview.id)}
                 >
-                  Resolve
+                  {t("review.resolve")}
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => onDismissReview(currentReview.id)}
               >
-                Dismiss
+                {t("review.dismiss")}
               </button>
               <button type="button" onClick={onSkipReview}>
-                Skip
+                {t("review.skip")}
               </button>
             </div>
           </article>
         ) : (
-          <p>No open review items.</p>
+          <p>{t("review.noOpen")}</p>
         )}
       </div>
       {reconstruction.days.length === 0 ? (
-        <p>No usable media has been grouped yet.</p>
+        <p>{t("review.noMedia")}</p>
       ) : (
         <div className="simple-list" role="list">
           {reconstruction.days.map((day) => (
@@ -11756,7 +11760,8 @@ function ReconstructionOutline({
                       {stop.displayPosition ?? String(stop.position)}
                     </span>
                     <strong>
-                      {stop.title ?? `Stop ${stop.position}`}
+                      {stop.title ??
+                        t("review.stop", { position: stop.position })}
                       {stop.placeName ? ` · ${stop.placeName}` : ""}
                     </strong>
                   </div>
@@ -11766,21 +11771,27 @@ function ReconstructionOutline({
                       stop.startsAtLocal ?? null,
                       timezoneId,
                     )}{" "}
-                    to{" "}
+                    {t("review.to")}{" "}
                     {formatReconstructionTime(
                       stop.endsAt,
                       stop.endsAtLocal ?? null,
                       timezoneId,
                     )}{" "}
-                    · {stop.mediaCount} media · {stop.contributorCount}{" "}
-                    contributors
+                    · {t("review.mediaCount", { count: stop.mediaCount })} ·{" "}
+                    {t("review.contributorCount", {
+                      count: stop.contributorCount,
+                    })}
                   </small>
                   <div className="moment-row">
                     {stop.moments.map((moment) => (
                       <span key={moment.id}>
-                        {moment.title ?? `Moment ${moment.position}`}:{" "}
-                        {moment.mediaCount} media, {moment.contributorCount}{" "}
-                        contributors
+                        {moment.title ??
+                          t("review.moment", { position: moment.position })}
+                        : {t("review.mediaCount", { count: moment.mediaCount })}
+                        ,{" "}
+                        {t("review.contributorCount", {
+                          count: moment.contributorCount,
+                        })}
                       </span>
                     ))}
                   </div>
@@ -11792,7 +11803,7 @@ function ReconstructionOutline({
       )}
       {reconstruction.reviewItems.length > 0 ? (
         <div className="review-list">
-          <h3>Review</h3>
+          <h3>{t("workspace.review")}</h3>
           {reconstruction.reviewItems.map((item) => (
             <p key={item.id}>
               <strong>{item.itemType}</strong>: {item.message}
