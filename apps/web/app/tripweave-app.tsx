@@ -11811,23 +11811,26 @@ function SimilarityGroupsPanel({
   groups: SimilarityGroupResponse[];
   onChangeRepresentative: (groupId: string, mediaId: string) => void;
 }) {
+  const { t } = useI18n();
   if (groups.length === 0) {
     return null;
   }
   return (
     <section className="similarity-panel" aria-labelledby="similarity-title">
       <div>
-        <h3 id="similarity-title">Similar photo stacks</h3>
-        <p>Duplicate and near-duplicate versions stay preserved.</p>
+        <h3 id="similarity-title">{t("media.similarTitle")}</h3>
+        <p>{t("media.similarDescription")}</p>
       </div>
       <div className="simple-list">
         {groups.map((group) => (
           <details className="similarity-group" key={group.id}>
             <summary>
-              <strong>{group.memberCount} versions</strong>
+              <strong>
+                {t("media.versions", { count: group.memberCount })}
+              </strong>
               <small>
-                {group.groupType.replace("_", " ")} · confidence{" "}
-                {group.confidence ?? "unknown"}
+                {group.groupType.replace("_", " ")} · {t("media.confidence")}{" "}
+                {group.confidence ?? t("media.unknown")}
               </small>
             </summary>
             <p>{group.reason}</p>
@@ -11836,13 +11839,16 @@ function SimilarityGroupsPanel({
                 <div className="simple-row" key={member.mediaItemId}>
                   <div>
                     <strong>
-                      {member.filename ?? "Untitled image"}
-                      {member.isRepresentative ? " · representative" : ""}
+                      {member.filename ?? t("media.untitled")}
+                      {member.isRepresentative
+                        ? ` · ${t("media.representative")}`
+                        : ""}
                     </strong>
                     <small>
-                      {member.contributor} · technical{" "}
-                      {member.technicalScore ?? "unknown"} · similarity{" "}
-                      {member.similarityScore ?? "unknown"}
+                      {member.contributor} · {t("media.technical")}{" "}
+                      {member.technicalScore ?? t("media.unknown")} ·{" "}
+                      {t("media.similarity")}{" "}
+                      {member.similarityScore ?? t("media.unknown")}
                     </small>
                   </div>
                   {!member.isRepresentative ? (
@@ -11852,7 +11858,7 @@ function SimilarityGroupsPanel({
                         onChangeRepresentative(group.id, member.mediaItemId)
                       }
                     >
-                      Use as representative
+                      {t("media.useRepresentative")}
                     </button>
                   ) : null}
                 </div>
@@ -11932,6 +11938,7 @@ function MediaList({
   onAdjustLocation?: (item: MediaItemResponse) => void;
   timezoneId?: string;
 }) {
+  const { t } = useI18n();
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [visibilityHelpItemId, setVisibilityHelpItemId] = useState<
     string | null
@@ -11941,7 +11948,7 @@ function MediaList({
     [media],
   );
   if (media.length === 0) {
-    return <p>No processed media yet.</p>;
+    return <p>{t("media.noProcessed")}</p>;
   }
   return (
     <>
@@ -11952,7 +11959,9 @@ function MediaList({
               className="thumb-frame"
               type="button"
               onClick={() => setSelectedPhotoId(item.id)}
-              aria-label={`Open ${item.filename ?? "photo"}`}
+              aria-label={t("media.openPhoto", {
+                name: item.filename ?? t("media.photo"),
+              })}
             >
               {item.thumbnail?.downloadUrl ? (
                 <img src={item.thumbnail.downloadUrl} alt="" />
@@ -11961,24 +11970,28 @@ function MediaList({
               )}
             </button>
             <div className="media-details">
-              <strong>{item.filename ?? "Untitled image"}</strong>
+              <strong>{item.filename ?? t("media.untitled")}</strong>
               <small>
                 {item.processingState} · {item.contributor}
                 {(item.similarityGroupCount ?? 1) > 1
-                  ? ` · stack of ${item.similarityGroupCount ?? 1}${
-                      item.isSimilarityRepresentative ? " · representative" : ""
+                  ? ` · ${t("media.stack", {
+                      count: item.similarityGroupCount ?? 1,
+                    })}${
+                      item.isSimilarityRepresentative
+                        ? ` · ${t("media.representative")}`
+                        : ""
                     }`
                   : ""}
               </small>
               {onVisibilityChange &&
               (canChangeVisibility ? canChangeVisibility(item) : true) ? (
                 <div className="media-property-row media-visibility-row">
-                  <span>Visibility</span>
+                  <span>{t("media.visibility")}</span>
                   <div className="visibility-control">
                     <div
                       className="visibility-toggle"
                       role="group"
-                      aria-label="Photo visibility"
+                      aria-label={t("media.visibilityLabel")}
                     >
                       <button
                         type="button"
@@ -11986,7 +11999,7 @@ function MediaList({
                         aria-pressed={item.visibility === "trip"}
                         onClick={() => onVisibilityChange(item, "trip")}
                       >
-                        Member only
+                        {t("media.memberOnly")}
                       </button>
                       <button
                         type="button"
@@ -12000,14 +12013,14 @@ function MediaList({
                         }
                         onClick={() => onVisibilityChange(item, "story")}
                       >
-                        Public
+                        {t("media.public")}
                       </button>
                     </div>
                     <div className="visibility-help">
                       <button
                         className="media-icon-button"
                         type="button"
-                        aria-label="Photo visibility help"
+                        aria-label={t("media.visibilityHelp")}
                         aria-expanded={visibilityHelpItemId === item.id}
                         aria-controls={`visibility-help-${item.id}`}
                         onClick={() =>
@@ -12015,7 +12028,7 @@ function MediaList({
                             current === item.id ? null : item.id,
                           )
                         }
-                        title="Photo visibility help"
+                        title={t("media.visibilityHelp")}
                       >
                         <MediaActionIcon action="help" />
                       </button>
@@ -12024,24 +12037,18 @@ function MediaList({
                           className="visibility-help-popover"
                           id={`visibility-help-${item.id}`}
                           role="dialog"
-                          aria-label="Photo visibility help"
+                          aria-label={t("media.visibilityHelp")}
                         >
                           <div>
-                            <strong>Who can see this photo?</strong>
-                            <p>
-                              Member only keeps it inside this trip. Public lets
-                              it appear in a published story.
-                            </p>
-                            <p>
-                              Published stories use a sanitized derivative,
-                              never the original photo.
-                            </p>
+                            <strong>{t("media.whoCanSee")}</strong>
+                            <p>{t("media.memberOnlyDescription")}</p>
+                            <p>{t("media.sanitizedDescription")}</p>
                           </div>
                           <button
                             className="visibility-help-close"
                             type="button"
                             onClick={() => setVisibilityHelpItemId(null)}
-                            aria-label="Close photo visibility help"
+                            aria-label={t("media.closeVisibilityHelp")}
                           >
                             ×
                           </button>
@@ -12053,7 +12060,7 @@ function MediaList({
               ) : null}
               <dl>
                 <div>
-                  <dt>Captured</dt>
+                  <dt>{t("media.captured")}</dt>
                   <dd>
                     {formatReconstructionTime(
                       item.capturedAt ?? null,
@@ -12063,26 +12070,30 @@ function MediaList({
                   </dd>
                 </div>
                 <div className="media-gps-row">
-                  <dt>GPS</dt>
+                  <dt>{t("media.gps")}</dt>
                   <dd>
-                    <span>{item.gpsPresent ? "Present" : "Not found"}</span>
+                    <span>
+                      {item.gpsPresent
+                        ? t("media.present")
+                        : t("media.notFound")}
+                    </span>
                     {onAdjustLocation ? (
                       <button
                         className="media-inline-action"
                         type="button"
                         onClick={() => onAdjustLocation(item)}
                       >
-                        Update
+                        {t("media.update")}
                       </button>
                     ) : null}
                   </dd>
                 </div>
                 <div>
-                  <dt>Dimensions</dt>
+                  <dt>{t("media.dimensions")}</dt>
                   <dd>
                     {item.width && item.height
                       ? `${item.width} × ${item.height}`
-                      : "Unknown"}
+                      : t("media.unknown")}
                   </dd>
                 </div>
               </dl>
@@ -12091,7 +12102,7 @@ function MediaList({
               ) : null}
               {item.processingState === "failed" && onRetry ? (
                 <button type="button" onClick={() => onRetry(item)}>
-                  Retry processing
+                  {t("media.retryProcessing")}
                 </button>
               ) : null}
               {onDelete ? (
@@ -12100,7 +12111,7 @@ function MediaList({
                   type="button"
                   onClick={() => onDelete(item)}
                 >
-                  Delete photo
+                  {t("media.deletePhoto")}
                 </button>
               ) : null}
             </div>
@@ -12127,6 +12138,7 @@ function MediaLocationDialog({
   onCancel: () => void;
   onSave: (latitude: number, longitude: number) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const savedLocation: [number, number] | null =
@@ -12187,13 +12199,13 @@ function MediaLocationDialog({
         className="media-location-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Adjust photo location"
+        aria-label={t("media.adjustLocation")}
       >
         <header className="media-location-dialog-header">
           <div>
-            <p className="eyebrow">Photo location</p>
-            <h2>{media.filename ?? "Photo"}</h2>
-            <p>Move the map until the desired place is under the center pin.</p>
+            <p className="eyebrow">{t("media.locationEyebrow")}</p>
+            <h2>{media.filename ?? t("media.photoFallback")}</h2>
+            <p>{t("media.locationInstruction")}</p>
           </div>
           <button
             type="button"
@@ -12201,7 +12213,7 @@ function MediaLocationDialog({
             onClick={onCancel}
             disabled={saving}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </header>
         <div className="media-location-map" ref={containerRef}>
@@ -12211,17 +12223,17 @@ function MediaLocationDialog({
         </div>
         <footer className="media-location-dialog-footer">
           <div className="media-location-status">
-            <small>Selected location</small>
+            <small>{t("media.selectedLocation")}</small>
             <strong>
               {center[1].toFixed(6)}, {center[0].toFixed(6)}
             </strong>
             {hasSavedLocation ? (
               <small className="media-location-current-label">
                 <span aria-hidden="true" />
-                Blue dot: current photo location
+                {t("media.currentLocation")}
               </small>
             ) : (
-              <small>No location saved for this photo yet.</small>
+              <small>{t("media.noLocation")}</small>
             )}
           </div>
           {error ? <p className="error">{error}</p> : null}
@@ -12231,7 +12243,7 @@ function MediaLocationDialog({
               onClick={() => void submit()}
               disabled={saving}
             >
-              {saving ? "Saving…" : "Use this location"}
+              {saving ? t("media.saving") : t("media.useLocation")}
             </button>
           </div>
         </footer>
