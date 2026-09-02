@@ -8403,6 +8403,7 @@ function StoryMapCanvas({
   onStopMarkerClick: (stopId: string, dayId: string) => void;
   reducedMotion: boolean;
 }) {
+  const { t } = useI18n();
   const mapNode = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const selectedMarkers = useRef<Marker[]>([]);
@@ -8733,6 +8734,7 @@ function StoryMapCanvas({
     state.selectedDayId,
     state.selectedStopId,
     state.viewMode,
+    t,
   ]);
 
   useEffect(() => {
@@ -9023,7 +9025,10 @@ function StoryMapCanvas({
           state.viewMode === "DAY" && state.selectedDayId === dayId
             ? "photo-day-marker day-focused"
             : "photo-day-marker";
-        element.setAttribute("aria-label", `Explore stops for ${label}`);
+        element.setAttribute(
+          "aria-label",
+          t("story.exploreStopsForDay", { day: label }),
+        );
         element.style.setProperty("--stop-color", color);
         if (featuredMedia?.thumbnailUrl) {
           const image = document.createElement("img");
@@ -9033,7 +9038,7 @@ function StoryMapCanvas({
           element.appendChild(image);
         } else {
           const fallback = document.createElement("span");
-          fallback.textContent = label.replace("Day ", "");
+          fallback.textContent = label;
           element.appendChild(fallback);
         }
         const title = document.createElement("strong");
@@ -9072,7 +9077,8 @@ function StoryMapCanvas({
       if (!coordinates || !firstStopId) {
         continue;
       }
-      const title = area.title ?? `Area ${area.sortOrder}`;
+      const title =
+        area.title ?? t("story.areaFallback", { position: area.sortOrder });
       const markerAnchor = document.createElement("div");
       markerAnchor.className = "photo-map-marker-anchor";
       markerAnchor.dataset.dayId = area.dayId;
@@ -9082,7 +9088,11 @@ function StoryMapCanvas({
       element.className = "photo-area-marker";
       element.setAttribute(
         "aria-label",
-        `Show ${stopCount} stops in ${title}, area ${area.sortOrder}`,
+        t("story.showAreaStops", {
+          count: stopCount,
+          title,
+          area: area.sortOrder,
+        }),
       );
       element.style.setProperty("--stop-color", color);
       const bubble = document.createElement("span");
@@ -9104,9 +9114,10 @@ function StoryMapCanvas({
       }
       const label = document.createElement("strong");
       label.className = "photo-area-marker-label";
-      label.textContent = `${title} · ${stopCount} stop${
-        stopCount === 1 ? "" : "s"
-      }`;
+      label.textContent = t("story.areaStopCount", {
+        title,
+        count: stopCount,
+      });
       element.appendChild(bubble);
       element.appendChild(label);
       element.addEventListener("click", (event) => {
@@ -9143,7 +9154,10 @@ function StoryMapCanvas({
       element.className = "photo-stop-marker";
       element.setAttribute(
         "aria-label",
-        `Open photos for ${stop.label}, ${flowLabel} stop`,
+        t("story.openStopPhotos", {
+          stop: stop.label,
+          position: flowLabel,
+        }),
       );
       element.style.setProperty("--stop-color", color);
       const bubble = document.createElement("span");
@@ -9204,6 +9218,7 @@ function StoryMapCanvas({
     state.selectedDayId,
     state.selectedStopId,
     state.viewMode,
+    t,
   ]);
 
   useEffect(() => {
@@ -9895,33 +9910,28 @@ const sampleTripUrl =
   "https://tripweave.chronotrailai.com/story/korea-aef41b9bcda5/v/2";
 
 function ExampleTripPreview({ onBack }: { onBack: () => void }) {
+  const { t } = useI18n();
   return (
     <section className="example-trip" aria-labelledby="example-trip-title">
       <header className="example-trip-header">
         <div>
-          <p className="eyebrow">Read-only example</p>
-          <h1 id="example-trip-title">Explore a real shared trip</h1>
-          <p>See how photos become a map, timeline, and story.</p>
+          <p className="eyebrow">{t("example.readOnly")}</p>
+          <h1 id="example-trip-title">{t("example.title")}</h1>
+          <p>{t("example.description")}</p>
         </div>
         <button className="secondary-button" type="button" onClick={onBack}>
-          Back to start
+          {t("example.backToStart")}
         </button>
       </header>
 
-      <section
-        className="example-trip-guide"
-        aria-label="How to explore this trip"
-      >
+      <section className="example-trip-guide" aria-label={t("example.guide")}>
         <div>
           <span className="example-trip-guide-icon" aria-hidden="true">
             <StoryHeaderIcon action="map" />
           </span>
           <p>
-            <strong>Explore the map</strong>
-            <span>
-              Tap a day photo marker to jump into its stops, or select a stop to
-              follow the route.
-            </span>
+            <strong>{t("example.exploreMap")}</strong>
+            <span>{t("example.exploreMapDescription")}</span>
           </p>
         </div>
         <div>
@@ -9929,8 +9939,8 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
             <StoryHeaderIcon action="timeline" />
           </span>
           <p>
-            <strong>Follow the timeline</strong>
-            <span>See the trip unfold moment by moment.</span>
+            <strong>{t("example.followTimeline")}</strong>
+            <span>{t("example.followTimelineDescription")}</span>
           </p>
         </div>
         <div>
@@ -9938,15 +9948,15 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
             <StoryHeaderIcon action="slideshow" />
           </span>
           <p>
-            <strong>Play the story</strong>
-            <span>Sit back and relive the journey.</span>
+            <strong>{t("example.playStory")}</strong>
+            <span>{t("example.playStoryDescription")}</span>
           </p>
         </div>
       </section>
 
       <div className="example-trip-frame">
         <iframe
-          title="Sample TripWeave story"
+          title={t("example.frameTitle")}
           src={sampleTripUrl}
           allow="fullscreen"
         />
@@ -9954,8 +9964,8 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
 
       <footer className="example-trip-footer">
         <div>
-          <strong>This is a real TripWeave story.</strong>
-          <p>Explore it freely, then create a trip of your own.</p>
+          <strong>{t("example.realStory")}</strong>
+          <p>{t("example.realStoryDescription")}</p>
         </div>
         <a
           className="secondary-button"
@@ -9963,7 +9973,7 @@ function ExampleTripPreview({ onBack }: { onBack: () => void }) {
           target="_blank"
           rel="noreferrer"
         >
-          Open in a new tab
+          {t("example.openNewTab")}
         </a>
       </footer>
     </section>
@@ -10102,6 +10112,7 @@ function ExampleTripMap({
   activeStopId: string;
   onSelectStop: (stopId: string) => void;
 }) {
+  const { t } = useI18n();
   const mapNode = useRef<HTMLDivElement | null>(null);
   const markerNodes = useRef(new Map<string, HTMLButtonElement>());
 
@@ -10143,7 +10154,10 @@ function ExampleTripMap({
         const markerNode = document.createElement("button");
         markerNode.type = "button";
         markerNode.className = "example-map-marker";
-        markerNode.setAttribute("aria-label", `Show ${stop.title}`);
+        markerNode.setAttribute(
+          "aria-label",
+          t("example.showStop", { stop: stop.title }),
+        );
         markerNode.innerHTML = `<img src="${stop.image}" alt="" />`;
         markerNode.addEventListener("click", () => onSelectStop(stop.id));
         markers.set(stop.id, markerNode);
@@ -10156,7 +10170,7 @@ function ExampleTripMap({
       markers.clear();
       map.remove();
     };
-  }, [onSelectStop]);
+  }, [onSelectStop, t]);
 
   useEffect(() => {
     markerNodes.current.forEach((marker, stopId) => {
