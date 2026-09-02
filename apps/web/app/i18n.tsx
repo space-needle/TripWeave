@@ -353,6 +353,11 @@ const messages = {
     "story.browseDayPhotos": "Browse day photos",
     "story.chronologicalTimeline": "Chronological timeline",
     "story.timelineDays": "Timeline days",
+    "story.dayActions": "Day actions",
+    "story.cancelArea": "Cancel area",
+    "story.createArea": "Create area",
+    "story.editNote": "Edit note",
+    "story.addNote": "Add note",
   },
   ko: {
     "language.label": "언어",
@@ -688,6 +693,11 @@ const messages = {
     "story.browseDayPhotos": "이 날짜의 사진 보기",
     "story.chronologicalTimeline": "시간순 타임라인",
     "story.timelineDays": "타임라인 날짜",
+    "story.dayActions": "날짜 작업",
+    "story.cancelArea": "영역 만들기 취소",
+    "story.createArea": "영역 만들기",
+    "story.editNote": "메모 수정",
+    "story.addNote": "메모 추가",
   },
 } as const;
 

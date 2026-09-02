@@ -6574,7 +6574,7 @@ function TripStoryExplorer({
                             )
                           }
                         >
-                          Day Actions
+                          {t("story.dayActions")}
                           <TimelineChevron
                             direction={
                               openDayActionsId === day.id ? "up" : "down"
@@ -6605,8 +6605,8 @@ function TripStoryExplorer({
                                 }}
                               >
                                 {areaSelectionDayId === day.id
-                                  ? "Cancel area"
-                                  : "Create area"}
+                                  ? t("story.cancelArea")
+                                  : t("story.createArea")}
                               </button>
                             ) : null}
                             {onSetDayNote ? (
@@ -6618,7 +6618,9 @@ function TripStoryExplorer({
                                   startEditingNote(`day:${day.id}`, day.note);
                                 }}
                               >
-                                {day.note ? "Edit note" : "Add note"}
+                                {day.note
+                                  ? t("story.editNote")
+                                  : t("story.addNote")}
                               </button>
                             ) : null}
                           </div>
@@ -6635,7 +6637,7 @@ function TripStoryExplorer({
                       }}
                     >
                       <label>
-                        Day note
+                        {t("story.dayNote")}
                         <textarea
                           autoFocus
                           value={noteDraft}
@@ -6649,7 +6651,7 @@ function TripStoryExplorer({
                           type="submit"
                           disabled={savingNoteKey === `day:${day.id}`}
                         >
-                          Save
+                          {t("settings.save")}
                         </button>
                         <button
                           type="button"
