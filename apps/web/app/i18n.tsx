@@ -998,11 +998,25 @@ export function useI18n(): I18nContextValue {
   return value;
 }
 
-export function LanguageSelector({ className }: { className?: string }) {
+export function LanguageSelector({
+  className,
+  showIcon = false,
+}: {
+  className?: string;
+  showIcon?: boolean;
+}) {
   const { locale, setLocale, t } = useI18n();
   return (
     <label className={className ?? "language-selector"}>
       <span className="sr-only">{t("language.label")}</span>
+      {showIcon ? (
+        <span className="language-selector-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M4 12h16M12 4c2.1 2.2 3.2 5 3.2 8S14.1 17.8 12 20M12 4c-2.1 2.2-3.2 5-3.2 8s1.1 5.8 3.2 8" />
+          </svg>
+        </span>
+      ) : null}
       <select
         aria-label={t("language.label")}
         value={locale}

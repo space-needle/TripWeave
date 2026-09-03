@@ -5525,8 +5525,27 @@ button.thumb-frame:focus-visible {
   }
 
   .mobile-language-selector {
-    display: block;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
     padding: 4px 5px;
+  }
+
+  .mobile-language-selector .language-selector-icon {
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+
+  .mobile-language-selector .language-selector-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
   }
 
   .mobile-language-selector select {
