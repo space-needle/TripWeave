@@ -2806,6 +2806,7 @@ button.public-story-home-button {
 
 .story-photo-roll {
   display: grid;
+  align-content: start;
   gap: 16px;
   min-height: 0;
   overflow-x: hidden;
@@ -2817,6 +2818,7 @@ button.public-story-home-button {
 
 .story-photo-roll-day {
   display: grid;
+  align-content: start;
   gap: 14px;
 }
 
