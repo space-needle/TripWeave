@@ -8,6 +8,7 @@ from urllib.request import Request
 from uuid import uuid4
 
 from tripweave.adapters import orm
+from tripweave.adapters.country_language import geocoder_language_for_country
 from tripweave.adapters.google_geocoder import GoogleGeocoder, geocode_result_from_google
 from tripweave.adapters.google_places_geocoder import (
     GooglePlacesNearbyGeocoder,
@@ -416,6 +417,26 @@ def test_google_geocoder_encodes_coordinates_language_and_key() -> None:
     assert result.name is None
 
 
+def test_google_geocoder_accepts_a_country_selected_language() -> None:
+    requested_url = ""
+
+    def opener(request: Request, _timeout_seconds: float) -> bytes:
+        nonlocal requested_url
+        requested_url = request.full_url
+        return b'{"status":"ZERO_RESULTS","results":[]}'
+
+    geocoder = GoogleGeocoder(api_key="test key", language="en", opener=opener)
+    geocoder.reverse_geocode(latitude=37.5665, longitude=126.9780, language_code="ko")
+
+    assert "language=ko" in requested_url
+
+
+def test_korean_user_place_name_policy_uses_korean_only_in_korea() -> None:
+    assert geocoder_language_for_country("KR") == "ko"
+    assert geocoder_language_for_country("JP") == "en"
+    assert geocoder_language_for_country(None) == "en"
+
+
 def test_google_places_result_prefers_the_closest_named_poi() -> None:
     result = geocode_result_from_google_places(
         {
@@ -494,3 +515,17 @@ def test_google_places_nearby_geocoder_sends_minimal_request() -> None:
         == "places.displayName,places.location,places.primaryType"
     )
     assert result.name is None
+
+
+def test_google_places_nearby_geocoder_accepts_a_country_selected_language() -> None:
+    request_body = b""
+
+    def opener(request: Request, _timeout_seconds: float) -> bytes:
+        nonlocal request_body
+        request_body = cast(bytes, request.data or b"")
+        return b'{"places":[]}'
+
+    geocoder = GooglePlacesNearbyGeocoder(api_key="test-key", language_code="en", opener=opener)
+    geocoder.reverse_geocode(latitude=37.5665, longitude=126.978, language_code="ko")
+
+    assert json.loads(request_body)["languageCode"] == "ko"

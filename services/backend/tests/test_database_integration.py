@@ -24,12 +24,18 @@ class CountingGeocoder:
     def __init__(self) -> None:
         self.calls: list[tuple[float, float]] = []
 
-    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+    def reverse_geocode(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
         self.calls.append((latitude, longitude))
         return GeocodeResult(name=f"Place {len(self.calls)}", confidence=0.88, source="test")
 
-    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
-        return self.reverse_geocode(latitude=latitude, longitude=longitude)
+    def name_for_point(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
+        return self.reverse_geocode(
+            latitude=latitude, longitude=longitude, language_code=language_code
+        )
 
 
 def get_test_database_url() -> str | None:
@@ -98,6 +104,32 @@ def test_alembic_upgrade_downgrade_and_reupgrade(migrated_database: Engine) -> N
     assert "trip_days" in tables
     assert "review_items" in tables
     assert "edit_operations" in tables
+
+
+def test_korea_country_boundary_selects_korean_and_defaults_to_english(
+    migrated_database: Engine,
+) -> None:
+    query = text(
+        """
+        SELECT country_code
+        FROM country_boundaries
+        WHERE ST_Covers(
+            boundary,
+            ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
+        )
+        LIMIT 1
+        """
+    )
+    with migrated_database.connect() as connection:
+        seoul_country = connection.execute(
+            query, {"latitude": 37.5665, "longitude": 126.9780}
+        ).scalar_one_or_none()
+        tokyo_country = connection.execute(
+            query, {"latitude": 35.6762, "longitude": 139.6503}
+        ).scalar_one_or_none()
+
+    assert seoul_country == "KR"
+    assert tokyo_country is None
 
 
 def test_database_constraints_reject_invalid_state_and_ownership(

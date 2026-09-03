@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from tripweave.adapters import orm
 from tripweave.adapters.area_visit_persistence import persist_area_visits_for_trip
 from tripweave.adapters.collaboration_intelligence import analyze_collaboration
+from tripweave.adapters.country_language import geocoder_language_for_point
 from tripweave.application.timezone_lookup import timezone_for_coordinates
 from tripweave.domain.enums import (
     EditOperationStatus,
@@ -673,7 +674,13 @@ def create_incremental_stop(
     assert point.captured_at_utc is not None
     assert point.latitude is not None and point.longitude is not None
     trip_day = find_or_create_trip_day(db, run, trip.id, point)
-    geocode_result = geocoder.reverse_geocode(latitude=point.latitude, longitude=point.longitude)
+    geocode_result = geocoder.reverse_geocode(
+        latitude=point.latitude,
+        longitude=point.longitude,
+        language_code=geocoder_language_for_point(
+            db=db, latitude=point.latitude, longitude=point.longitude
+        ),
+    )
     remembered_title = remembered_stop_title(
         db,
         user_id=trip.created_by,
@@ -1506,7 +1513,11 @@ def persist_clusters(
         stops: list[orm.Stop] = []
         for stop_position, cluster in enumerate(clusters, start=1):
             geocode_result = geocoder.reverse_geocode(
-                latitude=cluster.latitude, longitude=cluster.longitude
+                latitude=cluster.latitude,
+                longitude=cluster.longitude,
+                language_code=geocoder_language_for_point(
+                    db=db, latitude=cluster.latitude, longitude=cluster.longitude
+                ),
             )
             remembered_title = remembered_stop_title(
                 db,

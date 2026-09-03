@@ -45,9 +45,11 @@ class GooglePlacesNearbyGeocoder:
         self._request_lock = Lock()
         self._opener = opener or self._default_opener
 
-    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+    def reverse_geocode(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
         body = {
-            "languageCode": self._language_code,
+            "languageCode": language_code or self._language_code,
             "maxResultCount": self._max_result_count,
             "rankPreference": "DISTANCE",
             "locationRestriction": {
@@ -79,8 +81,12 @@ class GooglePlacesNearbyGeocoder:
             radius_meters=self._radius_meters,
         )
 
-    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
-        return self.reverse_geocode(latitude=latitude, longitude=longitude)
+    def name_for_point(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
+        return self.reverse_geocode(
+            latitude=latitude, longitude=longitude, language_code=language_code
+        )
 
     def _throttle(self) -> None:
         now = time.monotonic()

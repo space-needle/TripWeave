@@ -24,7 +24,9 @@ class ManualGeocoder:
     def __init__(self, places: Iterable[ManualPlaceName] | None = None) -> None:
         self._places = list(places or [])
 
-    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+    def reverse_geocode(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
         best: tuple[float, ManualPlaceName] | None = None
         for place in self._places:
             distance = haversine_meters(latitude, longitude, place.latitude, place.longitude)
@@ -37,8 +39,12 @@ class ManualGeocoder:
         _, place = best
         return GeocodeResult(name=place.name, confidence=place.confidence, source="manual")
 
-    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
-        return self.reverse_geocode(latitude=latitude, longitude=longitude)
+    def name_for_point(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
+        return self.reverse_geocode(
+            latitude=latitude, longitude=longitude, language_code=language_code
+        )
 
 
 def haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

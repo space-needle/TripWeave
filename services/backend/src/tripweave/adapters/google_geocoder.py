@@ -57,11 +57,13 @@ class GoogleGeocoder:
         self._request_lock = Lock()
         self._opener = opener or self._default_opener
 
-    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+    def reverse_geocode(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
         query = urlencode(
             {
                 "latlng": f"{latitude:.7f},{longitude:.7f}",
-                "language": self._language,
+                "language": language_code or self._language,
                 "key": self._api_key,
             }
         )
@@ -76,8 +78,12 @@ class GoogleGeocoder:
             return empty_google_result()
         return geocode_result_from_google(payload)
 
-    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
-        return self.reverse_geocode(latitude=latitude, longitude=longitude)
+    def name_for_point(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
+        return self.reverse_geocode(
+            latitude=latitude, longitude=longitude, language_code=language_code
+        )
 
     def _throttle(self) -> None:
         now = time.monotonic()

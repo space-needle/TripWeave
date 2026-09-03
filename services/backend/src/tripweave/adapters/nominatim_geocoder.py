@@ -71,7 +71,9 @@ class NominatimGeocoder:
         self._request_lock = Lock()
         self._opener = opener or self._default_opener
 
-    def reverse_geocode(self, *, latitude: float, longitude: float) -> GeocodeResult:
+    def reverse_geocode(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
         query = urlencode(
             {
                 "format": "jsonv2",
@@ -94,8 +96,12 @@ class NominatimGeocoder:
             return GeocodeResult(name=None, confidence=None, source="nominatim")
         return geocode_result_from_nominatim(payload)
 
-    def name_for_point(self, *, latitude: float, longitude: float) -> GeocodeResult:
-        return self.reverse_geocode(latitude=latitude, longitude=longitude)
+    def name_for_point(
+        self, *, latitude: float, longitude: float, language_code: str | None = None
+    ) -> GeocodeResult:
+        return self.reverse_geocode(
+            latitude=latitude, longitude=longitude, language_code=language_code
+        )
 
     def _throttle(self) -> None:
         now = time.monotonic()
