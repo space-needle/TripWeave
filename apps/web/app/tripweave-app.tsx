@@ -132,6 +132,18 @@ type StoryHeaderIconAction =
   | "save"
   | "home"
   | "delete";
+
+type ScreenWakeLockSentinel = {
+  released: boolean;
+  release: () => Promise<void>;
+  addEventListener: (type: "release", listener: () => void) => void;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<ScreenWakeLockSentinel>;
+  };
+};
 type TimelineMetricIconName = "stops" | "camera" | "travelers";
 
 type TripForm = {
@@ -10966,6 +10978,7 @@ function PublicStorySlideshow({
     return firstMapScene ?? null;
   });
   const hasMultipleScenes = scenes.length > 1;
+  useScreenWakeLock(scenes.length > 0);
   const activeMapScene =
     activeScene?.type === "trip" ||
     activeScene?.type === "day" ||
@@ -11175,6 +11188,71 @@ function PublicStorySlideshow({
       ) : null}
     </main>
   );
+}
+
+function useScreenWakeLock(enabled: boolean) {
+  const wakeLockRef = useRef<ScreenWakeLockSentinel | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const releaseWakeLock = async () => {
+      const wakeLock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (!wakeLock || wakeLock.released) {
+        return;
+      }
+      try {
+        await wakeLock.release();
+      } catch {
+        // A browser or the operating system may have already released it.
+      }
+    };
+
+    const requestWakeLock = async () => {
+      const browserNavigator = navigator as WakeLockNavigator;
+      if (
+        disposed ||
+        !enabled ||
+        document.visibilityState !== "visible" ||
+        !browserNavigator.wakeLock ||
+        (wakeLockRef.current && !wakeLockRef.current.released)
+      ) {
+        return;
+      }
+      try {
+        const wakeLock = await browserNavigator.wakeLock.request("screen");
+        if (disposed || !enabled) {
+          await wakeLock.release();
+          return;
+        }
+        wakeLockRef.current = wakeLock;
+        wakeLock.addEventListener("release", () => {
+          if (wakeLockRef.current === wakeLock) {
+            wakeLockRef.current = null;
+          }
+        });
+      } catch {
+        // Wake Lock is optional and may be unavailable in power-saving mode.
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void requestWakeLock();
+      } else {
+        void releaseWakeLock();
+      }
+    };
+
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void releaseWakeLock();
+    };
+  }, [enabled]);
 }
 
 function SlideshowPhotoStage({
