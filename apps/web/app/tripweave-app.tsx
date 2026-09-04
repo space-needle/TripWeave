@@ -2343,7 +2343,10 @@ function OwnerWorkspace() {
                           }
                           key={trip.id}
                           type="button"
-                          onClick={() => selectTrip(trip)}
+                          onClick={() => {
+                            selectTrip(trip);
+                            setMobileTab("story");
+                          }}
                         >
                           <span>{trip.title}</span>
                           <small>{trip.role}</small>
